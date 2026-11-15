@@ -43,6 +43,7 @@
       context: `${minimum ? `${number(minimum)}–` : ''}${number(String(total))} tokens${minimum ? '' : ' · fixed'}`,
       requests: count === -1 ? 'Server auto · concurrency determined at load' : `${number(String(count))} at once · up to ${number(String(limit))} tokens each`,
       sharing: mode === 'CPU' && root.dataset.engine !== 'strata' ? 'No GPU required' : checked(form, prefix + 'alone') ? 'Exclusive GPUs' : 'Shares GPUs',
+      hostRam: Number(value(form, prefix + 'host_ram_mib')) > 0 ? `${number(value(form, prefix + 'host_ram_mib'))} MiB reserved and capped` : 'Existing admission',
       split: mode === 'CPU' ? 'CPU only' : pins.length ? 'Pinned placement' : fixed || inherited ? 'Fixed device count' : checked(form, prefix + 'allow_split') ? 'May split across GPUs' : 'Single GPU preferred',
     };
   }
@@ -68,7 +69,7 @@
     const summaries = {
       context: [['Context', perNode('context')], ['Requests', perNode('requests')], ['Pool', nodes.map(node => `${node.node}: ${checked(form, node.prefix + 'parallel_shared') && checked(form, node.prefix + 'parallel_enabled') ? 'shared' : 'fixed'}`).join(' · ')]],
       generation: [['Sampling', `Temperature ${explainFlag(root, nodes, 'temp')} · top-p ${explainFlag(root, nodes, 'top-p')}`], ['Reasoning', explainFlag(root, nodes, 'reasoning')], ['Defaults', `${Object.keys(ownShared).filter(key => globalFlags.has(key)).length} explicit flags · all copies`]],
-      hardware: [['Placement', perNode('placement')], ['Sharing', perNode('sharing')], ['Splitting', root.dataset.engine === 'strata' ? 'Single GPU only' : perNode('split')]],
+      hardware: [['Placement', perNode('placement')], ['Sharing', perNode('sharing')], ['Splitting', root.dataset.engine === 'strata' ? 'Single GPU only' : perNode('split')], ...(root.dataset.engine === 'llama_cpp' ? [['Host RAM', perNode('hostRam')]] : [])],
       model: [['File', selected(root).map(node => `${selected(root).length > 1 ? `${node.value}: ` : ''}${basename(value(form, node.dataset.prefix + 'file'))}`).join('; ')], ['Engine', root.dataset.engine === 'strata' ? 'Strata' : 'llama.cpp'], [root.dataset.engine === 'strata' ? 'Tokenizer' : 'Projector', root.dataset.engine === 'strata' ? selected(root).map(node => basename(value(form, node.dataset.prefix + 'tokenizer'))).join(' · ') : basename(value(form, 'projector'))]],
       adapters: [['Adapters', adapterNames.length ? adapterNames.join('; ') : 'No adapters'], ['Scope', 'Shared across every copy']],
       advanced: [['Flags', nodes.map(node => `${node.node}: ${Object.keys(node.own).filter(flag => !globalFlags.has(flag)).length} explicit flags`).join(' · ')], ['Defaults', 'Inherited values and the installed runtime’s complete flag reference are inside.']],

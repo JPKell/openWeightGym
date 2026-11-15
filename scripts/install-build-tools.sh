@@ -7,7 +7,7 @@ source "$SCRIPT_DIR/lib/ui.sh"
 source "$SCRIPT_DIR/lib/detect.sh"
 source "$SCRIPT_DIR/lib/build.sh"
 backend=${1:-} label=${2:-engine}
-[[ $# == 2 && $backend =~ ^(cuda|vulkan|cpu|rocm|cuda-13\.4|cuda-12\.8)$ ]] || {
+[[ $# == 2 && $backend =~ ^(cuda|vulkan|cpu|rocm|cuda-13\.[45]|cuda-12\.8)$ ]] || {
   echo 'Usage: install-build-tools.sh BACKEND LABEL' >&2; exit 2;
 }
 {

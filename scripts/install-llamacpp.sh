@@ -5,7 +5,7 @@
 #
 #   scripts/install-llamacpp.sh                     choose a download or build here from source
 #   scripts/install-llamacpp.sh --prebuilt          find the cards and download the matching build
-#   scripts/install-llamacpp.sh --backend vulkan    or choose: cuda-13.4, cuda-12.8, rocm, vulkan, cpu
+#   scripts/install-llamacpp.sh --backend vulkan    or choose: cuda-13.5, cuda-13.4, cuda-12.8, rocm, vulkan, cpu
 #   scripts/install-llamacpp.sh --from-source       build it here with cmake instead
 #   scripts/install-llamacpp.sh --check             say what is installed and change nothing
 #
@@ -39,8 +39,8 @@ usage() {
   cat <<EOF
 Usage: scripts/install-llamacpp.sh [options]
 
-  --backend NAME     cuda-13.4, cuda-12.8, rocm, vulkan or cpu (default: chosen from the cards)
-  --build TAG        a llama.cpp release tag (default: $BUILD)
+  --backend NAME     cuda-13.5, cuda-13.4, cuda-12.8, rocm, vulkan or cpu (default: chosen from the cards)
+  --build TAG        a nightly (b12359) or version (v1.0.0) tag (default: $BUILD)
   --prefix DIR       where builds are kept (default: $PREFIX)
   --prebuilt         download the matching build without asking how to install
   --from-source      build llama-server here with cmake rather than downloading it
@@ -71,19 +71,20 @@ while (($#)); do
     *) usage_error "install-llamacpp.sh has no option $1." ;;
   esac
 done
-[[ $BACKEND =~ ^(auto|cuda-13\.4|cuda-12\.8|rocm|vulkan|cpu)$ ]] || usage_error "--backend is auto, cuda-13.4, cuda-12.8, rocm, vulkan or cpu, not $BACKEND."
-[[ $BUILD =~ ^b[0-9]+$ ]] || usage_error "A build tag looks like b12008, not $BUILD."
+[[ $BACKEND =~ ^(auto|cuda-13\.[45]|cuda-12\.8|rocm|vulkan|cpu)$ ]] || usage_error "--backend is auto, cuda-13.5, cuda-13.4, cuda-12.8, rocm, vulkan or cpu, not $BACKEND."
+[[ $BUILD =~ ^b[0-9]+$ || $BUILD =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || usage_error "A build tag looks like b12359 or v1.0.0, not $BUILD."
+ARTIFACT_BUILD=$BUILD
 
 # The release file for a backend on this processor.
 asset_for() {
   local backend=$1 arch
   case "$OS_ARCH" in x86_64) arch=x64 ;; aarch64|arm64) arch=arm64 ;; *) return 1 ;; esac
   case "$backend:$arch" in
-    cpu:*) echo "llama-$BUILD-bin-ubuntu-$arch.tar.gz" ;;
-    vulkan:*) echo "llama-$BUILD-bin-ubuntu-vulkan-$arch.tar.gz" ;;
-    cuda-13.4:*) echo "llama-$BUILD-bin-ubuntu-cuda-13.4-$arch.tar.gz" ;;
-    cuda-12.8:x64) echo "llama-$BUILD-bin-ubuntu-cuda-12.8-x64.tar.gz" ;;
-    rocm:x64) echo "llama-$BUILD-bin-ubuntu-rocm-10.0-x64.tar.gz" ;;
+    cpu:*) echo "llama-$ARTIFACT_BUILD-bin-ubuntu-$arch.tar.gz" ;;
+    vulkan:*) echo "llama-$ARTIFACT_BUILD-bin-ubuntu-vulkan-$arch.tar.gz" ;;
+    cuda-13.4:*|cuda-13.5:*) echo "llama-$ARTIFACT_BUILD-bin-ubuntu-$backend-$arch.tar.gz" ;;
+    cuda-12.8:x64) echo "llama-$ARTIFACT_BUILD-bin-ubuntu-cuda-12.8-x64.tar.gz" ;;
+    rocm:x64) echo "llama-$ARTIFACT_BUILD-bin-ubuntu-rocm-10.0-x64.tar.gz" ;;
     *) return 1 ;;
   esac
 }
@@ -163,16 +164,25 @@ supply_libraries() {
 
 download_release() {
   local backend=$1 target=$2 asset work
+  if [[ $BUILD == v* ]]; then
+    # Version releases publish their binaries under the nightly named by this manifest.
+    ARTIFACT_BUILD=$(curl -fsSL --retry 3 --connect-timeout 20 --max-time 60 "$RELEASES/$BUILD/nightly-tag.txt") ||
+      ui_die "Could not resolve the prebuilt llama.cpp release $BUILD." \
+        "Retry, or build this version here: $SELF --build $BUILD --from-source --backend $backend"
+    [[ $ARTIFACT_BUILD =~ ^b[0-9]+$ ]] || ui_die "llama.cpp $BUILD has an invalid nightly-tag.txt." \
+      "Build this version here: $SELF --build $BUILD --from-source --backend $backend"
+    ui_note "llama.cpp $BUILD uses the $ARTIFACT_BUILD prebuilt binaries"
+  fi
   asset=$(asset_for "$backend") || ui_die "There is no prebuilt $backend llama.cpp for this $OS_ARCH processor." \
     "Build it on this machine: $SELF --from-source --backend $backend" \
     "Or use another build: $SELF --backend cpu"
   work=$(mktemp -d)
-  ui_download "$RELEASES/$BUILD/$asset" "$work/llama.tar.gz" "llama.cpp $BUILD $backend" ||
+  ui_download "$RELEASES/$ARTIFACT_BUILD/$asset" "$work/llama.tar.gz" "llama.cpp $BUILD $backend" ||
     ui_die "Could not download $asset from GitHub." \
       "Check this machine can reach GitHub: curl -sI https://github.com" \
       "Then run this again: $SELF --backend $backend"
   if [[ $backend == cuda-* ]]; then
-    ui_download "$RELEASES/$BUILD/cudart-$asset" "$work/cudart.tar.gz" "CUDA runtime ${backend#cuda-}" ||
+    ui_download "$RELEASES/$ARTIFACT_BUILD/cudart-$asset" "$work/cudart.tar.gz" "CUDA runtime ${backend#cuda-}" ||
       ui_die "Could not download the CUDA runtime for $asset from GitHub." \
         "Check this machine can reach GitHub: curl -sI https://github.com" \
         "Then run this again: $SELF --backend $backend"
@@ -241,7 +251,15 @@ main() {
     fi
     if ((choice == 1)); then METHOD=source; else METHOD=prebuilt; fi
   fi
-  [[ $BACKEND == auto ]] && BACKEND=$LLAMA_BACKEND
+  if [[ $BACKEND == auto ]]; then
+    BACKEND=$LLAMA_BACKEND
+    # 1.0 replaced CUDA 13.4 assets with 13.5. Reuse the compatible 12.8 binaries
+    # unless the operator explicitly selects 13.5; source builds keep their toolkit.
+    if [[ $BUILD == v1.0.0 && $METHOD == prebuilt && $BACKEND == cuda-13.4 ]]; then
+      BACKEND=cuda-12.8
+      ui_note "Using CUDA 12.8: llama.cpp v1.0.0 has no CUDA 13.4 prebuilt"
+    fi
+  fi
   local release=$BUILD-$BACKEND
   [[ $METHOD == source ]] && release+=-source
   local target=$PREFIX/releases/$release

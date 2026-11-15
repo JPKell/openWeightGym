@@ -334,7 +334,30 @@ scripts/install-llamacpp.sh --check              # the build in use
 scripts/install-llamacpp.sh --prebuilt --backend vulkan  # another prebuilt kind
 scripts/install-llamacpp.sh --from-source        # install build requirements and compile here
 OWG_LLAMACPP_BUILD=b12024 scripts/install-llamacpp.sh   # another release
+scripts/install-llamacpp.sh --build v1.0.0 --prebuilt --backend cuda-12.8
+scripts/install-llamacpp.sh --build v1.0.0 --from-source --backend cpu
 ```
+
+Version tags resolve prebuilt downloads through the release's `nightly-tag.txt`; v1.0.0 maps to
+`b12359`. Source builds check out the requested version tag directly. The v1.0.0 NVIDIA binaries
+offer CUDA 13.5 and 12.8; automatic selection uses 12.8 when detection selects the older 13.4
+backend. Explicitly choose `--backend cuda-13.5` with a compatible driver. The qualified default remains
+`b12008`; selecting another release does not qualify its GPU workloads or change running children.
+
+The [1.0 stability promise](https://huggingface.co/blog/ggml-org/llama-cpp-v1) applies to public C
+headers and ABI. OWG uses the server's HTTP API and discovers launch flags from its installed
+`--help`, so continue checking server behavior. Before changing builds, review saved flags:
+`no-mmap` and `mlock` have moved to `load-mode`, `defrag-thold` was removed, and legacy `draft*`
+options may advertise removal instead of working. Recheck templates, tools, structured output,
+embeddings/reranking/classifiers, image input and served context for the models actually used.
+Keep the existing adapter CUDA-graph restriction until independently qualified.
+
+The first performance candidate is [native MoE caching](guide/models/configuration.md#native-moe-caching-and-host-ram)
+with explicit host RAM admission. FP8 KV (`f8_e4m3`) is an alternative to the existing 8-bit cache,
+not an automatic further halving; measure model/backend speed and quality before changing defaults.
+Speculative decoding needs draft-file identity and memory qualification before broader integration.
+Keep OWG's scheduler, caller permissions and Responses history authoritative rather than enabling
+llama-server's independent model router or replacing the gateway's Responses loop.
 
 Choose **Build here from source** to retry a build skipped during installation. The installer adds
 missing C/C++ build tools, CMake, make, pkg-config and OpenSSL development headers with the system

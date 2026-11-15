@@ -18,7 +18,7 @@ def test_every_saved_setting_survives_an_unchanged_overview_save(matrix):
     browser, fleet = matrix
     for name, models in fleet.models.items():
         model = models['qwen']
-        model.update(order=-12, min_context=1024, alone=True)
+        model.update(order=-12, min_context=1024, alone=True, host_ram_mib=4096 if name == 'compute' else 2048)
         model['flags'].update({'temp': None, 'top-k': 0, 'seed': 0, 'ignore-eos': False,
                                'logit-bias': ['100+1', '200-1'], 'chat-template-kwargs': '{"enable_thinking":false}',
                                'mmproj': f'/{name}/cache/p.gguf',
@@ -104,6 +104,8 @@ def test_node_scope_edits_selected_nodes_and_keeps_every_draft(matrix, width):
         page.get_by_role('button', name='Edit Hardware', exact=True).click()
         page.locator('[name="alone"]').check()
         playwright.expect(page.locator('[name="n:rig:alone"]')).to_be_checked()
+        page.locator('#host-ram-mib').fill('8192')
+        playwright.expect(page.locator('[name="n:rig:host_ram_mib"]')).to_have_value('8192')
         page.locator('label:has([data-model-node][value="compute"])').click()
         # Hidden node fields still belong to the same settings form and submit.
         sent = page.locator('#model-settings').evaluate('form => Object.fromEntries(new FormData(form))')

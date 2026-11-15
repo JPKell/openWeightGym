@@ -56,6 +56,76 @@ def test_implicit_llama_selection_preserves_fingerprints_measurements_and_file_r
     library.db.close()
 
 
+@pytest.mark.parametrize('budget', [True, -1, 1.5, '2048', None, 2**31 + 1])
+def test_llama_hybrid_budget_rejects_invalid_values(budget):
+    with pytest.raises(ValueError, match='host_ram_mib'):
+        check_model('moe', {'flags': {'model': '/model.gguf', 'ctx-size': 512},
+                           'gpus': 1, 'host_ram_mib': budget}, ('CUDA0',))
+
+
+def test_llama_hybrid_launch_resolves_path_and_preserves_native_flags_and_policy(tmp_path, monkeypatch):
+    binary = tmp_path / 'llama-server'
+    binary.write_text('#!/bin/sh\nexit 0\n')
+    binary.chmod(0o755)
+    monkeypatch.setenv('PATH', str(tmp_path))
+    settings = {'gpus': 1, 'host_ram_mib': 2048, 'flags': {'model': '/model.gguf', 'ctx-size': 512,
+                'cpu-moe': True, 'moe-cache-mib': 4096, 'moe-cache-cpu-share': .5}}
+    config = Config(gpus=('CUDA0',))
+    engine = engine_for(settings)
+    launch = engine.launch(config, 1234, settings, ('CUDA0',))
+    assert launch.command[0] == str(binary)
+    assert '--cpu-moe' in launch.command and '--host_ram_mib' not in launch.command
+    assert launch.command[launch.command.index('--moe-cache-cpu-share') + 1] == '0.5'
+    assert launch.memory_mib == 2048 and launch.process_group
+    assert launch.environment['GGML_CUDA_ENABLE_UNIFIED_MEMORY'] == '0'
+    assert tomllib.loads(as_toml('moe', settings))['models']['moe'] == settings
+    legacy_settings = {'gpus': 1, 'flags': {'model': '/model.gguf', 'ctx-size': 512}}
+    legacy = engine.launch(config, 1234, legacy_settings, ('CUDA0',))
+    assert legacy.command[0] == 'llama-server' and not legacy.process_group and legacy.memory_mib == 0
+
+
+@pytest.mark.parametrize('flags,budget,gpus,reason', [
+    ({'cpu-moe': 'yes'}, 2048, 1, 'cpu-moe'),
+    ({'n-cpu-moe': True}, 2048, 1, 'n-cpu-moe'),
+    ({'n-cpu-moe': -1}, 2048, 1, 'n-cpu-moe'),
+    ({'cpu-moe': True, 'moe-cache-mib': 1.5}, 2048, 1, 'moe-cache-mib'),
+    ({'cpu-moe': True, 'moe-cache-mib': -1}, 2048, 1, 'moe-cache-mib'),
+    ({'moe-cache-cpu-share': float('nan')}, 2048, 1, 'finite number'),
+    ({'moe-cache-cpu-share': 10**400}, 2048, 1, 'finite number'),
+    ({'moe-cache-cpu-share': True}, 2048, 1, 'finite number'),
+    ({'moe-cache-cpu-share': 1.1}, 2048, 1, 'finite number'),
+    ({'moe-cache-cpu-share': .5}, 2048, 1, 'positive moe-cache-mib'),
+    ({'moe-cache-mib': 512}, 2048, 1, 'requires host experts'),
+    ({'cpu-moe': True, 'moe-cache-mib': 512}, 0, 1, 'positive model-level host_ram_mib'),
+    ({'cpu-moe': True, 'moe-cache-mib': 512}, 0, 0, 'requires GPU placement'),
+])
+def test_invalid_native_moe_configuration_is_rejected_before_loading(flags, budget, gpus, reason):
+    settings = {'flags': {'model': '/model.gguf', 'ctx-size': 512, **flags}, 'gpus': gpus, 'host_ram_mib': budget}
+    with pytest.raises(ValueError, match=reason):
+        check_model('moe', settings, ('CUDA0',))
+
+
+@pytest.mark.parametrize('placement', [{'cpu-moe': True}, {'n-cpu-moe': 12}, {'override-tensor': r'blk\..*\.ffn_.*_exps.*=CPU'}])
+def test_native_moe_configuration_accepts_supported_expert_placements(placement):
+    check_model('moe', {'flags': {'model': '/model.gguf', 'ctx-size': 512, 'moe-cache-mib': 512,
+                                 'moe-cache-cpu-share': 0, **placement},
+                        'host_ram_mib': 2048, 'gpus': 1}, ('CUDA0',))
+
+
+def test_llama_hybrid_budget_round_trips_through_the_scoped_model_api(fake_llama_server):
+    with gateway(fake_llama_server, {'example': model('missing.gguf', 0)}) as caller:
+        owner = add_user(caller, 'owner', 'admin')
+        settings = {'gpus': 1, 'host_ram_mib': 2048,
+                    'flags': {'model': 'missing.gguf', 'ctx-size': 512, 'cpu-moe': True, 'moe-cache-mib': 512}}
+        response = caller.post('/loadcoach/models/moe?node=compute', headers=owner, json=settings)
+        assert response.status_code == 201, response.text
+        row = next(one for one in caller.get('/loadcoach/models?node=compute', headers=owner).json()['models'] if one['name'] == 'moe')
+        assert row['host_ram_mib'] == 2048 and row['host_ram_budget_mib'] == 2048
+        refused = caller.post('/loadcoach/models/moe?node=compute', headers=owner,
+                              json={**settings, 'host_ram_mib': 0})
+        assert refused.status_code == 400 and 'positive model-level host_ram_mib' in refused.text
+
+
 def test_engine_registry_is_explicit_and_rejects_unimplemented_engines():
     assert engine_for({}).id == engine_for({"engine": "llama_cpp"}).id == "llama_cpp"
     assert engine_for("strata").installation(Config()).enabled is False

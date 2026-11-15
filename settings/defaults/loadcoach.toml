@@ -136,6 +136,11 @@ flash-attn = "on"
 #
 # Models whose cards do not overlap stay loaded side by side.
 #
+# Optional model-level host_ram_mib reserves and hard-caps a GPU model's entire host-memory
+# use, including CPU MoE experts; native caching requires a positive budget. Otherwise
+# 0/omitted keeps existing admission. Requires the worker's
+# delegated finite memory controls. This does not enable CUDA unified-memory offload.
+#
 # [models."NAME".flags] holds llama-server's own flags, written without the leading dashes. Run
 # `llama-server --help` for the full list. `true` gives a bare flag, a list is joined with
 # commas. `model` and `ctx-size` are required. `host`, `port` and `device` are set by LoadCoach.

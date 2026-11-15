@@ -1655,7 +1655,7 @@ def test_model_defaults_reach_every_model_unless_it_sets_its_own(tmp_path):
     assert models["own"]["flags"]["cache-type-k"] == "f16" and models["own"]["flags"]["flash-attn"] == "on"
     assert command_line("llama-server", 1, models["own"]["flags"], ())[5:] == [
         "--device", "none", "--cache-type-k", "f16", "--flash-attn", "on", "--gpu-layers", "all",
-        "--model", str(gguf), "--ctx-size", "8192",
+        "--model", str(gguf), "--ctx-size", "8192", "--parallel", "1",
     ]  # fmt: skip
 
 
@@ -1676,9 +1676,12 @@ def test_command_line_turns_settings_into_flags():
 
     assert command_line("llama-server", 5000, flags, ("CUDA0", "CUDA1")) == [
         "llama-server", "--host", "127.0.0.1", "--port", "5000", "--device", "CUDA0,CUDA1",
-        "--model", "m.gguf", "--ctx-size", "4096", "--split-mode", "layer", "--mlock",
+        "--model", "m.gguf", "--ctx-size", "4096", "--split-mode", "layer", "--mlock", "--parallel", "1",
     ]  # fmt: skip
-    assert command_line("llama-server", 5000, {}, ())[5:] == ["--device", "none"]  # no cards: CPU only
+    assert command_line("llama-server", 5000, {}, ())[5:] == ["--device", "none", "--parallel", "1"]
+    for count in (1, 4, -1):
+        command = command_line('llama-server', 5000, {'parallel': count}, ())
+        assert command.count('--parallel') == 1 and command[-1] == str(count)
 
 
 def test_config_refuses_what_would_fail_later(tmp_path, monkeypatch):

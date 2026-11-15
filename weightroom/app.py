@@ -488,7 +488,7 @@ def read(text: str):
     return text if value is None or isinstance(value, dict) else value
 
 
-SHOWN_SETTINGS = ("engine", "flags", "strata", "gpus", "alone", "allow_split", "adapters", "min_context", "order")
+SHOWN_SETTINGS = ("engine", "flags", "strata", "gpus", "alone", "allow_split", "adapters", "min_context", "host_ram_mib", "order")
 # Fields of a model's form that every node's copy shares. They appear once, unprefixed.
 SHARED_FIELDS = ("engine", "projector", "embedding", "embedding_controls", "reranking", "reranking_controls", "adapter", "adapter_file", "adapter_scale", "order")
 
@@ -5238,7 +5238,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             base = next((one for one in known.json().get("models", []) if one["name"] == form.get("model")), None)
             if base is None:
                 return await file_page(request, person, "Choose the model this adapter is for.", failed=True, path=path)
-            made = {key: base[key] for key in ("flags", "gpus", "alone", "allow_split", "min_context") if key in base} | {"adapters": {**base.get("adapters", {}), short: {"file": path}}}
+            made = {key: base[key] for key in ("flags", "gpus", "alone", "allow_split", "min_context", "host_ram_mib") if key in base} | {"adapters": {**base.get("adapters", {}), short: {"file": path}}}
             answer = await ask("POST", f"/turnstile/artifacts/models/{quote(new, safe='/:')}", person.key, json=made, params={"new": "1"}) if new else None
             if answer is None or answer.status_code != 201:
                 why = answer.json()["error"]["message"] if answer is not None else "Give the new model a name."
@@ -5250,7 +5250,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             base = next((one for one in known.json().get("models", []) if one["name"] == form.get("model")), None)
             if base is None:
                 return await file_page(request, person, "Choose the model this projector is for.", failed=True, path=path)
-            made = {key: base[key] for key in ("flags", "gpus", "alone", "allow_split", "adapters", "min_context") if key in base}
+            made = {key: base[key] for key in ("flags", "gpus", "alone", "allow_split", "adapters", "min_context", "host_ram_mib") if key in base}
             seeing = {**made, "flags": {**made["flags"], "mmproj": path}}
             answer = await ask("POST", f"/turnstile/artifacts/models/{quote(new, safe='/:')}", person.key, json=seeing, params={"new": "1"}) if new else None
             if answer is None or answer.status_code != 201:

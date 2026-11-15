@@ -17,7 +17,7 @@ GLOBAL_FLAGS = frozenset({
     "dynatemp-range", "dynatemp-exp", "top-n-sigma", "adaptive-target", "adaptive-decay",
 })
 SETTING_KEYS = ("engine", "flags", "strata", "sdcpp", "audiocpp", "whispercpp", "gpus", "alone",
-                "allow_split", "adapters", "min_context", "order")
+                "allow_split", "adapters", "min_context", "host_ram_mib", "order")
 PROFILE_GLOBALS = {"sdcpp": ("defaults", "limits", "reference_megapixels"),
                    "audiocpp": ("defaults", "limits"), "whispercpp": ()}
 

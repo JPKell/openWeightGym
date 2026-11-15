@@ -47,6 +47,14 @@ full model-layer and KV-cache offload. CPU embedding probes use configured pooli
 physical batch limits. Image/audio models have no token context; their supported resource
 measurement is load time.
 
+Native MoE cache configurations retain their explicit CPU expert placement and host RAM cap.
+These samples are marked `hybrid`: admission checks both RAM and VRAM, the RAM cap remains
+enforced during loading and generation, and retained resource evidence includes peak resident
+RAM, assigned-card VRAM and the configured host budget. The existing sample table's CPU peak
+RAM column also describes hybrid host RAM. A cache's GPU size does not reduce its host expert
+reservation. Compare frozen settings, context and warm-up workloads when tuning cache size or
+CPU share; keep ordinary full-offload results distinct from hybrid results.
+
 A successful fit establishes a measured configuration, not a quality guarantee. Scores are
 formula-derived; compare underlying measurements and frozen settings before ranking models.
 

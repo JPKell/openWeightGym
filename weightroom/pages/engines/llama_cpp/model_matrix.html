@@ -69,6 +69,8 @@
   {% call group('hardware', 'Hardware', columns) %}
   <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row">Placement<small class="matrix-hint">GPUs, splitting and sharing</small></th>
     {% for column in columns %}{% call cell(column) %}{{ hardware(column.idp ~ 'model', column.showing.gpus, column.cards, column.showing.alone, column.showing.allow_split, field=column.prefix, ids=column.idp) }}{% endcall %}{% endfor %}</tr>
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><label for="{{ lead.idp }}host-ram-mib">Host RAM budget (MiB)</label><small class="matrix-hint">Reserves and caps CPU experts and buffers. Blank keeps existing admission.</small></th>
+    {% for column in columns %}{% call cell(column) %}<input id="{{ column.idp }}host-ram-mib" name="{{ column.prefix }}host_ram_mib" type="number" min="0" max="2147483648" step="1" class="form-control form-control-sm" value="{{ column.showing.host_ram_mib|default('') }}" aria-label="host RAM budget in MiB{{ column.on }}">{% endcall %}{% endfor %}</tr>
   {% endcall %}
 
   {% call group('model', 'Model', columns, shared=true) %}

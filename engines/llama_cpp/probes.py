@@ -8,7 +8,6 @@ import asyncio
 import hashlib
 import json
 import math
-import os
 import platform
 import re
 import secrets
@@ -308,6 +307,8 @@ class Probes:
             raise ValueError('Model fingerprint changed; discard this probe.')
         needs = self.runner.needs(original)
         cpu = not needs
+        host_budget = self.runner.hybrid_budget(original)
+        tracks_ram = cpu or bool(host_budget)
         cards = tuple(needs if isinstance(needs, list) else self.runner.cards[:needs])
         if not set(cards) <= set(self.runner.cards) or (not isinstance(needs, list) and len(cards) != needs):
             raise ValueError("This model requires a disabled or unavailable card.")
@@ -342,13 +343,17 @@ class Probes:
         offload = settings['flags'].get('gpu-layers', settings['flags'].get('n-gpu-layers'))
         if not cpu and layers and offload not in ('all', -1, '-1') and (offload is None or int(offload) < layers):
             raise ValueError('GPU probes require all model layers offloaded; increase gpu-layers first.')
-        if not cpu and os.environ.get('GGML_CUDA_ENABLE_UNIFIED_MEMORY', '0') not in ('', '0'):
+        if not cpu and not self.runner.config.disable_ram_offload:
             raise ValueError('Disable CUDA unified memory before GPU probes; it may spill allocations into host RAM.')
         key = json.dumps([task['id'], settings, sorted(cards)], sort_keys=True, default=str)
         if kept and kept['key'] != key:
             await self.runner.stop(kept['server'])
             self.runner.servers.pop(task['model'], None)
             kept = None
+        if host_budget and not kept:
+            room = self.runner.host_memory(cache_admission=True)
+            if room['free'] < host_budget or room.get('service_free') is None or room['service_free'] < host_budget:
+                raise Refusal(503, f"{task['model']} does not fit the available hybrid host/service RAM budget.", 10)
         if cpu and not kept:
             required = self.runner.ram_required(task['model'], settings)
             room = self.runner.host_memory()
@@ -380,17 +385,25 @@ class Probes:
         values = {'context_tokens': context, 'success': False, 'peak_gpu_mib': None, 'cards': list(cards)}
         if cpu:
             values.update(device='cpu', peak_ram_mib=None, rss_mib=None)
+        elif host_budget:
+            values.update(device='hybrid', host_ram_budget_mib=host_budget, peak_ram_mib=None, rss_mib=None)
         watch = None
+        ram_watch = None
+        peak = [0]
         content = ''
         evidence = {}
         ok = False
-        cpu_violation = [None]
+        ram_violation = [None]
         gpu_violation = [None]
-        def observe_cpu():
-            """Sample resident CPU memory while the native probe is active."""
+        def observe_ram():
+            """Sample host RAM and enforce CPU or hybrid admission during the probe."""
             if not server.process or server.dead():
                 return None
-            rss = resident_mib(server.process.pid)
+            if host_budget:
+                self.runner.sample_resident(server)
+                rss = server.rss_mib
+            else:
+                rss = resident_mib(server.process.pid)
             if rss is None:
                 return None
             server.rss_mib = rss
@@ -400,18 +413,18 @@ class Probes:
             self.runner.assert_cpu_memory(server, isolated_probe=True)
             return rss
         try:
-            if cpu:
+            if tracks_ram:
                 async def memory():
                     """Observe current host-memory usage during the active probe phase."""
                     while True:
                         try:
-                            observe_cpu()
+                            observe_ram()
                         except Refusal as problem:
-                            cpu_violation[0] = problem
+                            ram_violation[0] = problem
                             await self.runner.stop(server)
                             return
                         await asyncio.sleep(.1)
-                watch = asyncio.create_task(memory())  # include RAM used while the process loads
+                ram_watch = asyncio.create_task(memory())  # include RAM used while the process loads
             began = time.perf_counter()
             if kept:
                 values['server_reused'] = True
@@ -419,17 +432,17 @@ class Probes:
                 await self.runner.start(server)
             values['load_seconds'] = time.perf_counter() - began
             server.probing = True  # report native readiness without admitting ordinary requests
-            if cpu:
-                if cpu_violation[0]:
-                    raise cpu_violation[0]
-                if observe_cpu() is None:
-                    raise ValueError('CPU resident RAM could not be measured for the probe process.')
-            else:
+            if tracks_ram:
+                if ram_violation[0]:
+                    raise ram_violation[0]
+                if observe_ram() is None:
+                    raise ValueError('Host resident RAM could not be measured for the probe process.')
+            if not cpu:
                 offload = re.search(r'offloaded (\d+)/(\d+) layers', server.output())
                 if offload and offload[1] != offload[2]:
                     raise ValueError('This run loaded model layers on the CPU. GPU-only probes require full offload.')
                 await self.runner.look(fresh=True)
-                peak = [sum(self.runner.uses(server) or [])]
+                peak[0] = sum(self.runner.uses(server) or [])
                 if not peak[0]:
                     raise ValueError('No GPU allocation was reported for this model process.')
                 async def memory():
@@ -485,26 +498,32 @@ class Probes:
                     values.update(measured)
                     if measured['input_tokens'] != inputs or measured['output_tokens'] < 1:
                         raise ValueError('The server did not process the full prompt and generate an answer.')
-            if watch.done():
+            if watch and watch.done():
                 await watch
+            if ram_watch and ram_watch.done():
+                await ram_watch
             if gpu_violation[0]:
                 raise gpu_violation[0]
-            if cpu:
-                if cpu_violation[0]:
-                    raise cpu_violation[0]
-                rss = observe_cpu()
+            if tracks_ram:
+                if ram_violation[0]:
+                    raise ram_violation[0]
+                rss = observe_ram()
                 if rss is None:
-                    raise ValueError('CPU resident RAM could not be measured for the probe process.')
+                    raise ValueError('Host resident RAM could not be measured for the probe process.')
                 values.update(peak_ram_mib=server.rss_peak_mib, rss_mib=rss)
-                evidence['resource'] = {'device': 'cpu', 'peak_ram_mib': server.rss_peak_mib, 'rss_mib': rss}
-            else:
+                evidence['resource'] = {'device': 'hybrid' if host_budget else 'cpu', 'peak_ram_mib': server.rss_peak_mib, 'rss_mib': rss}
+                if host_budget:
+                    evidence['resource']['host_ram_budget_mib'] = host_budget
+            if not cpu:
                 values['peak_gpu_mib'] = peak[0] or None
+                if host_budget:
+                    evidence['resource']['peak_gpu_mib'] = values['peak_gpu_mib']
             values['success'] = not (values.get('unsupported') or values.get('unavailable'))
             ok = True
         except asyncio.CancelledError:
             raise
         except Exception as failure:
-            error = cpu_violation[0] or gpu_violation[0] or failure
+            error = ram_violation[0] or gpu_violation[0] or failure
             if isinstance(error, (ConfiguredRamCapacity, ServiceRamCapacity)):
                 # A real process breached the configured budget or its own unit's
                 # service ceiling. Context/Load can search smaller sizes.
@@ -512,8 +531,12 @@ class Probes:
                          else 'measured_service_ram')
                 values.update(error=str(error), capacity_basis=basis,
                               peak_ram_mib=server.rss_peak_mib, rss_mib=server.rss_mib)
-                evidence['resource'] = {'device': 'cpu', 'peak_ram_mib': server.rss_peak_mib,
+                evidence['resource'] = {'device': 'hybrid' if host_budget else 'cpu', 'peak_ram_mib': server.rss_peak_mib,
                                         'rss_mib': server.rss_mib}
+                if host_budget:
+                    evidence['resource']['host_ram_budget_mib'] = host_budget
+                    values['peak_gpu_mib'] = peak[0] or None
+                    evidence['resource']['peak_gpu_mib'] = values['peak_gpu_mib']
                 if isinstance(error, ServiceRamCapacity):
                     values.update(service_used_mib=error.used_mib, service_limit_mib=error.limit_mib)
                     evidence['service'] = {'scope': 'self', 'used_mib': error.used_mib,
@@ -535,12 +558,13 @@ class Probes:
                 else:
                     raise
         finally:
-            if watch:
+            for observer, violation in ((watch, gpu_violation[0]), (ram_watch, ram_violation[0])):
                 # A measured RAM breach or outside GPU process already asked its watcher
                 # to stop our child. Let that stop finish before final cleanup below.
-                if not (cpu_violation[0] or gpu_violation[0]):
-                    watch.cancel()
-                await asyncio.gather(watch, return_exceptions=True)
+                if observer:
+                    if not violation:
+                        observer.cancel()
+                    await asyncio.gather(observer, return_exceptions=True)
             if not (ok and options.get('reuse')):
                 await self.runner.stop(server)
                 if self.runner.servers.get(task['model']) is server:

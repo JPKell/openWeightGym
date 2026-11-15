@@ -14,7 +14,12 @@ from engines.llama_cpp import model
 
 
 def command_line(llama_server: str, port: int, flags: dict, cards: tuple[str, ...], adapters: dict | None = None) -> list[str]:
-    """Preserve the existing ordered llama-server argv, including LoRA scales."""
+    """Build ordered argv, including LoRA scales and OWG's one-slot default.
+
+    llama-server defaults to automatic slots; without a saved parallel count, OWG
+    admits one request against the whole configured context. Make that explicit
+    without changing stored settings or historical fingerprints.
+    """
     command = [llama_server, "--host", "127.0.0.1", "--port", str(port)]
     command += ["--device", ",".join(cards) or "none"]
     if adapters:
@@ -25,6 +30,8 @@ def command_line(llama_server: str, port: int, flags: dict, cards: tuple[str, ..
         command.append(f"--{flag}")
         if value is not True:
             command.append(",".join(map(str, value)) if isinstance(value, list) else str(value))
+    if flags.get('parallel') is None:
+        command += ['--parallel', '1']
     return command
 
 
@@ -50,9 +57,8 @@ class LlamaCpp:
     id, label, model = "llama_cpp", "llama.cpp", model
 
     def host_ram_budget(self, config, settings: dict) -> int:
-        # Existing CPU admission uses RSS; GPU models retain their existing VRAM policy.
-        """Return the engine host-memory reservation in MiB."""
-        return 0
+        """Reserve the full explicit cap for hybrid GPU models, including native MoE caching."""
+        return model.host_ram_budget(settings)
 
     def parse_form(self, submitted: dict, read) -> dict:
         """Parse submitted model fields into engine-specific configuration."""
@@ -83,6 +89,7 @@ class LlamaCpp:
         installed = self.installation(config)
         if not installed.enabled:
             raise ValueError("llama.cpp is disabled on this compute node.")
+        model.check_moe(settings)
         from loadcoach.devices import cuda_environment
         details = {one['id']: one for one in config.gpu_details}
         around = server_environment(config, settings.get('adapters'))
@@ -91,7 +98,15 @@ class LlamaCpp:
             devices = tuple(f'CUDA{index}' for index in range(len(cards)))
         else:
             devices = tuple(details.get(card, {}).get('llama_device', card) for card in cards)
-        return Launch(command_line(installed.executable, port, settings['flags'], devices, settings.get('adapters')), around,
+        budget = self.host_ram_budget(config, settings)
+        executable = installed.executable
+        if budget:
+            executable = shutil.which(executable)
+            if not executable:
+                raise ValueError("llama-server executable is unavailable for the bounded launch.")
+            executable = os.path.abspath(executable)  # the pre-exec cgroup helper requires an absolute program
+        return Launch(command_line(executable, port, settings['flags'], devices, settings.get('adapters')), around,
+                      process_group=bool(budget), memory_mib=budget,
                       health_path='/v1/models' if self.capabilities(settings).get('classifier') else '/health')
 
     def failure_reason(self, output: str) -> str:

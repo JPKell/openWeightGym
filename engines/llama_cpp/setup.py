@@ -79,6 +79,10 @@ def preview(name: str, candidate: dict, library, runner, supported: list[dict], 
                 errors.append(f"--{flag} must be one of {choices[1]} according to this engine's help.")
     if effective.get("adapters") and "lora-scaled" not in spellings:
         errors.append("This llama-server does not advertise --lora-scaled for adapters.")
+    flags = effective['flags']
+    if effective.get('gpus') != 0 and not effective.get('host_ram_mib') and (
+            flags.get('cpu-moe') or flags.get('n-cpu-moe') or flags.get('moe-cache-mib')):
+        warnings.append("CPU experts use host RAM even with CUDA unified memory disabled. Set a host RAM budget in Hardware to reserve and cap this GPU model's process.")
 
     stamps = []
     model_facts = {}

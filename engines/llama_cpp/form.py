@@ -119,6 +119,8 @@ def settings_from(form: dict[str, list[str]], read) -> dict:
         made["gpus"] = "any" if wanted.lower() == "any" else int(wanted) if wanted.isdigit() else [card.strip() for card in wanted.split(",") if card.strip()]
     if one("min_context"):
         made["min_context"] = read(one("min_context"))
+    if one("host_ram_mib"):
+        made["host_ram_mib"] = read(one("host_ram_mib"))
     if one("alone"):  # a box left unticked is left out, which is the same as false
         made["alone"] = True
     if (one("allow_split") or len(chosen) > 1) and made.get("gpus") != 0:

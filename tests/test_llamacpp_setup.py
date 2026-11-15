@@ -75,6 +75,7 @@ for library; do [[ ! -e $TEST_REQUIREMENTS/$library ]] || exit 1; done
 exec "$@"
 """,
         "curl": """printf 'curl %s\\n' "$*" >>"$TEST_CALLS"
+[[ $* != *nightly-tag.txt* ]] || { printf '%s\\n' "${TEST_NIGHTLY_TAG-b12359}"; exit "${TEST_NIGHTLY_STATUS:-0}"; }
 [[ $* != *-fsSIL* ]] || { printf 'Content-Length: 100\\n'; exit 0; }
 while (($#)); do
   if [[ $1 == -o ]]; then cp "$TEST_ARCHIVE" "$2"; exit; fi
@@ -134,6 +135,44 @@ fi
 
     run.environment = environment
     return run, prefix, commands, calls
+
+
+def test_version_prebuilt_uses_the_published_nightly_binaries(engine_installer):
+    run, prefix, _, calls = engine_installer
+    completed = run('--build', 'v1.0.0', '--prebuilt', '--backend', 'cuda-13.5')
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    logged = calls.read_text()
+    assert '/v1.0.0/nightly-tag.txt' in logged
+    assert '/b12359/llama-b12359-bin-ubuntu-cuda-13.5-x64.tar.gz' in logged
+    assert '/b12359/cudart-llama-b12359-bin-ubuntu-cuda-13.5-x64.tar.gz' in logged
+    assert (prefix / 'current').resolve() == prefix / 'releases/v1.0.0-cuda-13.5'
+
+
+def test_version_source_build_uses_the_version_tag_without_resolving_a_nightly(engine_installer):
+    run, prefix, _, calls = engine_installer
+    completed = run('--build', 'v1.0.0', '--from-source')
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert '--branch v1.0.0' in calls.read_text() and 'curl ' not in calls.read_text()
+    assert (prefix / 'current').resolve() == prefix / 'releases/v1.0.0-cpu-source'
+
+
+def test_version_prebuilt_auto_cuda_uses_an_available_compatible_asset(engine_installer):
+    run, prefix, _, calls = engine_installer
+    completed = run('--build', 'v1.0.0', '--prebuilt', env={'TEST_BACKEND': 'cuda-13.4'})
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert '/b12359/llama-b12359-bin-ubuntu-cuda-12.8-x64.tar.gz' in calls.read_text()
+    assert (prefix / 'current').resolve() == prefix / 'releases/v1.0.0-cuda-12.8'
+
+
+@pytest.mark.parametrize('tag,status', [('bad/path', '0'), ('', '0'), ('b12359', '22')])
+def test_bad_version_manifest_keeps_the_current_build(engine_installer, tag, status):
+    run, prefix, _, calls = engine_installer
+    assert run('--prebuilt').returncode == 0
+    before = (prefix / 'current').resolve()
+    completed = run('--build', 'v1.0.0', '--prebuilt', env={'TEST_NIGHTLY_TAG': tag, 'TEST_NIGHTLY_STATUS': status})
+    assert completed.returncode != 0
+    assert (prefix / 'current').resolve() == before
+    assert '/b12359/llama-' not in calls.read_text()
 
 
 @pytest.fixture

@@ -105,6 +105,21 @@ def test_missing_projector_warns_only_for_a_template_that_handles_images(tmp_pat
     assert not any("projector is selected" in w for w in text_only["warnings"])
 
 
+def test_native_moe_preview_explains_the_separate_host_ram_budget(tmp_path):
+    library, runner, settings = rig(tmp_path)
+    settings = {**settings, 'gpus': 1, 'flags': {**settings['flags'], 'cpu-moe': True}}
+    supported = flags_in(HELP + '--cpu-moe                     CPU experts\n--moe-cache-mib N              GPU cache\n')
+    report = preview('example', configuration(settings), library, runner, supported)
+    assert not report['errors']
+    assert any('CPU experts use host RAM' in warning for warning in report['warnings'])
+    cached = {**settings, 'flags': {**settings['flags'], 'moe-cache-mib': 4096}}
+    rejected = preview('example', configuration(cached), library, runner, supported)
+    assert any('positive model-level host_ram_mib' in error for error in rejected['errors'])
+    bounded = preview('example', configuration({**cached, 'host_ram_mib': 2048}), library, runner, supported)
+    assert not bounded['errors']
+    assert not any('CPU experts use host RAM' in warning for warning in bounded['warnings'])
+
+
 @pytest.mark.parametrize("changed, expected", [
     ({"flags": {"ctx-size": 0}}, "positive whole"),
     ({"flags": {"ctx-size": True}}, "positive whole"),

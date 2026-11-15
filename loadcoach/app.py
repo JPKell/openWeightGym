@@ -2057,7 +2057,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if denied := lacks(user, "manage-models"):
             return denied
         name = request.path_params["name"]
-        settings = await read_json(request, {"engine", "flags", "strata", "sdcpp", "audiocpp", "whispercpp", "gpus", "alone", "allow_split", "adapters", "min_context", "order"})
+        settings = await read_json(request, {"engine", "flags", "strata", "sdcpp", "audiocpp", "whispercpp", "gpus", "alone", "allow_split", "adapters", "min_context", "host_ram_mib", "order"})
         if isinstance(settings, Response):
             return settings
         # `order` is the model's sort order and not one of its settings. Left out, the model keeps the one it has: 10, for one being added. null puts it back at 10.

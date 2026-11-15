@@ -66,6 +66,27 @@ def test_hybrid_requires_both_memory_pools_and_explicit_opt_in(hybrid):
     assert runner.config.disable_ram_offload is True  # no llama.cpp policy mutation
 
 
+def test_llama_native_moe_uses_the_same_bounded_ram_and_vram_admission(hybrid):
+    runner, _, memory = hybrid
+    settings = {'flags': {'model': '/fixture/moe.gguf', 'ctx-size': 512, 'cpu-moe': True,
+                          'gpu-layers': 'all', 'moe-cache-mib': 4096, 'moe-cache-cpu-share': .5},
+                'gpus': 1, 'host_ram_mib': 2048}
+    runner.models.put('native-moe', settings)
+    assert runner.fit('native-moe', settings, set()) == (settings, ('CUDA0',), [])
+    runner.models.resident_measure('native-moe', settings, 128)
+    assert runner.ram_required('native-moe', settings) == 2048
+    for available in (None, 0, 2047):
+        memory['service_available'] = available
+        assert runner.fit('native-moe', settings, set()) is None
+    memory['service_available'] = 8000
+    memory['available'] = 2048  # the host's headroom must still fit
+    assert runner.fit('native-moe', settings, set()) is None
+    memory['available'] = 8000
+    runner.models.measured('native-moe', settings, [15950])
+    assert runner.fit('native-moe', settings, set()) is None
+    assert runner.config.disable_ram_offload is True
+
+
 def test_hybrid_host_fit_does_not_override_a_failed_vram_fit(hybrid):
     runner, settings, memory = hybrid
     runner.models.measured("hybrid", settings, [15950])

@@ -48,6 +48,10 @@ def test_fixed_and_hybrid_profiles_reserve_host_budget_and_unqualified_images_st
     assert render(known)['models'][0]['unknown']
     model.update(engine='strata', flags={'ctx-size': 8192}, measurements=[{'context': 8192, 'mib': [2000]}])
     assert render(known)['models'][0]['ram_points'] == [[0, 8192]]
+    model.update(engine='llama_cpp', host_ram_mib=8192,
+                 flags={'ctx-size': 8192, 'cpu-moe': True, 'moe-cache-mib': 1024})
+    native = render(known)['models'][0]
+    assert native['ram_points'] == [[0, 8192]] and not native['unknown'] and not native['spill']
 
 
 def test_ram_curves_include_resident_only_points_and_invalidate_with_profile_changes(tmp_path):

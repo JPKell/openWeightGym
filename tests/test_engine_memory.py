@@ -121,6 +121,25 @@ def test_missing_delegation_refuses_runner_launch_before_spawning(monkeypatch):
     asyncio.run(exercise())
 
 
+def test_native_llama_budget_refuses_missing_delegation_before_spawning(monkeypatch):
+    import asyncio
+    from loadcoach.config import Config
+    from loadcoach.models import Models
+    from loadcoach.runner import Runner, Server, Refusal
+    def unavailable(*args):
+        raise ValueError('fixture delegation unavailable')
+    monkeypatch.setattr(MemoryGroup, 'create', unavailable)
+    monkeypatch.setattr(asyncio, 'create_subprocess_exec', lambda *a, **k: pytest.fail('No model may start without its cap'))
+    runner = Runner(Config(gpus=('CUDA0',), llama_server=sys.executable), None, models=Models(':memory:'))
+    server = Server('moe', ('CUDA0',), {'flags': {'model': '/model.gguf', 'ctx-size': 512},
+                                     'gpus': 1, 'host_ram_mib': 96})
+    async def exercise():
+        with pytest.raises(Refusal, match='delegation unavailable'):
+            await runner.start(server)
+        assert server.process is None and not runner.retiring
+    asyncio.run(exercise())
+
+
 @pytest.mark.skipif(os.environ.get('OWG_NATIVE_MEMORY') != '1', reason='Opt-in native systemd qualification')
 def test_native_systemd_engine_child_enters_its_cap_and_cleans_up():
     """Exercise real Linux controls and the actual pre-exec helper without a container."""

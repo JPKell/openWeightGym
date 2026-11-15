@@ -267,7 +267,7 @@ def as_toml(name: str, settings: dict, order: int | None = None) -> str:
     lines = [f"[models.{json.dumps(name)}]"]
     if order is not None:
         lines.append(f"order = {order}")
-    for key in ("engine", "gpus", "alone", "allow_split", "min_context"):
+    for key in ("engine", "gpus", "alone", "allow_split", "min_context", "host_ram_mib"):
         if key in settings:
             lines.append(f"{key} = {json.dumps(settings[key])}")
     lines += ["", f"[models.{json.dumps(name)}.flags]"]
@@ -288,7 +288,7 @@ def model_command(models: Models, config: Config, action: str, arguments: list[s
         "order": "NAME NUMBER|default",
     }  # fmt: skip
     usage = "The models commands are:\n" + "\n".join(f"  loadcoach models {name} {needs}".rstrip() for name, needs in expects.items())
-    usage += "\nFLAG is one of llama-server's, without the dashes, or `engine`, `gpus`, `alone`, `allow_split`, `min_context`. An empty VALUE takes a flag away."
+    usage += "\nFLAG is one of llama-server's, without the dashes, or `engine`, `gpus`, `alone`, `allow_split`, `min_context`, `host_ram_mib`. An empty VALUE takes a flag away."
     usage += '\nAdapters are given whole, as JSON: adapters=\'{"terse": {"file": "/path/terse.gguf"}}\'. A request for NAME+terse gets that one alone.'
 
     def changed(name: str, settings: dict, what: str) -> None:
@@ -308,7 +308,7 @@ def model_command(models: Models, config: Config, action: str, arguments: list[s
                 raise ValueError(usage)
             if flag == "order":
                 raise ValueError("Sort order is separate from inference flags: use `loadcoach models order NAME NUMBER` or `default`.")
-            where = settings if flag in ("engine", "gpus", "alone", "allow_split", "adapters", "min_context") else flags
+            where = settings if flag in ("engine", "gpus", "alone", "allow_split", "adapters", "min_context", "host_ram_mib") else flags
             if value == "":
                 where.pop(flag, None)
                 continue

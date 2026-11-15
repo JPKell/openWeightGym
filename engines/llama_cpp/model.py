@@ -1,5 +1,6 @@
 """llama.cpp model validation, artifacts, contexts and server sharing semantics."""
 
+import math
 import re
 
 # Flags LoadCoach sets itself. A model server must stay on this machine, on a port we choose,
@@ -60,6 +61,40 @@ def effective(settings: dict, defaults: dict) -> dict:
         flags['batch-size'] = max(flags.get('batch-size', 0), budget)
         flags['ubatch-size'] = max(flags.get('ubatch-size', 0), flags['batch-size'])
     return {**settings, 'flags': flags}
+
+
+def host_ram_budget(settings: dict) -> int:
+    """An explicit hybrid RAM reservation; zero preserves measured CPU/legacy GPU policy."""
+    budget = settings.get("host_ram_mib", 0)
+    if type(budget) is not int or not 0 <= budget <= 2**31:
+        raise ValueError("host_ram_mib must be a whole number of MiB from 0 through 2147483648.")
+    if budget and settings.get("gpus") == 0:
+        raise ValueError("host_ram_mib is for GPU models using host RAM; CPU-only models use measured RAM admission.")
+    return budget
+
+
+def check_moe(settings: dict) -> None:
+    """Validate explicit expert placement and require bounded RAM for native caching."""
+    flags = settings['flags']
+    if flags.get('cpu-moe') is not None and type(flags['cpu-moe']) is not bool:
+        raise ValueError('cpu-moe must be true or false.')
+    for key in ('n-cpu-moe', 'moe-cache-mib'):
+        value = flags.get(key)
+        if value is not None and (type(value) is not int or not 0 <= value < 2**31):
+            raise ValueError(key + ' must be a whole number from 0 through 2147483647.')
+    share = flags.get('moe-cache-cpu-share')
+    if share is not None and (type(share) not in (int, float) or not 0 <= share <= 1 or not math.isfinite(share)):
+        raise ValueError('moe-cache-cpu-share must be a finite number from 0 to 1.')
+    cache = flags.get('moe-cache-mib') or 0
+    if share and not cache:
+        raise ValueError('moe-cache-cpu-share requires a positive moe-cache-mib.')
+    if cache:
+        if settings.get('gpus') == 0:
+            raise ValueError('Native MoE caching requires GPU placement.')
+        if not (flags.get('cpu-moe') or flags.get('n-cpu-moe') or flags.get('override-tensor')):
+            raise ValueError('Native MoE caching requires host experts: set cpu-moe, n-cpu-moe or an expert override-tensor placement.')
+        if not host_ram_budget(settings):
+            raise ValueError('Native MoE caching requires a positive model-level host_ram_mib budget in Hardware.')
 
 
 def check_modes(flags):
@@ -183,8 +218,9 @@ def check_model(name: str, settings: dict, cards: tuple[str, ...]) -> None:
     """
     if not NAME.fullmatch(name):
         raise ValueError(f"{name!r}: a model's name is letters, digits, dots, dashes, colons or slashes")
-    if not isinstance(settings, dict) or settings.keys() - {"engine", "flags", "gpus", "alone", "allow_split", "adapters", "min_context"}:
-        raise ValueError(f"model {name!r} may set `flags`, `gpus`, `alone`, `allow_split`, `adapters` and `min_context`. llama-server flags go in its flags")
+    if not isinstance(settings, dict) or settings.keys() - {"engine", "flags", "gpus", "alone", "allow_split", "adapters", "min_context", "host_ram_mib"}:
+        raise ValueError(f"model {name!r} may set `flags`, `gpus`, `alone`, `allow_split`, `adapters`, `min_context` and `host_ram_mib`. llama-server flags go in its flags")
+    host_ram_budget(settings)
     adapters = settings.get("adapters", {})
     # llama-server is given the adapters as FILE:STRENGTH,FILE:STRENGTH, so a path can hold neither a comma nor a colon.
     good_adapter = lambda short, one: (  # noqa: E731
@@ -202,6 +238,7 @@ def check_model(name: str, settings: dict, cards: tuple[str, ...]) -> None:
     if not isinstance(flags, dict) or not isinstance(flags.get("model"), str) or "ctx-size" not in flags:
         raise ValueError(f"model {name!r} needs both `model` (the .gguf file) and `ctx-size` in its flags")
     check_modes(flags)
+    check_moe(settings)
     parallel = flags.get("parallel")
     if parallel is not None and (type(parallel) is not int or parallel == 0 or parallel < -1):
         raise ValueError(f"model {name!r}: parallel is a positive whole number of requests, or -1 for server auto")
