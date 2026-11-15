@@ -97,7 +97,7 @@
       tick.id = prefix + '-on'; tick.name = 'on'; tick.value = model.name; tick.checked = true;
       row.querySelector('[data-name]').htmlFor = tick.id; row.querySelector('[data-name]').textContent = model.name;
       row.querySelector('[data-detail]').textContent = `${model.engine}${model.fixed ? '' : ` · ${model.shared_context ? 'shared' : 'fixed'} slots × ${Number.isInteger(model.parallel) && model.parallel > 0 ? model.parallel : 'auto'}`}`;
-      const badge = row.querySelector('[data-kind]'); badge.textContent = {llm: 'LLM', audio: 'Audio', image: 'Image'}[model.kind]; badge.classList.add(`bg-${{llm: 'blue', audio: 'teal', image: 'purple'}[model.kind]}-lt`);
+      const badge = row.querySelector('[data-kind]'); badge.textContent = {llm: 'LLM', audio: 'Audio', image: 'Image', video:'Video'}[model.kind]; badge.classList.add(`bg-${{llm: 'blue', audio: 'teal', image: 'purple',video:'purple'}[model.kind]}-lt`);
       const place = row.querySelector('[data-placement]'); place.id = prefix + '-placement';
       row.querySelector('[data-placement-label]').htmlFor = place.id;
       row.querySelector('[data-placement-label]').textContent = `Placement for ${model.name}`;
@@ -152,9 +152,9 @@
       tick.disabled = !model.enabled || !model.placements.length;
       tick.setAttribute('aria-label', `Select ${model.name}`);
       item.querySelector('[data-name]').textContent = model.name;
-      item.querySelector('[data-detail]').textContent = model.engine;
+      item.querySelector('[data-detail]').textContent = model.engine+(model.observed_gpu_mib?.length?' · observed '+model.observed_gpu_mib.map(value=>size(value)).join(' + ')+'; full bounds unqualified':'');
       item.title = model.enabled ? `${model.engine} · ${memoryText(model)}` : 'This model location is disabled.';
-      item.querySelector('[data-catalogue-kind]').textContent = {llm: 'LLM', audio: 'Audio', image: 'Image'}[model.kind];
+      item.querySelector('[data-catalogue-kind]').textContent = {llm: 'LLM', audio: 'Audio', image: 'Image', video:'Video'}[model.kind];
       item.querySelector('[data-catalogue-memory]').textContent = model.unknown ? 'Unknown' : size(total(model));
       return item;
     }));
@@ -166,7 +166,7 @@
   function renderBudget() {
     const result = judge();
     $('#verdict').dataset.state = result.state; $('#verdict-title').textContent = result.title; $('#verdict-detail').textContent = result.detail;
-    $('#selection-count').textContent = `${selected().length} selected · ${selected().filter(m => m.kind === 'llm').length} LLM · ${selected().filter(m => m.kind === 'audio').length} audio · ${selected().filter(m => m.kind === 'image').length} image`;
+    $('#selection-count').textContent = `${selected().length} selected · ${selected().filter(m => m.kind === 'llm').length} LLM · ${selected().filter(m => m.kind === 'audio').length} audio · ${selected().filter(m => m.kind === 'image').length} image · ${selected().filter(m => m.kind === 'video').length} video`;
     $('#resources').replaceChildren(...resources.map(resource => {
       const row = clone('fit-resource-template'), used = result.used[resource.id];
       row.dataset.card = resource.id;

@@ -5,7 +5,7 @@ from loadcoach.setting_catalog import entries, default_for, validate
 
 def contracts():
     """Return the canonical public limits in display order."""
-    return tuple(entry for entry in entries('weightroom') if entry.page == 'limits')
+    return tuple(entry for entry in entries('weightroom') if entry.page == 'limits' or entry.page=='video' and entry.ceiling is not None)
 
 
 def checked(values, *, superuser=False):

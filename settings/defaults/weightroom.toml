@@ -13,6 +13,24 @@ timezone = "America/Vancouver"
 # Allow image generation and its model setup throughout the platform. Changes apply immediately.
 allow_image_generation = true
 
+# Allow local video generation and video model setup. Image generation must also be enabled.
+allow_video_generation = true
+
+# Maximum effective clip length in seconds. Applies to new work; groups may override up to 10.
+video_max_seconds = 5
+# Maximum landscape width in pixels. Portrait uses the same longest side and pixel area.
+video_max_width = 832
+# Maximum landscape height in pixels. Groups may override dimensions within qualified profile bounds.
+video_max_height = 480
+# Maximum encoded WebM file size in MiB. Groups may override; checked before retaining output.
+video_output_max_mib = 512
+# Retained video quota per stable account in GiB. Groups may override; outputs fail when full.
+video_quota_gib = 10
+# Video retention in days. Zero keeps clips until deleted; active jobs remain protected.
+video_retention_days = 0
+# Remux generated PCM soundtracks to Opus with optional control-node ffmpeg; video is copied.
+video_soundtrack_remux = true
+
 # Allow text-to-speech, speech-to-text and Voice. Changes apply immediately.
 allow_speech = true
 

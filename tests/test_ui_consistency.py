@@ -22,6 +22,7 @@ TEMPLATE_ROOTS = tuple(ROOT / name / 'pages' for name in ('weightroom', 'mirrorw
 HOST = '5855323a162516e680c785a3dd60f563bfc44129d809af71eb8674ff7316901d'
 # Explicit routes keep this check portable: it does not depend on ignored audit artifacts.
 PAGES = (
+    '/chat/video','/models/video','/settings/video',
     '/', '/chat', '/chat/classifier', '/collections', '/workflows', '/chat/images', '/chat/music',
     '/chat/sounds', '/chat/speech', '/chat/transcribe', '/voice', '/voice/desktop', '/models',
     '/models/images/workflows', '/models/audio', '/dry-fit', '/roles', '/files',
@@ -296,6 +297,14 @@ def test_all_console_pages_share_sizes_and_fit(ui_console, tmp_path, width, them
     (output / f'{width}-{theme}-{palette}.json').write_text(json.dumps(measurements, indent=2))
     assert not errors, errors
     assert not failures, '\n'.join(failures)
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+@pytest.mark.parametrize('theme', ['light','dark'])
+def test_video_surfaces_share_console_controls_and_fit(ui_console,tmp_path,width,theme):
+    """Run the canonical layout audit on the new video surfaces in both sizes and themes."""
+    server,_=ui_console
+    test_all_console_pages_share_sizes_and_fit((server,('/chat/video','/models/video','/settings/video')),tmp_path,width,theme,'slate')
 
 
 @pytest.mark.parametrize('width', [1440, 390])

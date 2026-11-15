@@ -9,6 +9,7 @@ PAGES = {
     'alerts': ('Alerts and notifications', '/settings/alerts'),
     'security': ('Security and sign-in', '/settings/security'),
     'limits': ('Uploads and limits', '/settings/limits'),
+    'video': ('Video settings', '/settings/video'),
     'downloads': ('Downloads and credentials', '/settings/downloads'),
     'machine': ('Machine configuration', '/settings/machine'),
     'history': ('Settings history', '/settings/history'),

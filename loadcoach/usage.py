@@ -20,9 +20,11 @@ HOUR = 3600
 # reported both token counts, so a model's rates can price them when the report is made.
 SUMMED = ("requests", "input_tokens", "output_tokens", "missing_usage", "recorded_cost",
           "unpriced_requests", "unpriced_input", "unpriced_output",
-          "complete_requests", "complete_input", "complete_output")
+          "complete_requests", "complete_input", "complete_output",
+          "video_clips", "video_seconds", "video_frames", "video_pixels", "gpu_seconds")
 KEY = ("hour", "person", "grp", "model", "service", "outcome", "level")
-FIELDS = ("requests", "input_tokens", "output_tokens", "total_tokens", "missing_usage", "inferred_group")
+FIELDS = ("requests", "input_tokens", "output_tokens", "total_tokens", "missing_usage", "inferred_group",
+          "video_clips", "video_seconds", "video_frames", "video_pixels", "gpu_seconds")
 ENDINGS = ("done", "failed", "refused", "hung up", "stopped")
 COST_SOURCES = ("recorded", "model", "fallback")
 
@@ -73,7 +75,9 @@ def tally(at, user, model, what, level, detail, bucket: int = HOUR) -> tuple[tup
            "" if service is None else str(service), what, level or "normal")
     return key, [1, inputs, outputs, int(not (has_input and has_output)), float(cost or 0),
                  int(unpriced), inputs * unpriced, outputs * unpriced,
-                 int(complete), inputs * complete, outputs * complete]
+                 int(complete), inputs * complete, outputs * complete,
+                 *[float(detail.get(key,0)) if type(detail.get(key,0)) in (int,float) and 0<=detail.get(key,0)<1e15 else 0
+                   for key in ('video_clips','video_seconds','video_frames','video_pixels','gpu_seconds')]]
 
 
 def add_hours(connection, rows) -> None:
@@ -203,6 +207,7 @@ def report(db, params, owner: str | None = None, groups: dict[str, str] | None =
         requests, inputs, outputs = counted["requests"], counted["input_tokens"], counted["output_tokens"]
         values = dict(zip(FIELDS, (requests, inputs, outputs, inputs + outputs, counted["missing_usage"],
                                    requests if inferred else 0)))
+        values.update({key:counted[key] for key in ('video_clips','video_seconds','video_frames','video_pixels','gpu_seconds')})
         values.update(recorded_cost=Decimal(str(counted["recorded_cost"])),
                       recorded_requests=requests - counted["unpriced_requests"])
         unpriced = [counted["unpriced_requests"], counted["unpriced_input"], counted["unpriced_output"]]

@@ -8,11 +8,12 @@ NAV_SECTIONS = {
     'Interact': (
         ('Chat & analysis', ('/chat', '/chat/tools', '/voice', '/chat/classifier')),
         ('Images', ('/chat/images', '/chat/extraction')),
+        ('Video', ('/chat/video',)),
         ('Audio', ('/chat/speech', '/chat/transcribe', '/chat/music', '/chat/sounds')),
         ('Desktop apps', ('/voice/desktop',)),
     ),
     'Models': (
-        ('Catalogue', ('/models', '/models/images', '/models/audio', '/cloud-apis')),
+        ('Catalogue', ('/models', '/models/images', '/models/video', '/models/audio', '/cloud-apis')),
         ('Routing & capacity', ('/roles', '/dry-fit')),
         ('Files & provenance', ('/files', '/fingerprints')),
         ('Downloads', ('/hub', '/civitai')),
@@ -38,7 +39,7 @@ NAV_SECTIONS = {
         ('Platform', ('/settings', '/settings/requests', '/settings/retention', '/settings/alerts', '/settings/limits', '/settings/downloads', '/settings/machine', '/settings/history', '/compute-nodes')),
         ('Access & spending', ('/settings/security', '/users', '/groups', '/allowances')),
         ('Tools & plugins', ('/tools', '/plugins')),
-        ('Media', ('/settings/image', '/system/audio', '/system/voice')),
+        ('Media', ('/settings/image', '/settings/video', '/system/audio', '/system/voice')),
     ),
     'Docs': (
         ('', ('/docs',)),
@@ -79,7 +80,7 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
     """
     services = services or PlatformServices()
     groups = [
-        {"name": "Interact", "links": [("Text chat", "/chat"), ("Classifier", "/chat/classifier"), ("Image generation", "/chat/images"), ("Image extraction", "/chat/extraction"), ("Music", "/chat/music"), ("Sounds", "/chat/sounds"), ("Voice generation", "/chat/speech"), ("Transcribe", "/chat/transcribe")]},
+        {"name": "Interact", "links": [("Text chat", "/chat"), ("Classifier", "/chat/classifier"), ("Image generation", "/chat/images"), ("Video generation", "/chat/video"), ("Image extraction", "/chat/extraction"), ("Music", "/chat/music"), ("Sounds", "/chat/sounds"), ("Voice generation", "/chat/speech"), ("Transcribe", "/chat/transcribe")]},
         {"name": "Models", "links": []},
         # Collections and workflows keep their own addresses; they are here because they are used to compare models.
         {"name": "Benchmark", "links": [("Runs", "/benchmarks/runs"), ("Results", "/benchmarks/results"), ("Node measurements", "/benchmarks/node-measurements"), ("Compare", "/benchmarks/compare"), ("Collections", "/collections"), ("Workflows", "/workflows")]},
@@ -93,7 +94,7 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
         groups[0]["links"].append(("Voice chat", '/voice'))
         groups[0]["links"].append(("Voice desktop app", '/voice/desktop'))
     if "manage-models" in can:
-        groups[1]["links"] = [("Models", "/models"), ("Images", "/models/images"), ("Audio", "/models/audio"), ("Roles", "/roles")]
+        groups[1]["links"] = [("Models", "/models"), ("Images", "/models/images"), ("Video", "/models/video"), ("Audio", "/models/audio"), ("Roles", "/roles")]
     if "manage-hosted" in can:  # the services elsewhere whose models are offered here
         groups[1]["links"].append(("Cloud APIs", "/cloud-apis"))
     if "manage-models" in can:
@@ -138,7 +139,7 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
             active = '/benchmarks/runs'
     if path.startswith("/models/images"):
         active = "/models/images"
-    elif path.startswith(("/chat/tools", "/chat/classifier", "/chat/images", "/chat/extraction", "/chat/music", "/chat/sounds", "/chat/speech", "/chat/transcribe", "/models/audio")):
+    elif path.startswith(("/chat/tools", "/chat/classifier", "/chat/images", "/chat/video", "/models/video", "/chat/extraction", "/chat/music", "/chat/sounds", "/chat/speech", "/chat/transcribe", "/models/audio")):
         active = "/" + "/".join(path.strip("/").split("/")[:2])
     selected = next((group for group in groups if any(url == active for _, url in group["links"])), None)
     if root == "/plugins" and active != "/plugins/activity":

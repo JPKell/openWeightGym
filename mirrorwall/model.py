@@ -59,6 +59,9 @@ def check_name(name):
 
 def check_model(name,settings,cards):
     """Validate image assets, supported fields and explicit one/two-card layout."""
+    from mirrorwall.video import is_video, check_profile
+    if is_video(settings):
+        return check_profile(name,settings,cards)
     check_name(name)
     if not isinstance(settings,dict) or settings.keys()-{"engine","flags","sdcpp","gpus","alone"}:
         raise ValueError("Image models accept engine, flags, sdcpp, gpus and alone.")

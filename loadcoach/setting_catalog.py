@@ -519,6 +519,19 @@ _add('weightroom', 'audio_transcription_model', 'text', tier='now', scope='front
 _add('weightroom', 'toollocker', 'text', tier='file', scope='front', page='machine', section='Additional settings', label='Toollocker', help="ToolLocker's base URL for the System > Tools console. Empty uses turnstile on this machine, port 8443. Tool calls use the signed-in person's session key.")
 _add('weightroom', 'timezone', 'text', tier='now', scope='front', page='general', section='Display and costs', label='Time zone', control='text', help="The zone that times are shown in. Left out, it is this machine's own, which may not be yours.", rule=_timezone)
 _add('weightroom', 'allow_image_generation', 'bool', tier='now', scope='front', page='general', section='Platform services', label='Image generation', control='switch', help='Allow image generation and its model setup throughout the platform. Changes apply immediately.')
+_add('weightroom','allow_video_generation','bool',tier=NOW,scope='front',page='general',section='Platform services',label='Video generation',control='switch',default=True,help='Allow local video generation and model setup. Requires image generation to be enabled.')
+_add('turnstile','allow_video_generation','bool',tier=FILE,scope='front',page='machine',section='Platform services',label='Video generation',default=True)
+for name,default,minimum,maximum,label,unit in (
+    ('video_max_seconds',5,1,10,'Maximum clip length','s'),
+    ('video_max_width',832,256,1280,'Maximum landscape width','px'),
+    ('video_max_height',480,256,1280,'Maximum landscape height','px'),
+    ('video_output_max_mib',512,1,512,'Maximum output file','MiB'),
+    ('video_quota_gib',10,1,1024,'Video quota per account','GiB'),
+):
+    _add('weightroom',name,'int',tier=NOW,scope='front',page='video',section='Video limits',label=label,
+         default=default,min=minimum,ceiling=maximum,unit=unit,control='number',help='Applies to new video work. Groups may override; the qualified profile always imposes its hard limit.')
+_add('weightroom','video_retention_days','int',tier=NOW,scope='front',page='video',section='Video storage',label='Clip retention',default=0,min=0,max=36500,unit='days',control='number',help='Zero keeps clips until deleted. Active jobs remain protected.')
+_add('weightroom','video_soundtrack_remux','bool',tier=NOW,scope='front',page='video',section='Video storage',label='Opus soundtracks',default=True,control='switch',help='Use optional control-node ffmpeg to copy video and remux generated PCM audio to Opus. Without it playback depends on the browser.')
 _add('weightroom', 'allow_speech', 'bool', tier='now', scope='front', page='general', section='Platform services', label='Speech · TTS, STT and Voice', control='switch', help='Allow text-to-speech, speech-to-text and Voice. Changes apply immediately.')
 _add('weightroom', 'allow_audio_generation', 'bool', tier='now', scope='front', page='general', section='Platform services', label='Music and audio generation', control='switch', help='Allow music and sound generation. Speech has its own switch. Changes apply immediately.')
 _add('weightroom', 'allow_model_downloads', 'bool', tier='now', scope='front', page='general', section='Platform services', label='Model downloads', control='switch', help='Allow model discovery and downloads. Civitai also requires image generation. Changes apply immediately.')

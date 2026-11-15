@@ -1,0 +1,12 @@
+{% extends 'frame.html' %}
+{% from 'parts.html' import page_header, alert %}
+{% from 'video_parts.html' import workspace %}
+{% block title %}Video generation · openWeightGym{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/generation.css?v=1"><link rel="stylesheet" href="/mirrorwall-static/video.css?v=1"><script src="/mirrorwall-static/video.js?v=1" defer></script>{% endblock %}
+{% block main %}
+<div id="video-studio">
+{% call page_header('Video generation') %}<a href="/models/video" class="btn btn-outline-secondary">Video models</a><a href="/docs/web-app/video-generation" class="btn btn-outline-secondary">Guide</a>{% endcall %}
+{{ alert('danger',attrs={'id':'video-message','role':'status','hidden':''}) }}
+{{ workspace(video_samplers,video_schedulers) }}
+</div>
+{% endblock %}

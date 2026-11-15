@@ -18,6 +18,11 @@ Search, section filters, article contents, browser history, light/dark appearanc
 
 For My account proposals, run `.venv/bin/python scripts/preview-account-designs.py` and open `build/account-designs/index.html`. Sample edits and keys stay in page memory; proposed controls are labelled and no real account changes. Repository `AGENTS.md` lists other preview scripts and owning components.
 
+For Video generation and Video models, run `.venv/bin/python scripts/preview-video-designs.py`
+and open `build/video-designs/index.html`. Each tab offers Canvas, Desk and Review layouts with
+browser-local sample actions, light/dark appearance and failure states. Sample artwork is
+illustrative; it is not a generated video. The selected live layout is Canvas on both pages.
+
 ## Related
 
 [Find your way](/docs/getting-started/navigation), [My account](/docs/web-app/my-account).

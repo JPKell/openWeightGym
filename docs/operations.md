@@ -336,7 +336,7 @@ git -C ~/stable-diffusion.cpp submodule update --init --recursive
 cmake -S ~/stable-diffusion.cpp -B ~/stable-diffusion.cpp/build-suite \
   -DCMAKE_BUILD_TYPE=Release -DSD_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=native \
   -DSD_BUILD_SHARED_LIBS=OFF -DBUILD_SHARED_LIBS=OFF \
-  -DSD_SERVER_BUILD_FRONTEND=OFF -DSD_WEBP=OFF -DSD_WEBM=OFF
+  -DSD_SERVER_BUILD_FRONTEND=OFF -DSD_WEBP=ON -DSD_WEBM=ON
 cmake --build ~/stable-diffusion.cpp/build-suite --target sd-cli sd-server --parallel 4
 ~/stable-diffusion.cpp/build-suite/bin/sd-server --help
 scripts/install-sdcpp.sh --source ~/stable-diffusion.cpp \

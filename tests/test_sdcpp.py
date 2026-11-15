@@ -154,6 +154,96 @@ def test_corrupt_release_is_not_adopted_or_executed(tmp_path):
     with pytest.raises(ValueError,match="verification failed"): installer.verify(tmp_path)
 
 
+def test_video_container_build_options_cannot_reuse_an_incompatible_release():
+    flags=installer.build_flags('cuda','120')
+    assert '-DSD_WEBM=ON' in flags and '-DSD_WEBP=ON' in flags
+    release=lambda options:installer.release_identity(installer.REVISION,'cuda','patch',options)
+    assert release(flags)!=release([one.replace('SD_WEBM=ON','SD_WEBM=OFF') for one in flags])
+    assert release(flags)!=release(installer.build_flags('cuda','native'))
+
+
+@pytest.fixture
+def anyio_backend():
+    return 'asyncio'
+
+
+@pytest.mark.anyio
+async def test_native_progress_is_delivered_before_a_newline():
+    from mirrorwall.runtime import native_lines
+    import asyncio
+    stream=asyncio.StreamReader()
+    stream.feed_data(b'loading\r1/20 - 6.4s/it\r')
+    lines=native_lines(stream)
+    assert await anext(lines)==b'loading\n'
+    assert await anext(lines)==b'1/20 - 6.4s/it\n'
+    stream.feed_eof()
+    assert [line async for line in lines]==[]
+
+
+@pytest.mark.anyio
+async def test_video_loader_uses_native_recipe_capabilities_and_opaque_file_ids(tmp_path):
+    from mirrorwall.runtime import Native
+    from test_video_requests import profile
+    import httpx
+    settings=profile(recipe='wan21-t2v')
+    for key in ('model',):
+        path=tmp_path/'weights.gguf';path.write_bytes(b'weights');settings['flags'][key]=str(path)
+    for name in ('vae','text_encoder'):
+        path=tmp_path/(name+'.gguf');path.write_bytes(name.encode());settings['sdcpp']['components'][name]=str(path)
+    native=Native({'settings':settings,'scratch':str(tmp_path)})
+    native.prepare_video_catalog()
+    seen=[]
+    def respond(request):
+        if request.url.path.endswith('/model-files'):
+            return httpx.Response(200,json={'files':[{'relative_path':path,'id':'opaque:'+slot} for slot,path in native.model_files.items()]})
+        body=json.loads(request.content);seen.append(body)
+        return httpx.Response(200,json={'state':'ready','recipe':body['recipe']})
+    native.client=httpx.AsyncClient(base_url='http://native',transport=httpx.MockTransport(respond))
+    try:
+        await native.load_video_recipe()
+        assert seen==[{'recipe':'wan21-t2v','models':{'diffusion_model':'opaque:diffusion_model','vae':'opaque:vae','t5xxl':'opaque:t5xxl'}}]
+    finally:
+        await native.stop()
+    assert not list(tmp_path.glob('video-models-*'))
+
+
+@pytest.mark.parametrize('outcome',['complete','invalid','source-changed'])
+def test_video_conversion_is_bounded_preserves_sources_and_publishes_only_verified_output(tmp_path,monkeypatch,outcome):
+    import asyncio
+    from test_mirrorwall_components import gguf,safetensors
+    from loadcoach import host_memory
+    folder=tmp_path/'image';folder.mkdir()
+    source=Path(safetensors(folder/'hunyuan.safetensors',{
+        'txt_in.individual_token_refiner.blocks.0.adaLN_modulation.1.weight':(8,8),'byt5_in.weight':(8,8)}))
+    original=source.read_bytes()
+    monkeypatch.setattr(host_memory,'memory_snapshot',lambda:{'available':131072,'service_available':131072})
+    jobs=installer.VideoConversions(tmp_path/'conversions','/bin/true',lambda:{'cache':str(folder)})
+    calls=[]
+    async def command(identifier,*args):
+        calls.append(args)
+        target=Path(args[-1])
+        if outcome=='invalid':target.write_bytes(b'GGUFbroken')
+        else:gguf(target,{'weight':(8,8)})
+        if outcome=='source-changed':source.write_bytes(original+b'changed')
+    monkeypatch.setattr(jobs,'command',command)
+    async def run():
+        try:
+            row=await jobs.convert('owner',str(source),ram_mib=2048,disk_mib=1024)
+            await asyncio.gather(*tuple(jobs.jobs.tasks))
+            return jobs.jobs.get(row['id'],'owner')
+        finally:await jobs.close()
+    row=asyncio.run(run())
+    assert row['state']==('complete' if outcome=='complete' else 'failed')
+    assert '--as='+str(2048*2**20) in calls[0] and '--fsize='+str(1024*2**20) in calls[0]
+    output=source.with_name('hunyuan-Q8_0.gguf')
+    assert output.exists()==(outcome=='complete')
+    assert not list(folder.glob('.video-convert-*'))
+    if outcome=='complete':
+        assert source.read_bytes()==original
+        receipt=json.loads(output.with_name(output.name+'.source.json').read_text())
+        assert receipt['source_sha256']==installer.digest(source) and receipt['sha256']==installer.digest(output)
+
+
 class FakeNative:
     """Return deterministic image events without native processes or accelerators."""
     def __init__(self,fail=False):

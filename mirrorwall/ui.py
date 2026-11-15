@@ -62,7 +62,64 @@ def routes(for_people, page, ask, model_api):
         """Render image-only model management for authorized administrators."""
         if "manage-models" not in person.can:
             return page(request, "refused.html", person, status=403, why="Your account may not manage image models.")
-        return page(request, "mirrorwall_models.html", person, studio_manage=True)
+        video=request.url.path.startswith('/models/video')
+        from mirrorwall.video import FAMILIES, defaults, limits
+        profiles={family:{'label':family,'defaults':defaults({'sdcpp':{'family':family}}),'limits':limits({})} for family in FAMILIES}
+        return page(request, "mirrorwall_models.html", person, studio_manage=True,
+                    media_kind='video' if video else 'image',video_profiles=profiles if video else {})
+
+    async def videos(request,person):
+        """Render the private video Canvas with capability-filtered model and input controls."""
+        return page(request,'video_studio.html',person,video_samplers=SAMPLERS,video_schedulers=SCHEDULERS)
+
+    async def video_proxy(request,person):
+        """Forward allowlisted private video operations with the current server-side session key."""
+        action=request.path_params.get('action','state')
+        if request.method!='GET':
+            origin=request.headers.get('origin')
+            if origin and urlsplit(origin).netloc!=request.headers.get('host'):
+                return JSONResponse({'error':{'message':"Use this site's own video page."}},403)
+        parts=action.split('/')
+        if action=='state' and request.method=='GET':
+            models,jobs=await asyncio.gather(ask('GET','/v1/models',person.key),ask('GET','/v1/videos',person.key,params={'limit':100}))
+            if not models.is_success or not jobs.is_success:
+                return JSONResponse({'error':{'message':'Video inventory or history is unavailable.'}},503)
+            if jobs.headers.get('x-suite-image-temporary')=='1':
+                observation.silence()
+            return JSONResponse({'models':[one for one in models.json().get('data',[]) if one.get('capabilities',{}).get('video_generation')],
+                                 'jobs':jobs.json().get('data',[]),'history_has_more':jobs.json().get('has_more',False),
+                                 'can_unlogged':'unlogged' in person.can},headers={'cache-control':'no-store'})
+        target=None
+        if action=='jobs' and request.method in ('GET','POST'):
+            target='/v1/videos'
+        elif len(parts)==2 and parts[0]=='jobs' and request.method in ('GET','DELETE'):
+            target='/v1/videos/'+quote(parts[1],safe='')
+        elif len(parts)==3 and parts[0]=='jobs' and parts[2] in ('content','cancel','poster') and request.method==('GET' if parts[2]=='content' else 'POST'):
+            target='/v1/videos/'+quote(parts[1],safe='')+'/'+parts[2]
+        elif action=='assets' and request.method=='POST':
+            target='/mirrorwall/assets'
+        elif len(parts)==3 and parts[0]=='assets' and parts[2]=='content' and request.method=='GET':
+            target='/mirrorwall/assets/'+quote(parts[1],safe='')+'/content'
+        if not target:
+            return JSONResponse({'error':{'message':'Unknown video operation.'}},404)
+        more={}
+        if request.method=='POST':
+            try:
+                more['json']=await Front.read_json(request)
+            except (ValueError,TypeError) as problem:
+                return JSONResponse({'error':{'message':str(problem)}},400)
+            if more['json'].get('temporary'):
+                if 'unlogged' not in person.can:
+                    return JSONResponse({'error':{'message':'Your account may not use no-log video.'}},403)
+                observation.silence()
+        if request.headers.get('range'):
+            more['headers']={'range':request.headers['range']}
+        answer=await ask(request.method,target,person.key,params=dict(request.query_params),**more)
+        if answer.headers.get('x-suite-image-temporary')=='1':
+            observation.silence()
+        headers={key:value for key,value in answer.headers.items() if key.lower() in
+                 ('content-type','content-disposition','accept-ranges','content-range','x-suite-image-temporary')}
+        return Response(answer.content,answer.status_code,headers={**headers,'cache-control':'no-store','x-content-type-options':'nosniff'})
 
     async def proxy(request, person):
         """Forward only allowlisted image operations using the current server-side session."""
@@ -115,10 +172,12 @@ def routes(for_people, page, ask, model_api):
                                for name, one in facts.items()}
         value['default_node'] = next(iter(facts), '')
         selected_node = request.query_params.get('node', '')
+        video=request.url.path.startswith('/video-models')
         value['models'] = [{**copy, 'node':copy.get('machine', ''),
                             'workflow_model':one['name'], 'workflow_model_id':one.get('model_id')}
                            for one in value['models'] if one.get('engine') == 'sdcpp'
                            for copy in one.get('locations') or [one]
+                           if (copy.get('sdcpp',one.get('sdcpp',{})).get('mode')=='vid_gen')==video
                            if not selected_node or copy.get('machine', '') == selected_node]
         value['cards'] = value['node_cards'].get(selected_node or value['default_node'],
                             (value.get('engine_cards') or {}).get('sdcpp', value.get('cards') or []))
@@ -140,6 +199,9 @@ def routes(for_people, page, ask, model_api):
             if not isinstance(name, str) or not isinstance(settings,dict) or settings.get("engine") != "sdcpp":
                 raise ValueError("Choose an image model name and settings.")
             check_name(name)
+            from mirrorwall.video import is_video
+            if is_video(settings)!=request.url.path.startswith('/video-models'):
+                raise ValueError('Use the model studio for this media kind.')
             destinations=body.get('machines')
             if destinations is not None and (not body.get('new') or not isinstance(destinations,list) or not destinations
                 or len(destinations)>100 or any(not isinstance(node,str) or not node.strip() for node in destinations)):
@@ -201,7 +263,12 @@ def routes(for_people, page, ask, model_api):
                                      **{key:request.query_params[key] for key in ('paged','cursor','kind','base') if key in request.query_params}})
         return Response(answer.content,answer.status_code,media_type='application/json',headers={'cache-control':'no-store'})
 
-    return [Route("/chat/images", for_people(studio)),
+    return [Route('/chat/video',for_people(videos)),Route('/models/video',for_people(models)),
+            Route('/video-api',for_people(video_proxy)),
+            Route('/video-api/{action:path}',for_people(video_proxy),methods=['GET','POST','DELETE']),
+            Route('/video-models',for_people(inventory)),Route('/video-models',for_people(model_save),methods=['POST']),
+            Route('/video-models/check',for_people(model_check),methods=['POST']),
+            Route("/chat/images", for_people(studio)),
             Route("/models/images", for_people(models)),
             Route("/models/images/workflows", for_people(workflows)),
             Route("/mirrorwall-models", for_people(inventory)),

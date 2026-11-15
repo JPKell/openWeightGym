@@ -25,7 +25,7 @@ from db import DatabaseSource, database, migrate
 from db.schemas import BATCHES
 from loadcoach.setting_catalog import default_for
 
-ENDPOINTS = ("/v1/chat/completions", "/v1/responses", "/v1/completions", "/v1/embeddings", "/v1/rerank", "/v1/images/generations", "/v1/images/edits", "/v1/audio/generations")
+ENDPOINTS = ("/v1/chat/completions", "/v1/responses", "/v1/completions", "/v1/embeddings", "/v1/rerank", "/v1/images/generations", "/v1/images/edits", "/v1/audio/generations", "/v1/videos/generations")
 MOST_LINES = default_for("turnstile","batch_max_lines")  # requests in one batch
 MOST_BYTES = int(default_for("turnstile","batch_max_mib") * 2**20)  # the size of one uploaded file
 TRIES = default_for("turnstile","batch_tries")  # how often one request is begun. Each time it is cut off by LoadCoach going down counts, so that one which brings it down is not begun for ever

@@ -64,7 +64,7 @@ def judged(path: str, upstream: httpx.Response, whole: bytes, complete: bool, br
     if said_wrong(whole):
         return "error"  # a 200 with an error inside, as an outside service may answer
     kind = upstream.headers.get("content-type", "")
-    if path.startswith('/v1/images/'):
+    if path.startswith(('/v1/images/','/v1/videos/')):
         from mirrorwall.stream import completed
         if 'text/event-stream' in kind:
             return 'success' if completed(whole) else 'cancelled'
@@ -323,7 +323,8 @@ class Routing:
                     raise
                 self.log.add('reliability', 'record-failed', user.name, '', model, of=int(number), why=str(problem))
 
-        ended.image_request = path.startswith('/v1/images/')
+        ended.image_request = path.startswith(('/v1/images/','/v1/videos/'))
+        ended.video_request = path.startswith('/v1/videos/')
         ended.audio_request = path.startswith('/v1/audio/')
         return ended
 

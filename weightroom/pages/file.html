@@ -1,7 +1,7 @@
 {% extends "frame.html" %}
 {% from "parts.html" import said_box, page_header, card, more, confirm_loss, alert, empty_row %}
 {% from "kpi_parts.html" import kpi_row, kpi %}
-{% from "file_parts.html" import file_record %}
+{% from "file_parts.html" import file_record, conversion_form %}
 {% set name = file.path.rsplit("/", 1)[-1] %}
 {% set facts = told.facts if told else file.facts|default({}, true) %}
 {% set file_inspector = true %}
@@ -46,8 +46,12 @@
     {% call card('Convert to classifier GGUF') %}
     {% if facts.conversion == 'refused' %}{% call alert('danger') %}{{ facts.why }}{% endcall %}
     {% else %}<p class="small text-secondary">Convert the complete bundle on its owning compute node. Install CPU conversion tools in Components first. Sources stay untouched; a 30-question parity gate labels the output.</p>
-    <form method="post" action="/file"><input type="hidden" name="path" value="{{ file.path }}"><label class="form-label" for="conversion-node">Owning compute node</label><select class="form-select form-select-sm mb-2" name="machine" id="conversion-node">{% for node in nodes if node.name != 'front' and node.answering %}<option value="{{ node.name }}">{{ (node.name)|node_label }}</option>{% endfor %}</select><button class="btn btn-outline-primary btn-sm" name="do" value="convert-classifier">Convert to classifier GGUF</button></form>{% endif %}
+    {{ conversion_form(file,nodes) }}{% endif %}
     {% endcall %}
+    {% endif %}
+    {% set video_identity = file.facts.get('image_identity',{}) if file.facts else {} %}
+    {% if file.path.lower().endswith('.safetensors') and (video_identity.get('family')=='hunyuan-video-1.5' or video_identity.get('variant')=='ltx-gemma4-12b') and (platform is not defined or platform().images and platform().videos) %}
+    {% call card('Convert video component') %}<p class="small text-secondary">Create a Q8_0 GGUF on the owning node with bounded CPU RAM and temporary disk. Source weights stay unchanged; the output still needs inference qualification.</p>{{ conversion_form(file,nodes,'video') }}{% endcall %}
     {% endif %}
     {% call card('Distribute to nodes', id='distribution-card') %}
       <form method="post" action="/file" data-hold-refresh data-file-distribute>

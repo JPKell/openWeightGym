@@ -196,6 +196,8 @@ Owner authorized V1–V10; physical acceptance is owner confirmation, separate f
 
 ## Open delivery and qualification
 
+- **Video generation (2026-11-15):** [implementation and local evidence](video-generation-plan.md#delivery-record--2026-11-15) complete; 01 Canvas on both pages, WAN smoke accepted, seven absent-weight targets marked not runnable; no deployment performed.
+
 - **Mirror Wall image generation:** [combined deployment and validation](image-generation-plan.md#combined-deployment-2026-10-24) complete; [owner visual quality review and native klein 4B qualification](image-generation-plan.md#execution-status) remain; SDXL qualification is recorded under milestone 158.
 - **SoundRoom audio:** [deployment and qualification](soundroom-plan.md#execution-status) complete through the 2026-10-25 repeated-clone fix; 21 qualified profiles live; required voice-service permissions restored ([call settings](../voice/README.md#browser-call-settings)). Open: spoken chat untried by a person.
 - **Installer acceptance:** owner plans a clean reinstall near application completion (roughly

@@ -18,6 +18,10 @@ Use an account with [model management](/docs/system/abilities#ability-manage-mod
 2. Select the source and desired destinations before copying or moving. Review transfer progress and errors.
 3. Open the individual file to inspect metadata, node copies and its offered configuration actions. **Search metadata** and **Metadata group** narrow the record.
 
+Compatible HunyuanVideo weights and LTX-2.5 text encoders offer **Convert video component**.
+Choose RAM and temporary disk budgets; Files tracks conversion without replacing the source.
+See [Video models](/docs/model-guides/video-models) for component requirements and qualification.
+
 ## Limits and troubleshooting
 
 Downloads arrive in storage; active cache copies are promoted for use. A move preserves sources until destination copies succeed, and storage originals stay protected. **Clean unused copies** removes only eligible cache/compute copies backed by storage. Cleanup refuses unavailable usage evidence rather than guessing that a file is unused. A shared cache/storage directory has no separate cache to clear.

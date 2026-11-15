@@ -398,6 +398,14 @@ package manager. Existing CUDA toolkits outside `PATH` are reused, including `/o
 Build tools and GPU toolkits remain installed after builds, failures and uninstallation;
 openWeightGym does not purge them. Model weights are separate.
 
+Local video uses this same optional stable-diffusion.cpp runtime. Its build must enable
+`SD_WEBM=ON` and `SD_WEBP=ON`; the installer includes these options in its immutable release
+identity, verifies the build cache, keeps older releases and atomically selects the new build.
+Rebuild with `scripts/install-sdcpp.sh` on the owning compute node. See the maintained
+[manual build instructions](operations.md#optional-image-generation-runtime) for the same flags.
+Optional ffmpeg on the control node supplies posters and Opus soundtrack remuxing. A runtime
+build does not qualify a model's GPU fit, cancellation or browser playback.
+
 Run **owg → Install components**, or `owg install`, to add services omitted earlier, including
 voice, monitoring and tool services appropriate to this machine's role, or any of the engines
 (including llama.cpp). Existing services stay selected internally; their settings, unit

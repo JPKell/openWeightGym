@@ -1,0 +1,20 @@
+{% from 'parts.html' import page_header, card, alert, section_title %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'video_parts.html' import workspace %}
+{% from 'image_design_parts.html' import templates %}
+<!doctype html><html lang="en" data-bs-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Video · Design proposals · openWeightGym</title><style>{{ css|safe }}</style></head><body>
+<main class="container-fluid p-3 p-lg-4">
+{% call page_header('Video design review') %}<span class="badge bg-blue-lt">Sample data · no inference</span><button id="video-theme" class="btn btn-outline-secondary" type="button">Dark mode</button>{% endcall %}
+{% call pills('Page proposals',buttons=true) %}{{ pill_button('Video generation',true,attrs={'data-surface':'generation'}) }}{{ pill_button('Video models',attrs={'data-surface':'models'}) }}{% endcall %}
+{% call pills('Layout proposals',buttons=true) %}{% for id,label in [('canvas','01 · Canvas'),('desk','02 · Work desk'),('review','03 · Review room')] %}{{ pill_button(label,id=='canvas',attrs={'data-video-design':id}) }}{% endfor %}{% endcall %}
+<p id="video-design-note" class="small text-secondary"></p>
+<label for="video-demo-state" class="form-label">Preview state</label><select id="video-demo-state" class="form-select mb-3"><option value="ready">Sample library</option><option value="empty">No models</option><option value="forbidden">No permitted models</option><option value="runtime">Runtime missing WebM</option><option value="quota">Quota full</option><option value="error">Model error</option><option value="timeout">Timeout</option><option value="cancelled">Cancelled</option></select>
+{{ alert('warning',attrs={'id':'video-message','role':'status','hidden':''}) }}
+<div id="video-generation-proposal">{{ workspace(samplers,schedulers,preview=true,samples=samples) }}</div>
+<div id="video-model-proposal" class="video-model-workspace" data-layout="canvas" hidden>
+<aside class="video-model-list">{% call card('Video models') %}<label for="video-node" class="form-label">Compute node</label><select id="video-node" class="form-select mb-3"><option>All nodes</option><option>compute</option><option>studio</option></select><div id="video-model-list" class="model-list"></div>{% endcall %}</aside>
+<section class="video-model-evidence">{% call card('Readiness and qualification') %}{{ section_title('',id='video-profile-name') }}<p id="video-profile-status" role="status"></p><dl id="video-profile-evidence" class="ig-facts"></dl><p class="small text-secondary">Illustrative evidence only. Each real profile needs measured GPU/RAM peaks, cancellation, playback and owner visual review.</p>{% endcall %}</section>
+<section class="video-model-setup">{% set media_kind='video' %}{% include 'mirrorwall_model_setup.html' %}</section>
+</div>
+{{ templates() }}
+</main><script id="video-samples" type="application/json">{{ sample_data|tojson }}</script><script>{{ javascript|safe }}</script></body></html>

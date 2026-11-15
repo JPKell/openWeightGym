@@ -116,6 +116,14 @@
     {% endcall %}
   {% endfor %}
 {% endcall %}
+{% if report.totals.video_clips|default(0) %}
+{% call kpi_row('Video resources',class_='mb-3') %}
+{{ kpi('Clips',value=report.totals.video_clips|int) }}
+{{ kpi('Output seconds',value=report.totals.video_seconds|round(2)) }}
+{{ kpi('Frames',value=report.totals.video_frames|int) }}
+{{ kpi('GPU seconds reserved',value=report.totals.gpu_seconds|round(2)) }}
+{% endcall %}
+{% endif %}
 {% endmacro %}
 
 {# The total cost, the share each source gives it, and (with `rates`) the mock rates that price the rest. #}

@@ -43,6 +43,8 @@ def workspace(known, status, fit_line, fit_cpu_mib):
         line = fit_line(model, cards)
         fixed = model.get('engine') in ('sdcpp', 'audiocpp', 'whispercpp')
         kind = 'rerank' if flags.get('reranking') else 'classifier' if model.get('capabilities', {}).get('classifier') else 'image' if model.get('engine') == 'sdcpp' else 'audio' if model.get('engine') in ('audiocpp', 'whispercpp') else 'llm'
+        if model.get('sdcpp',{}).get('mode')=='vid_gen':
+            kind='video'
         maximum = model.get('flags', {}).get('ctx-size')
         maximum = maximum if type(maximum) is int and maximum > 0 else 0
         minimum = min(maximum, max(1, model.get('min_context') or 1024)) if maximum else 0
@@ -78,7 +80,7 @@ def workspace(known, status, fit_line, fit_cpu_mib):
         spill = bool(model.get('engine', 'llama_cpp') == 'llama_cpp' and (known.get('memory_policy') or {}).get('ram_offload') and need)
         if spill and not ram_points:
             unknown = True
-        if fixed and kind == 'image' and not (model.get('image_profile') or {}).get('qualified'):
+        if fixed and kind in ('image','video') and not (model.get('image_profile') or {}).get('qualified'):
             unknown = True
         if not maximum and not fixed:
             unknown = True
@@ -89,6 +91,7 @@ def workspace(known, status, fit_line, fit_cpu_mib):
                        'selected': model.get('loaded') == 'ready', 'locked': False, 'placement': chosen,
                        'placements': placements, 'points': gpu_points, 'ram_points': ram_points,
                        'unknown': unknown, 'guessed': line['guessed'], 'exclusive': bool(model.get('alone', model.get('engine') in ('audiocpp', 'whispercpp'))),
+                       'observed_gpu_mib':(model.get('image_profile') or {}).get('gpu_peak_mib',[]) if kind=='video' else [],
                        'ram_note': ram_note, 'spill': spill, 'enabled': model.get('enabled', True),
                        'profile_label': (model.get('sdcpp') or model.get('audiocpp') or model.get('whispercpp') or {}).get('family', '') if fixed else '',
                        'parallel': flags.get('parallel', 1),

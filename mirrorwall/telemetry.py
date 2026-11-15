@@ -103,6 +103,10 @@ class Meter:
 
 def envelope(asked,settings):
     """Only the largest configured generation, references, adapters and upscale qualify sharing."""
+    from mirrorwall.video import is_video
+    if is_video(settings):
+        # Video stays exclusive; successful probes retain stage peaks without qualifying sharing.
+        return False
     from mirrorwall.model import limits,defaults
     maximum=limits(settings)
     options=settings['sdcpp']

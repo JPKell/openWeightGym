@@ -3,8 +3,11 @@
   const $ = id => document.getElementById('mw-' + id);
   const params = new URLSearchParams(location.search);
   let node = params.get('node') || '', defaultNode = '';
-  const SLOTS = ['diffusion', 'text_encoder', 'vae', 'clip_l', 'clip_g', 'upscaler', 'tokenizer'];
-  const FAMILIES = SuiteImageProfiles.labels;
+  const video=document.getElementById('image-studio')?.dataset.mediaKind==='video';
+  const Profiles=video?SuiteVideoProfiles:SuiteImageProfiles;
+  const components=video?['text_encoder','vae','high_noise_diffusion_model','audio_vae','embeddings_connectors','byt5','clip_vision','latent_upscaler','tae']:['text_encoder','vae','clip_l','clip_g','tokenizer'];
+  const SLOTS=['diffusion',...components,...(video?[]:['upscaler'])];
+  const FAMILIES = Profiles.labels;
   const modelDrafts = new Map();
   const dialog = document.getElementById('model-dialog');
   let nodeCards = [], nodeCardsByNode = {}, enginesByNode = {}, models = [], selected = null, checking = 0, timer = null, initialized = false, refreshing = 0, filtering = 0;
@@ -22,7 +25,7 @@
   }
   async function api(body, path = '', target = body ? activeNode() : '') {
     const query = target ? '?node=' + encodeURIComponent(target) : '';
-    const response = await fetch('/mirrorwall-models' + path + query, {method: body ? 'POST' : 'GET', cache: 'no-store', headers: body ? {'content-type':'application/json'} : {}, body: body ? JSON.stringify(body) : undefined});
+    const response = await fetch((video?'/video-models':'/mirrorwall-models') + path + query, {method: body ? 'POST' : 'GET', cache: 'no-store', headers: body ? {'content-type':'application/json'} : {}, body: body ? JSON.stringify(body) : undefined});
     if (response.redirected) { location.href = '/sign-in'; throw new Error('Please sign in again.'); }
     const value = await response.json();
     if (!response.ok) throw new Error(value.error?.message || 'Image model management failed.');
@@ -32,30 +35,31 @@
   function draft(strict = true) {
     const parsed = (name, fallback) => { try { return ['defaults','limits'].includes(name) ? SuiteModelFields.read('mw-' + name) : JSON.parse($(name).value); } catch (error) { if (strict) throw new Error('The ' + name + ' field is not valid JSON.'); return fallback; } };
     const profile = {...selected?.sdcpp, family:$('family').value, split_mode:$('split').value, components:{},
-      host_ram_mib:Number($('ram').value), reference_megapixels:Number($('ref-mp').value), threads:Number($('threads').value), staged:$('staged').checked,
+      host_ram_mib:Number($('ram').value), ...(!video?{reference_megapixels:Number($('ref-mp').value)}:{mode:'vid_gen'}), threads:Number($('threads').value), staged:$('staged').checked,
       defaults:parsed('defaults', {}), limits:parsed('limits', {}), loras:parsed('loras', {})};
-    ['text_encoder','vae','clip_l','clip_g','tokenizer'].forEach(name => { if ($(name).value.trim()) profile.components[name] = $(name).value.trim(); });
-    if ($('upscaler').value.trim()) profile.upscaler = $('upscaler').value.trim(); else delete profile.upscaler;
+    if(video) {if($('recipe').value) profile.recipe=$('recipe').value;else delete profile.recipe;}
+    components.forEach(name => { if ($(name).value.trim()) profile.components[name] = $(name).value.trim(); });
+    if (!video && $('upscaler').value.trim()) profile.upscaler = $('upscaler').value.trim(); else delete profile.upscaler;
     if ($('vram').value.trim()) profile.vram_limit_gib = $('vram').value.split(',').map(Number); else delete profile.vram_limit_gib;
     if ($('layer-weights').value.trim()) profile.layer_weights = $('layer-weights').value.split(',').map(Number); else delete profile.layer_weights;
     const gpus = SuiteHardware.read('mw', profile.split_mode === 'single' ? 1 : 2);
     if (gpus === 0) profile.split_mode = 'single';
-    return {engine:'sdcpp', flags:{model:$('diffusion').value.trim(),'ctx-size':0}, sdcpp:profile, gpus, alone:$('alone').checked};
+    return {engine:'sdcpp', flags:{model:$('diffusion').value.trim(),'ctx-size':0}, sdcpp:profile, gpus, alone:video || $('alone').checked};
   }
   function familyDefaults() {
-    return SuiteImageProfiles.spec($('family').value).defaults;
+    return Profiles.spec($('family').value).defaults;
   }
   function setFamily(family) {
     $('family').value = family;
     if (!selected) SuiteModelFields.load('mw-defaults', familyDefaults());
     if (!selected && family === 'sdxl') SuiteModelFields.load('mw-limits', {...SuiteModelFields.read('mw-limits'), max_references: 1});
-    if (!selected && SuiteImageProfiles.spec(family).textOnly) SuiteModelFields.load('mw-limits', {...SuiteModelFields.read('mw-limits'), max_references:0});
+    if (!selected && Profiles.spec(family).textOnly) SuiteModelFields.load('mw-limits', {...SuiteModelFields.read('mw-limits'), max_references:0});
     familyHelp();
     remember();
     recheck(0);
   }
   function familyHelp() {
-    SuiteImageProfiles.help($('family-help'),$('family').value,values=>{
+    Profiles.help($('family-help'),$('family').value,values=>{
       SuiteModelFields.load('mw-defaults',values); remember(); recheck(0);
     });
   }
@@ -76,6 +80,7 @@
       fix.onclick = () => setFamily(found.detected_family); box.append(wrong);
     }
     for (const slot of found.slots) {
+      if (!$(slot.slot)) continue;
       const input = $(slot.slot), says = $('says-' + slot.slot), need = $('need-' + slot.slot);
       input.classList.toggle('is-valid', slot.status === 'ok');
       input.classList.toggle('is-invalid', slot.status === 'wrong' || slot.status === 'missing' || (slot.status === 'unused' && Boolean(slot.found)));
@@ -120,7 +125,7 @@
   function remember() {
     if (!dialog?.open) return;
     const controls=[...$('model-form').querySelectorAll('input,select,textarea')].filter(input=>input.id || input.name).map(input=>({id:input.id,name:input.name,value:input.value,checked:input.checked}));
-    const loras=[...$('lora-rows').querySelectorAll('tr:not([data-empty-row])')].map(row=>Object.fromEntries([...row.querySelectorAll('[data-lora-field]')].map(input=>[input.dataset.loraField,input.value])));
+    const loras=[...$('lora-rows').querySelectorAll('tr:not([data-empty-row])')].map(row=>Object.fromEntries([...row.querySelectorAll('[data-lora-field]')].map(input=>[input.dataset.loraField,input.type==='checkbox'?input.checked:input.value])));
     modelDrafts.set(modelKey(selected),{controls,loras});
   }
   function fill(model) {
@@ -139,21 +144,22 @@
       option.selected=true;
     };
     $('name').value = model?.name || ''; $('name').readOnly = Boolean(model); choose('diffusion', model?.flags?.model);
-    for (const name of ['text_encoder','vae','clip_l','clip_g','tokenizer']) choose(name, profile.components?.[name]);
-    $('family').value = profile.family || 'flux2-klein'; $('split').value = profile.split_mode || 'single';
+    for (const name of components) choose(name, profile.components?.[name]);
+    $('family').value = profile.family || (video?'wan2.1':'flux2-klein'); $('split').value = profile.split_mode || 'single';
     SuiteHardware.set('mw', model?.gpus ?? 1, nodeCardsByNode[activeNode()] || nodeCards);
     document.querySelector('[data-image-split]').hidden = model?.gpus === 0;
     $('ram').value = profile.host_ram_mib || 8192; $('vram').value = profile.vram_limit_gib?.join(',') || '';
-    $('layer-weights').value = profile.layer_weights?.join(',') || ''; $('alone').checked = model?.alone || false;
-    $('ref-mp').value = profile.reference_megapixels || 1; $('threads').value = profile.threads || 4;
-    choose('upscaler', profile.upscaler); $('staged').checked = profile.staged !== false;
+    $('layer-weights').value = profile.layer_weights?.join(',') || ''; $('alone').checked = video || model?.alone || false;
+    if(!video) $('ref-mp').value = profile.reference_megapixels || 1; $('threads').value = profile.threads || 4;
+    if(!video) choose('upscaler', profile.upscaler); $('staged').checked = profile.staged !== false;
     SLOTS.forEach(name => Array.from($(name).options).forEach(option => {
       option.disabled = Boolean(model && option.value && option.value !== $(name).value &&
         (option.dataset.machine !== activeNode() || option.dataset.tier === 'storage'));
     }));
     SuiteModelFields.load('mw-defaults', profile.defaults || familyDefaults());
-    SuiteModelFields.load('mw-limits', profile.limits || {max_width:1024,max_height:1024,max_pixels:1048576,max_steps:50,max_images:8,max_references:2});
+    SuiteModelFields.load('mw-limits', profile.limits || (video?Profiles.spec($('family').value).limits:{max_width:1024,max_height:1024,max_pixels:1048576,max_steps:50,max_images:8,max_references:2}));
     $('loras').value = JSON.stringify(profile.loras || {}, null, 2); renderLoras(); $('saved').textContent = '';
+    if(video) $('recipe').value=profile.recipe || '';
     $('measurement').textContent = model?.measured ? 'Reserved per GPU: ' + model.measured.mib.join(', ') + ' MiB · ' + model.measured.at : 'No qualified full-workflow memory envelope yet.';
     if (model?.image_profile) $('measurement').textContent += ' Observed GPU peaks: ' + model.image_profile.gpu_peak_mib.join(', ') + ' MiB; host RSS peak: ' + model.image_profile.rss_peak_mib + ' MiB.';
     const saved=modelDrafts.get(modelKey(model));
@@ -206,6 +212,7 @@
     for (const [key, value] of [['name', name], ['file', entry.file || ''], ['scale', entry.scale ?? 1]]) {
       row.querySelector('[data-lora-field="'+key+'"]').value=value;
     }
+    if(video)row.querySelector('[data-lora-field="is_high_noise"]').checked=entry.is_high_noise===true || entry.is_high_noise==='true';
     row.querySelector('[data-remove-lora]').onclick = () => {
       row.remove();
       try { syncLoras(); recheck(0); message(''); } catch (error) { message(error.message); }
@@ -222,7 +229,7 @@
       if (!field('name') && !field('file')) continue;
       if (!field('name') || !field('file')) throw new Error('Each LoRA needs a name and a file.');
       if (Object.hasOwn(values, field('name'))) throw new Error('LoRA names must be unique.');
-      Object.defineProperty(values, field('name'), {value:{file:field('file'), scale:Number(field('scale'))}, enumerable:true});
+      Object.defineProperty(values, field('name'), {value:{file:field('file'), scale:Number(field('scale')), ...(video?{is_high_noise:row.querySelector('[data-lora-field="is_high_noise"]').checked}:{})}, enumerable:true});
     }
     $('loras').value = JSON.stringify(values, null, 2);
   }

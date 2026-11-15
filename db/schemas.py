@@ -380,7 +380,19 @@ LOG = (
         CREATE INDEX IF NOT EXISTS events_at_id ON events(at, id);
         CREATE INDEX IF NOT EXISTS events_user_at_id ON events("user", at, id);
     """),
+    Migration(14, "video resource usage", lambda database, connection: _video_usage_columns(database,connection)),
 )
+
+
+def _video_usage_columns(database,connection):
+    """Extend existing hourly summaries; fresh stores already contain these columns."""
+    if database.engine=='sqlite':
+        columns={row[1] for row in connection.execute('PRAGMA table_info(usage_hours)')}
+    else:
+        columns={row[0] for row in connection.execute("SELECT column_name FROM information_schema.columns WHERE table_name='usage_hours'")}
+    for name in ('video_clips','video_seconds','video_frames','video_pixels','gpu_seconds'):
+        if name not in columns:
+            connection.execute('ALTER TABLE usage_hours ADD COLUMN '+name+' DOUBLE PRECISION NOT NULL DEFAULT 0')
 
 
 def _usage_hours(database, connection) -> None:
@@ -394,6 +406,9 @@ def _usage_hours(database, connection) -> None:
         missing_usage BIGINT NOT NULL, recorded_cost DOUBLE PRECISION NOT NULL,
         unpriced_requests BIGINT NOT NULL, unpriced_input BIGINT NOT NULL, unpriced_output BIGINT NOT NULL,
         complete_requests BIGINT NOT NULL, complete_input BIGINT NOT NULL, complete_output BIGINT NOT NULL,
+        video_clips DOUBLE PRECISION NOT NULL DEFAULT 0, video_seconds DOUBLE PRECISION NOT NULL DEFAULT 0,
+        video_frames DOUBLE PRECISION NOT NULL DEFAULT 0, video_pixels DOUBLE PRECISION NOT NULL DEFAULT 0,
+        gpu_seconds DOUBLE PRECISION NOT NULL DEFAULT 0,
         PRIMARY KEY(hour, person, grp, model, service, outcome, level))""")
     connection.execute("CREATE INDEX IF NOT EXISTS usage_hours_person ON usage_hours(person, hour)")
     rows = connection.execute(

@@ -340,6 +340,18 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             marks.update(type='classifier', architecture={'output_modalities': ['decisions']},
                          limits=marks['capabilities']['limits'])
         marks.update(runner.model_metadata(name))
+        if marks['capabilities'].get('video_generation'):
+            from mirrorwall.video import defaults as video_defaults, limits as video_limits
+            options=library.get(name)['sdcpp']
+            evidence=next((one.get('image_profile',{}) for one in library.measurements(name,library.get(name)) if one.get('image_profile',{}).get('build')==runner.known_version(library.get(name))),{})
+            marks['video_workflow']={'exclusive':True,'family':options['family'],'mode':'vid_gen',
+                'vae_tiling':options.get('vae_tiling',False),'temporal_tiling':options.get('temporal_tiling',False),
+                'defaults':video_defaults(library.get(name)),'limits':video_limits(library.get(name)),
+                'runtime_capabilities':evidence.get('runtime_capabilities',options.get('runtime_capabilities',{})),
+                'envelope':evidence,
+                'split_mode':options.get('split_mode','single'),
+                'components':{key:True for key in options.get('components',{})},
+                'loras':{key:{'scale':entry.get('scale',1)} for key,entry in options.get('loras',{}).items()}}
         if marks['capabilities'].get('image_generation'):
             from mirrorwall.model import defaults as image_defaults,limits as image_limits
             options=library.get(name)['sdcpp']
@@ -525,6 +537,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     ) -> Ticket | Response:
         """Wait in line on this request's behalf. Returns the ticket, or the response that ends it."""
         asked = request.headers.get("x-loadcoach-priority")
+        if request.url.path.startswith('/v1/videos/'):
+            asked='low'
         if asked not in (None, "high", "normal", "low"):
             return error(400, "X-LoadCoach-Priority must be high, normal or low.")
         if asked == "high" and user.group.priority != "high" and (denied := lacks(user, "high")):
@@ -630,6 +644,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 raise ValueError('Choose an audio model for audio requests.')
             if request.url.path.startswith('/v1/images/') and not selected_engine.capabilities(settings).get('image_generation'):
                 raise ValueError('Choose an image-generation model for image requests.')
+            if request.url.path.startswith('/v1/videos/') and not selected_engine.capabilities(settings).get('video_generation'):
+                raise ValueError('Choose a video-generation model for video requests.')
             if hasattr(selected_engine, "check_request"):
                 selected_engine.check_request(request.url.path, asked)
         except ValueError as problem:
@@ -717,7 +733,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         # Generated images and audio never go into the log as bytes, in either direction.
         from mirrorwall import stream as image_stream
         from soundroom import stream as audio_stream
-        media = image_stream if request.url.path.startswith('/v1/images/') else audio_stream if request.url.path.startswith('/v1/audio/') else None
+        media = image_stream if request.url.path.startswith(('/v1/images/','/v1/videos/')) else audio_stream if request.url.path.startswith('/v1/audio/') else None
         retained = json.dumps(media.metadata(asked)).encode() if media else body
         log.keep_asked(entry, retained.decode(errors="replace") if len(retained) <= KEEP_AT_MOST else json.dumps({"too_big": len(retained)}))
 
@@ -898,7 +914,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             flight.diagnostics.stage('response')
 
         complete, broke, timed_out = False, "", False
-        media_capture = media.Capture(upstream.headers.get('content-type', '')) if media else None
+        media_capture = media.Capture(upstream.headers.get('content-type', ''),**({'max_event':704*2**20} if request.url.path.startswith('/v1/videos/') else {})) if media else None
 
         async def answer():
             # Runs chunk by chunk. If the caller hangs up, `finally` closes the upstream
@@ -959,6 +975,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                         reliability_outcome='timeout' if timed_out else 'error' if broke or inside_it or upstream.status_code >= 500 else 'refused' if upstream.status_code >= 400 else (media_capture.outcome() if media_capture else answer_outcome(bytes(flight.whole), flight.kind, request.url.path)) if complete and readable else 'unscored',
                         **marks,
                         **why,
+                        **(media_capture.video_usage() if media_capture and hasattr(media_capture,'video_usage') else {}),
                         **({**token_counts(b"".join(flight.pieces)[-4096:]), **({"answer_tokens": 0} if request.url.path == "/v1/rerank" else {})} if readable else {}),  # the counts come last
                     )
                     for call in calls:  # what the model asked a tool to do, each as its own entry
@@ -1059,6 +1076,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                            "tools": supports_model_tools(name, library.get(name)),
                            "json_schema": engine_for(library.get(name)).capabilities(library.get(name)).get('json_schema', False),
                            "image_generation": engine_for(library.get(name)).capabilities(library.get(name)).get("image_generation", False),
+                           "video_generation": engine_for(library.get(name)).capabilities(library.get(name)).get("video_generation", False),
                            "audio": bool(engine_for(library.get(name)).capabilities(library.get(name)).get("audio")),
                            "rerank": bool(engine_for(library.get(name)).capabilities(library.get(name)).get("rerank")),
                            "classifier": engine_for(library.get(name)).capabilities(library.get(name)).get('classifier', False),
@@ -1454,7 +1472,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         shown = cleanup if cleanup.get("state") == "running" or time.time() - cleanup.get("ended", 0) < 600 else {}
         return JSONResponse({"places": where, "files": found, "cleanup": shown, "checked": FileIndex.checked(index),
                              "problems": index.get("problems", []),
-                             "conversions": classifier_jobs.jobs.recent(user.identity or user.name)})
+                             "conversions": [*classifier_jobs.jobs.recent(user.identity or user.name),*video_conversions.jobs.recent(user.identity or user.name)]})
 
     def files_changed(*paths: str | Path) -> None:
         """Put the index right for files LoadCoach has just made, changed or removed."""
@@ -2034,6 +2052,22 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return JSONResponse(job, 202, headers={'cache-control': 'no-store'})
         except (ValueError, OSError) as problem:
             return error(400, str(problem))
+
+    async def video_conversion(request: Request,user: User) -> Response:
+        """Track bounded video-component conversion jobs through Files without modifying source weights."""
+        if denied:=lacks(user,'manage-models'):
+            return denied
+        if request.method=='GET':
+            return JSONResponse({'jobs':video_conversions.jobs.recent(user.identity or user.name)})
+        body=await read_json(request,{'path','ram_mib','disk_mib'})
+        if isinstance(body,Response):
+            return body
+        try:
+            job=await video_conversions.convert(user.identity or user.name,str(body.get('path','')),
+                ram_mib=body.get('ram_mib',16384),disk_mib=body.get('disk_mib',65536))
+            return JSONResponse(job,202)
+        except (ValueError,OSError) as problem:
+            return error(400,str(problem))
 
     async def flags(request: Request, user: User) -> Response:
         """The selected engine's installed, model-launch option catalogue."""
@@ -2632,6 +2666,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         log.add("loadcoach", "started", models=len(library.names()), cards=list(config.gpus))
         yield
         await classifier_jobs.close()
+        await video_conversions.close()
         await database_operations.jobs.close()
         if config.token_file:
             os.unlink(config.token_file)
@@ -3115,6 +3150,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     from loadcoach.classifier_jobs import ClassifierJobs
     classifier_jobs = ClassifierJobs(compute_data_folder() / 'classifier-tools',
         engine_for('llama_cpp').installation(config).executable, places, files_changed)
+    from mirrorwall.install import VideoConversions
+    from mirrorwall.engine import node_options as image_node_options
+    video_conversions=VideoConversions(compute_data_folder()/'video-conversions',image_node_options(config)['cli'],places,files_changed)
     database_operations = DatabaseOperations(compute_database_sources, compute_data_folder() / 'database-operations',
         lambda event, owner, **detail: log.add('database', event, owner, machine=config.machine_name, **detail), machine=config.machine_name)
 
@@ -3217,6 +3255,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             route('/loadcoach/classifier-tools', classifier_operations, 'POST'),
             route('/loadcoach/classifier-conversions', classifier_operations),
             route('/loadcoach/classifier-conversions', classifier_operations, 'POST'),
+            route('/loadcoach/video-conversions',video_conversion),
+            route('/loadcoach/video-conversions',video_conversion,'POST'),
             route("/loadcoach/flags", flags),
             route("/loadcoach/model-rename", model_rename, "POST"),  # not under /models/, where everything after is a model's name
             route("/loadcoach/model-forget-measure", model_forget_measure, "POST"),

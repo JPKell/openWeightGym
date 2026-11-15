@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, aclosing
 import io
 import json
 import math
@@ -101,8 +101,32 @@ def native_command(job,port):
         command += ["--params-backend","diffusion=disk,te=disk,vae=disk"]
     for key,flag in (("text_encoder","--llm"),("vae","--vae"),("clip_l","--clip_l"),("clip_g","--clip_g"),("tokenizer","--tokenizer")):
         if components.get(key):
+            if key=='text_encoder' and options.get('family','').startswith('wan'):
+                flag='--t5xxl'
             command += [flag,components[key]]
+    for key,flag in (('high_noise_diffusion_model','--high-noise-diffusion-model'),('audio_vae','--audio-vae'),
+                     ('embeddings_connectors','--embeddings-connectors'),('byt5','--t5xxl'),('clip_vision','--clip_vision'),
+                     ('tae','--taesd')):
+        if components.get(key):
+            command += [flag,components[key]]
+    if components.get('latent_upscaler'):
+        command += ['--hires-upscalers-dir',str(Path(components['latent_upscaler']).parent)]
     return command
+
+
+async def native_lines(stream):
+    """Read native newline logs and carriage-return progress without waiting for job completion."""
+    pending=b''
+    while chunk:=await stream.read(4096):
+        pieces=re.split(b'[\r\n]',pending+chunk)
+        pending=pieces.pop()
+        if len(pending)>2**22:
+            raise ValueError('Native diagnostic line exceeds its bound.')
+        for piece in pieces:
+            if piece:
+                yield piece+b'\n'
+    if pending:
+        yield pending
 
 
 class Native:
@@ -114,28 +138,47 @@ class Native:
         self.reader=None
         self.client=None
         self.catalog=None
+        self.model_catalog=None
+        self.model_files={}
         self.lora_paths={}
         self.output=""
         self.split_devices=set()
         self.row_split=False
         self.applied_loras=set()
         self.incompatible_loras=set()
+        self.capabilities={}
+        self.stage='loading'
+        self.step_progress={}
 
     async def read_output(self):
         """Drain native output privately and retain only bounded ephemeral diagnostics."""
-        while line:=await self.process.stdout.readline():
+        async for line in native_lines(self.process.stdout):
             text=line.decode(errors="replace")
             self.output=(self.output+text)[-262144:]
             if self.job.get("qualification_log"):
                 with Path(self.job["qualification_log"]).open("a") as record:
                     record.write(text)
-            if re.search(r"(?:flux|qwen|moss|diffusion|dit|unet).*graph-cut layer split:.*segments",text,re.I):
+            if re.search(r"(?:flux|qwen|moss|diffusion|dit|unet|wan(?!_vae)|ltxav|hunyuan_video(?!_vae)|minimax_h3(?!_audio_vae|_vae)).*graph-cut layer split:.*segments",text,re.I):
                 if match:=re.search(r"CUDA\s*([0-9]+)",text,re.I):
                     self.split_devices.add(int(match[1]))
-            if re.search(r"(?:flux|qwen|moss|diffusion|dit|unet).*row split: [1-9][0-9]* tensors .*split across 2 devices",text,re.I):
+            if re.search(r"(?:flux|qwen|moss|diffusion|dit|unet|wan(?!_vae)|ltxav|hunyuan_video(?!_vae)|minimax_h3(?!_audio_vae|_vae)).*row split: [1-9][0-9]* tensors .*split across 2 devices",text,re.I):
                 self.row_split=True
             clean=re.sub(r'\x1b\[[0-9;]*m','',text).strip()
             clean=re.sub(r' --- [^\r\n]+:\d+$','',clean)
+            if self.job['settings']['sdcpp'].get('mode')=='vid_gen':
+                lower=clean.lower()
+                if 'get_learned_condition' in lower or 'computing condition' in lower:
+                    self.stage='encoding prompt'
+                if 'generate_video ' in lower:
+                    self.stage='sampling'
+                if 'sampling(high noise) completed' in lower:
+                    self.stage='sampling · low noise'
+                elif 'sampling completed' in lower or 'generating latent video completed' in lower:
+                    self.stage='decoding'
+                if 'decode_first_stage completed' in lower or 'decode_video_outputs returned frames' in lower:
+                    self.stage='encoding container'
+                if (match:=re.search(r'(\d+)\s*/\s*(\d+)\s*[-|]',clean)) and re.search(r's/it|it/s',clean):
+                    self.step_progress={'step':int(match[1]),'total_steps':int(match[2])}
             if match:=re.search(r'\((\d+) / (\d+)\) LoRA tensors have been applied, lora_file_path = (.+)',clean):
                 if int(match[1])>0 and match[1]==match[2]:
                     self.applied_loras.add(match[3])
@@ -186,6 +229,15 @@ class Native:
         if self.job['settings']['sdcpp'].get('layer_weights'):
             environment['SD_SUITE_SPLIT_WEIGHTS']=','.join(str(v) for v in self.job['settings']['sdcpp']['layer_weights'])
         command=native_command(self.job,port)
+        video=self.job['settings']['sdcpp'].get('mode')=='vid_gen'
+        if video:
+            self.prepare_video_catalog()
+            # CLI preloading advertises an all-features recipe. Load the precise upstream
+            # recipe instead so input availability comes from the actual loaded context.
+            flags={'--model','--diffusion-model','--llm','--t5xxl','--vae','--clip_l','--clip_g','--tokenizer',
+                   '--high-noise-diffusion-model','--audio-vae','--embeddings-connectors','--clip_vision','--taesd'}
+            command=[value for index,value in enumerate(command) if value not in flags and (index==0 or command[index-1] not in flags)]
+            command+=['--model-dir',self.model_catalog.name]
         if self.catalog:
             command+=['--lora-model-dir',self.catalog.name]
         self.process=await asyncio.create_subprocess_exec(*command,env=environment,
@@ -198,12 +250,68 @@ class Native:
                 raise RuntimeError("sdcpp failed to load: "+(self.failure_detail() or "check component compatibility and memory limits"))
             try:
                 answer=await self.client.get("/v1/models")
+                if answer.status_code==200 and video:
+                    await self.load_video_recipe()
+                    return
                 if answer.status_code==200 and answer.json().get("data"):
                     return
             except httpx.HTTPError:
                 pass
             await asyncio.sleep(.2)
         raise TimeoutError("sdcpp component loading timed out.")
+
+    def prepare_video_catalog(self):
+        """Expose only configured components in native category directories, never caller paths."""
+        self.model_catalog=tempfile.TemporaryDirectory(prefix='video-models-',dir=self.job.get('scratch'))
+        options=self.job['settings']['sdcpp']
+        components={'diffusion_model':self.job['settings']['flags']['model'],**options.get('components',{})}
+        slots={'text_encoder':'t5xxl' if options['family'].startswith('wan') else 'llm','byt5':'t5xxl'}
+        self.model_files={}
+        for key,path in components.items():
+            if key=='latent_upscaler':
+                continue
+            slot=slots.get(key,key)
+            directory='diffusion_models' if slot in ('diffusion_model','high_noise_diffusion_model') else 'vae' if slot in ('vae','audio_vae','tae') else 'clip_vision' if slot=='clip_vision' else 'text_encoders'
+            source=Path(path).resolve()
+            relative=directory+'/'+hashlib.sha256(str(source).encode()).hexdigest()+source.suffix
+            target=Path(self.model_catalog.name)/relative
+            target.parent.mkdir(exist_ok=True)
+            try:
+                os.link(source,target)
+            except OSError:
+                if shutil.disk_usage(target.parent).free<source.stat().st_size+2**30:
+                    raise ValueError('Insufficient scratch disk to stage video components across filesystems.')
+                shutil.copyfile(source,target)
+                target.chmod(0o600)
+                with source.open('rb') as a,target.open('rb') as b:
+                    if hashlib.file_digest(a,'sha256').digest()!=hashlib.file_digest(b,'sha256').digest():
+                        raise ValueError('Video component changed while staging.')
+            self.model_files[slot]=relative
+
+    async def load_video_recipe(self):
+        """Resolve opaque native file IDs and load the pinned server's component-aware recipe."""
+        from mirrorwall.video import recipe
+        response=await self.client.get('/sdcpp/v1/model-files')
+        response.raise_for_status()
+        files={one['relative_path']:one['id'] for one in response.json()['files']}
+        models={slot:files[path] for slot,path in self.model_files.items()}
+        selected=recipe(self.job['settings'])
+        # WAN VACE-Fun pairs extend the upstream VACE recipe with its native
+        # high-noise slot; native resolves that slot's feature declaration itself.
+        if selected=='wan21-vace' and 'high_noise_diffusion_model' in models:
+            recipes=await self.client.get('/sdcpp/v1/recipes');recipes.raise_for_status()
+            base=next(one for one in recipes.json()['recipes'] if one['id']==selected)
+            definition={key:value for key,value in base.items() if key in ('schema_version','name','description','model_url','required_any','defaults','context','features','disabled_features')}
+            definition['id']='owg-video-profile'
+            definition['slots']=[{key:value for key,value in slot.items() if key in ('id','label','required')} for slot in base['slots']]+[{'id':'high_noise_diffusion_model','required':True}]
+            directory=Path(self.model_catalog.name)/'recipes';directory.mkdir()
+            (directory/'profile.json').write_text(json.dumps(definition))
+            refreshed=await self.client.post('/sdcpp/v1/models/refresh');refreshed.raise_for_status()
+            selected=definition['id']
+        response=await self.client.post('/sdcpp/v1/models/load',json={'recipe':selected,'models':models},
+                                        timeout=self.job['settings']['sdcpp'].get('limits',{}).get('max_job_seconds',1800))
+        if response.status_code>=400:
+            raise ValueError('Native video recipe could not load: '+native_error(response.json()))
 
     async def stop(self):
         """Stop and await native exit before another GPU stage or reservation release."""
@@ -223,12 +331,17 @@ class Native:
             self.catalog.cleanup()
             self.catalog=None
         self.lora_paths.clear()
+        if self.model_catalog:
+            self.model_catalog.cleanup()
+            self.model_catalog=None
+        self.model_files.clear()
 
     async def generate(self,payload):
         """Yield progress/previews and the final image; never return before cancellation settles."""
         await self.start()
         payload={**payload,'lora':[{**one,'path':self.lora_paths[one['path']]} for one in payload.get('lora',[])]}
-        answer=await self.client.post("/sdcpp/v1/img_gen",json=payload)
+        video=self.job['settings']['sdcpp'].get('mode')=='vid_gen'
+        answer=await self.client.post("/sdcpp/v1/vid_gen" if video else "/sdcpp/v1/img_gen",json=payload)
         if answer.status_code>=400:
             raise RuntimeError("sdcpp rejected the generation settings: "+native_error(answer.json()))
         identifier=answer.json()["id"]
@@ -236,14 +349,18 @@ class Native:
         previous=None
         began=time.monotonic()
         try:
-            while time.monotonic()-began<self.job["settings"]["sdcpp"].get("timeout",1800):
+            while time.monotonic()-began<self.job["settings"]["sdcpp"].get('limits',{}).get('max_job_seconds',self.job["settings"]["sdcpp"].get("timeout",1800)):
                 response=await self.client.get("/sdcpp/v1/jobs/"+identifier)
                 response.raise_for_status()
                 value=response.json()
+                if video:
+                    progress=value.get('progress') or {}
+                    yield {'type':'video_generation.progress','stage':value.get('stage',self.stage),
+                           'progress':progress or self.step_progress,'queue_position':value.get('queue_position',0)}
                 preview=value.get("preview")
                 if preview and preview.get("b64_json") and preview.get("step")!=previous:
                     previous=preview["step"]
-                    yield {"type":"image_generation.partial_image",**preview}
+                    yield {"type":"video_generation.partial_image" if video else "image_generation.partial_image",**preview}
                 status=value["status"]
                 if status=="completed":
                     mode=self.job["settings"]["sdcpp"].get("split_mode","single")
@@ -256,16 +373,22 @@ class Native:
                     if any(path not in self.applied_loras or path in self.incompatible_loras for path in expected):
                         raise RuntimeError('The requested LoRA was not fully applied; check adapter/model compatibility.')
                     done=True
-                    yield {"type":"native.completed","data":value["result"]["images"][0],
+                    yield {"type":"native.completed","data":value["result"] if video else value["result"]["images"][0],
                            "native_seconds":(value["completed"]-value["started"])/1000,
                            "split_devices":sorted(self.split_devices)}
                     return
                 if status in ("failed","cancelled"):
                     raise RuntimeError("sdcpp "+status+": "+native_error(value)+" "+self.failure_detail())
                 await asyncio.sleep(.25)
-            raise TimeoutError("Image generation timed out.")
+            raise TimeoutError(('Video' if video else 'Image')+' generation exceeded the profile timeout; reduce the requested work or review the profile limit.')
         finally:
             if not done:
+                # Ask native to cancel, then terminate and await exit if it cannot prove settlement.
+                with anyio.CancelScope(shield=True):
+                    try:
+                        await asyncio.wait_for(self.client.post('/sdcpp/v1/jobs/'+identifier+'/cancel'),2)
+                    except (httpx.HTTPError,TimeoutError,AttributeError):
+                        pass
                 # A failed HTTP client cannot prove cancellation; terminate the owned native child.
                 await self.stop()
 
@@ -447,6 +570,53 @@ async def workflow(job,asked,native,cache=None,owner=None):
                    "mask_mode":"composite" if "mask" in resolved else None}
 
 
+async def video_workflow(job,asked,native,cache=None,owner=None):
+    """Run one bounded video through the same native child and progress/cancellation lifecycle."""
+    from mirrorwall.video import checked_request as check_video, native_payload
+    started=time.monotonic()
+    yield {'type':'video_generation.progress','stage':'loading'}
+    await native.start()
+    answer=await native.client.get('/sdcpp/v1/capabilities')
+    answer.raise_for_status()
+    capabilities=answer.json()
+    native.capabilities=capabilities
+    resolved=check_video(asked,job['settings'],capabilities=capabilities)
+    seed=resolved['seed'] if resolved['seed']>=0 else secrets.randbelow(2**31)
+    resolved['seed']=seed
+    # Never forward raw uploaded bytes, EXIF, filesystem paths or native arguments.
+    for key in ('init_image','end_image'):
+        if key in resolved:
+            resolved[key]=base64.b64encode(png_bytes(decode_image(resolved[key]))).decode()
+    for key in ('reference_images','control_video'):
+        if key in resolved:
+            resolved[key]=[base64.b64encode(png_bytes(decode_image(value))).decode() for value in resolved[key]]
+    yield {'type':'video_generation.progress','stage':'encoding prompt'}
+    async with aclosing(native.generate(native_payload(resolved,job['settings']))) as native_events:
+        async for event in native_events:
+            if event['type']!='native.completed':
+                yield event
+                continue
+            data=event['data']
+            frames=data.get('frame_count')
+            fps=data.get('fps')
+            if data.get('mime_type')!='video/webm' or data.get('output_format')!='webm' or frames!=resolved['frames'] or fps!=resolved['fps']:
+                raise ValueError('Native video format, frame count or frame rate differs from the admitted request.')
+            raw=base64.b64decode(data['b64_json'],validate=True)
+            if not raw.startswith(b'\x1aE\xdf\xa3') or len(raw)>512*2**20:
+                raise ValueError('Native video is invalid or exceeds the output limit.')
+            yield {'type':'video_generation.progress','stage':'saving'}
+            private={'init_image','end_image','reference_images','control_video','metadata','stream'}
+            scale=2 if resolved.get('hires') else 1
+            yield {'type':'video_generation.completed',**data,'seed':seed,'width':resolved['width']*scale,'height':resolved['height']*scale,
+                   'mode':'references' if resolved.get('reference_images') else 'control' if resolved.get('control_video') else 'ends' if resolved.get('end_image') else 'start' if resolved.get('init_image') else 'text',
+                   'soundtrack_present':bool(job['settings']['sdcpp'].get('components',{}).get('audio_vae')),
+                   'seconds':frames/fps,'settings':{key:value for key,value in resolved.items() if key not in private},
+                   'native_seconds':event['native_seconds'],'elapsed_seconds':time.monotonic()-started,
+                   'gpu_seconds':(time.monotonic()-started)*len(job.get('cards',[])),
+                   'runtime_capabilities':capabilities}
+            native.seconds_per_output_second=(time.monotonic()-started)/(frames/fps)
+
+
 def create_app(job,native=None):
     """Expose only authenticated private health and image routes to the owning Runner."""
     native=native or Native(job)
@@ -480,15 +650,23 @@ def create_app(job,native=None):
         busy=True
         try:
             await native.start()
-            return JSONResponse({"loaded":True,"context_available":False,"basis":"native component readiness"})
+            capabilities=await native.client.get('/sdcpp/v1/capabilities')
+            capabilities.raise_for_status()
+            return JSONResponse({"loaded":True,"context_available":False,"basis":"native component readiness",
+                                 'runtime_capabilities':capabilities.json()})
         finally:
             busy=False
 
     async def images(request:Request):
         """Validate a bounded image request and enforce one admitted job."""
         nonlocal busy
+        from mirrorwall.video import is_video, checked_request as check_video
+        video=request.url.path.startswith('/v1/videos/')
         if not authorized(request):
             return JSONResponse({"error":{"message":"Unauthorized"}},401)
+        if video!=is_video(job['settings']):
+            return JSONResponse({'error':{'message':'Choose a model for the requested media kind.'}},400)
+        check=check_video if video else checked_request
         if busy:
             return JSONResponse({"error":{"message":"This image runtime already has an admitted job."}},409)
         try:
@@ -498,7 +676,7 @@ def create_app(job,native=None):
                 if len(body)>MAX_REQUEST_BYTES:
                     return JSONResponse({"error":{"message":"Image request exceeds 60 MiB."}},413)
             asked=json.loads(body)
-            checked_request(asked,job["settings"])
+            check(asked,job["settings"])
         except (ValueError,TypeError,Image.DecompressionBombError) as problem:
             return JSONResponse({"error":{"message":str(problem)}},400)
         busy=True
@@ -509,13 +687,14 @@ def create_app(job,native=None):
             completed=False
             meter=Meter(job.get('monitor_cards', job['cards']))
             sampling=asyncio.create_task(meter.run())
-            qualifying=envelope(checked_request(asked,job['settings']),job['settings']) and not (profile and profile.get('qualified'))
-            sequence=workflow(job,asked,native,None if qualifying else cache,request.headers.get('x-loadcoach-image-owner'))
+            qualifying=envelope(check(asked,job['settings']),job['settings']) and not (profile and profile.get('qualified'))
+            sequence=(video_workflow if video else workflow)(job,asked,native,None if qualifying else cache,request.headers.get('x-loadcoach-image-owner'))
             try:
-                async for event in sequence:
-                    if event.get('stage'):
-                        meter.stage=event['stage']
-                    yield event
+                async with asyncio.timeout(job['settings']['sdcpp'].get('limits',{}).get('max_job_seconds',1800) if video else None):
+                    async for event in sequence:
+                        if event.get('stage'):
+                            meter.stage=event['stage']
+                        yield event
                 completed=True
             finally:
                 with anyio.CancelScope(shield=True):
@@ -525,11 +704,13 @@ def create_app(job,native=None):
                     meter.stopping.set()
                     await sampling
                     measured=meter.result()
-                    qualified=completed and measured['complete'] and envelope(checked_request(asked,job['settings']),job['settings'])
+                    qualified=completed and measured['complete'] and envelope(check(asked,job['settings']),job['settings'])
                     if profile and profile.get('qualified'):
                         measured['gpu_peak_mib']=[max(a,b) for a,b in zip(profile['gpu_peak_mib'],measured['gpu_peak_mib'])]
                         measured['rss_peak_mib']=max(profile['rss_peak_mib'],measured['rss_peak_mib'])
-                    profile={**measured,'successful':completed,'qualified':completed and measured['complete'] and (qualified or bool(profile and profile.get('qualified'))),'at':time.time()}
+                    profile={**measured,'successful':completed,'qualified':completed and measured['complete'] and (qualified or bool(profile and profile.get('qualified'))),'at':time.time(),
+                             **({'runtime_capabilities':getattr(native,'capabilities',{}),
+                                 'seconds_per_output_second':getattr(native,'seconds_per_output_second',None)} if video and completed else {})}
                     busy=False
 
         if asked.get("stream"):
@@ -543,7 +724,7 @@ def create_app(job,native=None):
                         yield "event: "+event["type"]+"\ndata: "+json.dumps(event)+"\n\n"
                 except Exception as problem:
                     await native.stop()
-                    detail=str(problem).strip() or getattr(native,'failure_detail',lambda:'')() or type(problem).__name__
+                    detail=('Video generation exceeded the profile timeout; reduce the clip length or review its limit.' if video and isinstance(problem,TimeoutError) else str(problem).strip() or getattr(native,'failure_detail',lambda:'')() or type(problem).__name__)
                     yield "event: error\ndata: "+json.dumps({"type":"error","error":{"message":detail}})+"\n\n"
                 finally:
                     await sequence.aclose()
@@ -551,15 +732,15 @@ def create_app(job,native=None):
         try:
             output=[]
             async for event in events():
-                if event["type"]=="image_generation.completed":
+                if event["type"] in ("image_generation.completed","video_generation.completed"):
                     output.append({k:v for k,v in event.items() if k not in ("type","image_index")})
             return JSONResponse({"created":int(time.time()),"data":output},headers={"cache-control":"no-store"})
         except Exception as problem:
             await native.stop()
-            detail=str(problem).strip() or getattr(native,'failure_detail',lambda:'')() or type(problem).__name__
+            detail=('Video generation exceeded the profile timeout; reduce the clip length or review its limit.' if video and isinstance(problem,TimeoutError) else str(problem).strip() or getattr(native,'failure_detail',lambda:'')() or type(problem).__name__)
             return JSONResponse({"error":{"message":detail}},502)
 
-    return Starlette(lifespan=lifespan,routes=[Route("/health",health),Route("/load",load,methods=["POST"]),Route("/v1/images/generations",images,methods=["POST"]),Route("/v1/images/edits",images,methods=["POST"])])
+    return Starlette(lifespan=lifespan,routes=[Route("/health",health),Route("/load",load,methods=["POST"]),Route("/v1/images/generations",images,methods=["POST"]),Route("/v1/images/edits",images,methods=["POST"]),Route('/v1/videos/generations',images,methods=['POST'])])
 
 
 if __name__=="__main__":

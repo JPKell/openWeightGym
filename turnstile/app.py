@@ -147,6 +147,7 @@ class Settings:
     models_storage_folder: str = ""  # optional model library on the control node; empty disables this tier
     image_adult_previews: bool = False  # permit individual users to opt in to adult Civitai previews
     allow_image_generation: bool = True
+    allow_video_generation: bool = True
     allow_speech: bool = True
     allow_audio_generation: bool = True
     allow_model_downloads: bool = True
@@ -796,7 +797,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         from mirrorwall.stream import Capture as ImageCapture
         from soundroom.stream import Capture as AudioCapture
         media = ImageCapture if getattr(judge, 'image_request', False) else AudioCapture if getattr(judge, 'audio_request', False) else None
-        image_capture = media(upstream.headers.get('content-type', '')) if media else None
+        image_capture = media(upstream.headers.get('content-type', ''),**({'max_event':704*2**20} if getattr(judge,'video_request',False) else {})) if media else None
 
         def retain(piece):
             """Keep image and audio metadata bounded while ordinary replies retain their diagnostic bytes."""
@@ -1167,6 +1168,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                          adult_previews_allowed=lambda: live('turnstile',
                              'image_adult_previews', settings.image_adult_previews) is True)
     batch_work.image_work=image_work
+    from mirrorwall.video_api import Videos
+    video_work=Videos(image_work)
+    image_work.video_remux=lambda: live('weightroom','video_soundtrack_remux',default_for('weightroom','video_soundtrack_remux'))
     from soundroom.store import Store as AudioStore
     from soundroom.front import Front as AudioFront
     audio_work = AudioFront(AudioStore(batch_work.store.db, settings.data), batch_work, users, log)
@@ -1691,7 +1695,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             response=await routing.answer(request, user, where, body)
             if path == '/v1/audio/generations':
                 return await audio_work.capture(request, user, response, json.loads(body))
-            return await image_work.capture(request,user,response) if path in ('/v1/images/generations','/v1/images/edits') else response
+            return await image_work.capture(request,user,response) if path in ('/v1/images/generations','/v1/images/edits','/v1/videos/generations') else response
         if not named and len(parts) >= 4 and parts[1] in ('v1', 'loadcoach') and parts[2] in ('batches', 'files', 'tasks'):
             # Older task/file IDs live on their original node; never guess a default owner.
             identifier = parts[3]
@@ -2302,7 +2306,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 "cleanup": source.get("cleanup", {}),
                 "nodes": nodes, "distributions": [*shown_jobs(),
                     *[{**job, 'machine': node['name'], 'source': node['name'], 'file': job['scope'],
-                       'kind': 'classifier-conversion', 'targets': {}} for node in nodes for job in node['conversions']]]}
+                       'kind': 'video-conversion' if job.get('kind')=='video-conversion' else 'classifier-conversion', 'targets': {}} for node in nodes for job in node['conversions']]]}
 
     async def artifact_files(request: Request) -> Response:
         """The control node's files plus available storage at every configured compute node. `refresh=1` looks again first."""
@@ -3043,6 +3047,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         allowed = {"models": {"GET"}, "flags": {"GET"}, "file": {"GET"}, "files": {"GET"},
                    "hub": {"GET"}, "downloads": {"GET", "POST"},
                    "classifier-tools": {"GET", "POST"}, "classifier-conversions": {"GET", "POST"},
+                   "video-conversions": {"GET", "POST"},
                    "model-setup": {"GET", "POST"}, "model-rename": {"POST"}, "model-forget-measure": {"POST"},
                    "model-measure-all": {"POST"}, "images/check": {"POST"}, "audio/packages": {"GET", "POST"}, "audio/families": {"GET"}}
         methods = {"POST", "DELETE"} if suffix.startswith("models/") else allowed.get(suffix, set())
@@ -3052,6 +3057,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(403, "Model downloads are disabled in Platform services.")
         if suffix in ('classifier-tools', 'classifier-conversions') and not platform().classifiers:
             return error(403, 'Classifiers are disabled in Platform services.')
+        if suffix=='video-conversions' and not (platform().images and platform().videos):
+            return error(403,'Video generation is disabled in Platform services.')
         path = "/loadcoach/" + suffix
         if request.url.query:
             path += "?" + request.url.query
@@ -3498,7 +3505,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     from turnstile.responses import routes as response_routes
     from turnstile.classifier import routes as classifier_routes
-    app = Starlette(lifespan=lifespan, routes=[Route('/', diagnostic), *classifier_routes(extraction_delegate, routing), *extractions.routes(caller, extraction_delegate), *response_routes(caller, extractions, pass_on), *image_work.routes(caller,log), *audio_work.routes(caller, log),Route("/turnstile/ready", ready),
+    app = Starlette(lifespan=lifespan, routes=[Route('/', diagnostic), *classifier_routes(extraction_delegate, routing), *extractions.routes(caller, extraction_delegate), *response_routes(caller, extractions, pass_on), *image_work.routes(caller,log), *video_work.routes(caller,log), *audio_work.routes(caller, log),Route("/turnstile/ready", ready),
                             Route("/turnstile/power", power_notice, methods=["POST"]),
                             Route("/turnstile/accounts", accounts_list),
                             Route("/turnstile/machines", machines_list),

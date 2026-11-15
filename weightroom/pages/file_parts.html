@@ -22,3 +22,9 @@
 {% endmacro %}
 
 {% macro empty_metadata() %}{{ empty_row(2, 'No metadata matches. Clear the filters to see every entry.', attrs={'data-file-metadata-empty': '', 'hidden': true}) }}{% endmacro %}
+
+{% macro conversion_form(file,nodes,kind='classifier') %}
+<form method="post" action="/file"><input type="hidden" name="path" value="{{ file.path }}"><label class="form-label" for="conversion-node">Owning compute node</label><select class="form-select form-select-sm mb-2" name="machine" id="conversion-node">{% for node in nodes if node.name != 'front' and node.answering %}<option value="{{ node.name }}">{{ (node.name)|node_label }}</option>{% endfor %}</select>
+{% if kind=='video' %}<div class="row g-2 mb-3">{% for name,label,value,minimum,maximum in [('ram_mib','RAM budget · MiB',16384,2048,131072),('disk_mib','Temporary disk budget · MiB',65536,1024,524288)] %}<div class="col-md-6"><label for="conversion-{{ name }}" class="form-label">{{ label }}</label><input id="conversion-{{ name }}" name="{{ name }}" type="number" class="form-control" min="{{ minimum }}" max="{{ maximum }}" value="{{ value }}" required></div>{% endfor %}</div>{% endif %}
+<button class="btn btn-outline-primary btn-sm" name="do" value="convert-{{ kind }}">{{ 'Convert to Q8_0 GGUF' if kind=='video' else 'Convert to classifier GGUF' }}</button></form>
+{% endmacro %}

@@ -2,10 +2,11 @@
 (() => {
   'use strict';
   const root=document.getElementById('image-studio'); if(!root) return;
+  const video=root.dataset.mediaKind==='video', Profiles=video?SuiteVideoProfiles:SuiteImageProfiles;
   const $=id=>document.getElementById('studio-'+id), field=key=>document.getElementById('workflow-'+key);
   const manage=root.dataset.manage==='true', params=new URLSearchParams(location.search);
   const drafts=new Map(), histories=new Map(), selections=new Map();
-  const keys=['width','height','n','upscale','steps','seed','sampler','scheduler','guidance','cfg_scale','reference_megapixels','strength'];
+  const keys=video?['width','height','seconds','fps','steps','seed','sampler','scheduler','guidance']:['width','height','n','upscale','steps','seed','sampler','scheduler','guidance','cfg_scale','reference_megapixels','strength'];
   let library={models:[],presets:[],can_manage:false}, models=[], selected=null, workflowID=null, saving=false, historyEpoch=0;
   let inventoryReady=!manage, workflowsReady=false, loading=false;
   const copy=value=>structuredClone(value);
@@ -14,10 +15,10 @@
   const announce=value=>{ $('status').textContent=value; };
   const error=(value,save=false)=>{ const box=$(save?'save-error':'error'); box.hidden=!value; box.textContent=value || ''; };
   async function api(path,body) {
-    const response=await fetch('/mirrorwall-api/'+path,{method:body?'POST':'GET',cache:'no-store',
+    const response=await fetch('/mirrorwall-api/'+path+(video?'?kind=video':''),{method:body?'POST':'GET',cache:'no-store',
       headers:body?{'content-type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
     if(response.redirected) { location.href='/sign-in'; throw new Error('Please sign in again.'); }
-    const value=await response.json(); if(!response.ok) throw new Error(value.error?.message || 'Image workflows are unavailable.'); return value;
+    const value=await response.json(); if(video && value.models) value.models=value.models.map(m=>({...m,image_workflow:m.video_workflow})); if(!response.ok) throw new Error(value.error?.message || 'Image workflows are unavailable.'); return value;
   }
   const current=()=>library.presets.find(row=>row.id===workflowID);
   const modelKey=m=>m?.key || m?.id;
@@ -32,11 +33,12 @@
   function baseline() {
     const row=current(), p=profile();
     const result={name:row?.name || '',published:Boolean(row?.published),settings:{
-      ...SuiteImageProfiles.spec(p.family).defaults,reference_megapixels:p.reference_megapixels || 1,strength:.75,negative_prompt:'',
+      ...Profiles.spec(p.family).defaults,...(!video?{reference_megapixels:p.reference_megapixels || 1,strength:.75}:{}),negative_prompt:'',
       ...p.defaults,...row?.settings,loras:copy(row?.settings.loras || Object.fromEntries(Object.entries(p.loras || {}).map(([name,one])=>[name,one.scale ?? 0])))}};
-    const rules=SuiteImageProfiles.spec(p.family), settings=result.settings;
+    const rules=Profiles.spec(p.family), settings=result.settings;
     if(!rules.guidance) delete settings.guidance;
     if(!rules.negative) {delete settings.cfg_scale; delete settings.negative_prompt;}
+    if(video) delete settings.cfg_scale;
     if(!rules.strength || p.limits?.max_references===0) delete settings.strength;
     if(p.limits?.max_references===0) delete settings.reference_megapixels;
     if(!p.upscaling) delete settings.upscale;
@@ -72,7 +74,7 @@
     models.filter(m=>(m.id+' '+(m.node || '')+' '+m.image_workflow?.family).toLowerCase().includes(search)).forEach(m=>{
       const button=template('model-option'); button.dataset.model=m.id; button.setAttribute('aria-pressed',String(m===selected));
       if(m.node) button.dataset.node=m.node;
-      text(button,'[data-name]',m.id); text(button,'[data-detail]',[SuiteImageProfiles.spec(m.image_workflow?.family).label,m.node].filter(Boolean).join(' · '));
+      text(button,'[data-name]',m.id); text(button,'[data-detail]',[Profiles.spec(m.image_workflow?.family).label,m.node].filter(Boolean).join(' · '));
       text(button,'.model-monogram',m.image_workflow?.family==='moss-image'?'M':m.image_workflow?.family?.startsWith('qwen')?'Q':m.image_workflow?.family==='sdxl'?'SD':'F');
       const count=library.presets.filter(row=>row.model_id && m.model_id?row.model_id===m.model_id:row.model===m.id).length;
       text(button,'[data-count]',count); button.onclick=()=>select(m); button.disabled=saving || loading;
@@ -88,15 +90,15 @@
     matching.forEach(w=>{
       const button=template('workflow-option'); button.dataset.workflow=w.id; button.setAttribute('aria-pressed',String(w.id===workflowID));
       text(button,'[data-name]',w.name); text(button,'[data-version]','v'+w.version);
-      const settings={...SuiteImageProfiles.spec(profile().family).defaults,...profile().defaults,...w.settings};
-      text(button,'[data-detail]',`${settings.width} × ${settings.height} · ${settings.steps} steps · ${settings.n} image${settings.n===1?'':'s'}`);
+      const settings={...Profiles.spec(profile().family).defaults,...profile().defaults,...w.settings};
+      text(button,'[data-detail]',`${settings.width} × ${settings.height} · ${settings.steps} steps · `+(video?`${settings.seconds} s · ${settings.fps} fps`:`${settings.n} image${settings.n===1?'':'s'}`));
       text(button,'[data-sharing]',w.published?'↗ Shared workflow':'○ Personal workflow'); button.disabled=saving || loading;
       button.onclick=()=>{remember(); workflowID=w.id; showWorkflows(); showEditor();}; $('workflow-list').append(button);
     });
     $('workflow-empty').hidden=!selected || all.length>0; $('no-match').hidden=!all.length || matching.length>0;
   }
   function toggle(name,visible) {
-    const input=field(name); input.disabled=!visible; input.closest('.col-md-6, .col-12').hidden=!visible;
+    const input=field(name); if(!input) return; input.disabled=!visible; input.closest('.col-md-6, .col-12').hidden=!visible;
   }
   function updateHistory() {
     const entry=(histories.get(workflowID) || []).find(row=>String(row.version)===$('history').value);
@@ -117,19 +119,20 @@
   function showEditor() {
     document.getElementById('editor-panel').hidden=!selected;
     document.getElementById('workflows-panel').hidden=!selected;
-    const p=profile(), rules=SuiteImageProfiles.spec(p.family), row=current();
+    const p=profile(), rules=Profiles.spec(p.family), row=current();
+    if(video && $('qualify')) $('qualify').disabled=!selected || !available() || saving || loading;
     const draft=drafts.get(key()) || baseline();
     $('workflow-fields').disabled=!selected || saving || loading;
     field('name').value=draft.name; field('name').maxLength=100; field('shared').checked=draft.published;
     keys.forEach(name=>field(name).value=draft.settings[name] ?? '');
     field('negative_prompt').value=draft.settings.negative_prompt || '';
-    toggle('guidance',rules.guidance); toggle('cfg_scale',rules.negative); toggle('strength',rules.strength && p.limits?.max_references!==0);
-    toggle('reference_megapixels',p.limits?.max_references!==0); toggle('upscale',Boolean(p.upscaling));
+    toggle('guidance',rules.guidance); toggle('cfg_scale',!video && rules.negative); toggle('strength',rules.strength && p.limits?.max_references!==0);
+    toggle('reference_megapixels',!video && p.limits?.max_references!==0); toggle('upscale',Boolean(p.upscaling));
     $('negative').hidden=!rules.negative; field('negative_prompt').disabled=!rules.negative;
     const limits=p.limits || {};
-    for(const [name,limit] of [['width','max_width'],['height','max_height'],['steps','max_steps'],['n','max_images'],['upscale','max_upscale']]) field(name).max=limits[limit] || ({width:4096,height:4096,steps:200,n:64,upscale:1}[name]);
+    for(const [name,limit] of [['width','max_width'],['height','max_height'],['steps','max_steps'],...(video?[['seconds','max_seconds']]:[['n','max_images'],['upscale','max_upscale']])]) if(field(name)) field(name).max=limits[limit] || ({width:4096,height:4096,steps:200,n:64,upscale:1}[name]);
     field('width').step=field('height').step=rules.alignment;
-    field('reference_megapixels').max=p.reference_megapixels || 1;
+    if(field('reference_megapixels')) field('reference_megapixels').max=p.reference_megapixels || 1;
     $('reference-note').textContent=limits.max_references===0?'This profile generates from text only.':`Up to ${limits.max_references ?? (rules.strength?1:2)} references. `+(rules.strength?'Strength controls how much the starting image changes.':'References guide the composition.');
     $('loras').replaceChildren(); $('no-loras').hidden=Boolean(Object.keys(p.loras || {}).length);
     for(const [name,definition] of Object.entries(p.loras || {})) {
@@ -142,7 +145,7 @@
     $('sharing-note').textContent=row?'Duplicate this workflow to change its visibility.':library.can_manage?'Shared workflows can be used by other authorized users.':'Personal workflows are visible only to you.';
     $('save').textContent=row?.published && !library.can_manage?'Save personal copy':row?'Save new version':'Save workflow';
     $('save').disabled=!selected || !available() || saving || loading; $('duplicate').disabled=!selected || !row || saving || loading;
-    SuiteImageProfiles.help($('workflow-helper'),p.family,values=>{
+    Profiles.help($('workflow-helper'),p.family,values=>{
       for(const [name,value] of Object.entries(values)) if(field(name) && !field(name).disabled && Number(value)<=Number(field(name).max || Infinity)) field(name).value=value;
       mark(); announce('Suggested settings applied to the draft. Review the model limits before saving.');
     });
@@ -155,7 +158,7 @@
     const next=new URL(location.href); next.searchParams.delete('new'); next.searchParams.set('model',m.id);
     if(m.node) next.searchParams.set('model_node',m.node); else next.searchParams.delete('model_node');
     history.replaceState(null,'',next);
-    $('model-name').textContent=m.id; $('family').textContent=SuiteImageProfiles.spec(profile().family).label;
+    $('model-name').textContent=m.id; $('family').textContent=Profiles.spec(profile().family).label;
     $('model-detail').textContent=m.node?`${m.node} · ${m.flags?.model?.split('/').pop() || ''}`:'Image model';
     $('unavailable').hidden=Boolean(available()); $('unavailable').textContent='This model is unavailable in your current image catalogue. Saved drafts are kept; workflow saves need a reachable, permitted model.';
     $('new-workflow').disabled=!available();
@@ -165,7 +168,7 @@
   function mapInventory(items,node) {
     return items.map(m=>({id:m.name,workflow_id:m.workflow_model || m.name,model_id:m.workflow_model_id || m.model_id || m.id,
       flags:m.flags,node:m.node || node,key:JSON.stringify([m.node || node,m.name]),
-      image_workflow:{family:m.sdcpp.family,defaults:m.sdcpp.defaults,limits:m.sdcpp.limits,reference_megapixels:m.sdcpp.reference_megapixels,
+      image_workflow:{family:m.sdcpp.family,defaults:m.sdcpp.defaults,limits:m.sdcpp.limits,runtime_capabilities:m.sdcpp.runtime_capabilities,components:m.sdcpp.components,reference_megapixels:m.sdcpp.reference_megapixels,
         loras:m.sdcpp.loras,upscaling:Boolean(m.sdcpp.upscaler),exclusive:m.alone}}));
   }
   function populate() {
@@ -228,6 +231,17 @@
   if(manage) {
     $('edit-model').onclick=()=>document.dispatchEvent(new CustomEvent('weightroom:image-edit',{detail:{name:selected.id,node:selected.node}}));
     $('close-model').onclick=()=>document.getElementById('model-dialog').close();
+    if(video) $('qualify').onclick=async()=>{
+      const p=profile(), actual=available();if(!actual)return;
+      $('qualify').disabled=true;
+      try {
+        const response=await fetch('/video-api/jobs',{method:'POST',headers:{'content-type':'application/json'},
+          body:JSON.stringify({model:actual.id,prompt:'A red boat gently moving across a calm lake, natural daylight.',
+            seconds:Math.min(2.1,p.limits?.max_seconds || 5),size:`${p.defaults?.width || 832}x${p.defaults?.height || 480}`})});
+        const answer=await response.json();if(!response.ok)throw new Error(answer.error?.message || 'Qualification could not start.');
+        announce('Qualification clip queued. Review its progress, playback and visual quality in Video generation.');
+      }catch(problem){error(problem.message);}finally{$('qualify').disabled=false;}
+    };
   }
   api('workflows').then(value=>{
     remember(); library=value; workflowsReady=true;

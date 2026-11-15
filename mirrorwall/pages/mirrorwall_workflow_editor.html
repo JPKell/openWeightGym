@@ -1,5 +1,6 @@
 {% from 'parts.html' import card, form_section, more, alert %}
 {% from 'image_design_parts.html' import field, select %}
+{% set video = media_kind|default('image') == 'video' %}
 {% call card('Workflow settings', class_='workflow-editor', header_id='studio-editor-title') %}
 <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><span id="studio-version" class="badge bg-blue-lt">New workflow</span><span id="studio-draft" class="small text-secondary" role="status"></span><button id="studio-duplicate" class="btn btn-outline-secondary btn-sm ms-auto" disabled>Duplicate</button></div>
 <form id="studio-workflow-form" data-hold-refresh><fieldset id="studio-workflow-fields" disabled><div class="row g-3">
@@ -7,7 +8,8 @@
 <div class="col-12 small text-secondary" id="studio-owner"></div>
 <div class="col-12" id="studio-workflow-helper"></div>
 {% call form_section('Output') %}
-{% for key,label,low,high,step in [('width','Width (px)',256,4096,16),('height','Height (px)',256,4096,16),('n','Image count',1,64,1),('upscale','Output enlargement (×)',1,4,0.5)] %}{{ field('workflow-' ~ key,label,'number',min=low,max=high,step=step) }}{% endfor %}
+{% set fields = [('width','Width (px)',256,1280 if video else 4096,16),('height','Height (px)',256,1280 if video else 4096,16)] + ([('seconds','Length (seconds)',0.1,10,'any'),('fps','Frames per second',1,60,1)] if video else [('n','Image count',1,64,1),('upscale','Output enlargement (×)',1,4,0.5)]) %}
+{% for key,label,low,high,step in fields %}{{ field('workflow-' ~ key,label,'number',min=low,max=high,step=step) }}{% endfor %}
 {% endcall %}
 {% call form_section('Sampling') %}
 {{ field('workflow-steps','Steps','number',min=1,max=200) }}{{ field('workflow-seed','Seed · −1 is random','number',min=-1,max=2147483647) }}

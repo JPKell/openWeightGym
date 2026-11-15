@@ -157,7 +157,7 @@ class FrontBatches:
                 try:
                     with observation.job("batch_line", number+":"+str(line["line"]), user_for(batch["user"]), getattr(self.log, "observations", None)):
                         observation.annotate(benchmark=bool(batch.get('metadata', {}).get('benchmark')))
-                        if self.image_work and endpoint.startswith('/v1/images/'):
+                        if self.image_work and endpoint.startswith(('/v1/images/','/v1/videos/')):
                             answer=await self.image_work.execute_line(number,line,body,current_user,headers)
                         elif self.audio_work and endpoint.startswith('/v1/audio/'):
                             answer = await self.audio_work.execute_line(number, line, body, current_user, headers)
@@ -290,7 +290,7 @@ class FrontBatches:
             return error(400, str(problem))
         self.store.models = Pins(await self.model_ids(user))  # the models as compute names them now, so that a name changing hands later is noticed
         batch = self.store.start(user.name, endpoint, file["id"], lines, asked.get("metadata") if isinstance(asked.get("metadata"), dict) else None)
-        if self.image_work and endpoint.startswith('/v1/images/'):
+        if self.image_work and endpoint.startswith(('/v1/images/','/v1/videos/')):
             self.image_work.store.bind_job(batch['id'],user.identity,'',lines[0]['body']['model'],{'request':lines[0]['body']})
         if self.audio_work and endpoint.startswith('/v1/audio/'):
             self.audio_work.store.bind_job(batch['id'], user.identity, '', lines[0]['body']['model'], {'request': lines[0]['body']})

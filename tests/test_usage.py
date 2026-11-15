@@ -53,6 +53,24 @@ def test_usage_retained_endings_filters_groups_and_missing_counts(tmp_path, monk
     assert log.verify()[1] is None
 
 
+def test_video_work_survives_hourly_summary_upgrade_and_event_pruning(tmp_path,monkeypatch):
+    from db.schemas import _video_usage_columns
+    log=Log(str(tmp_path/'video-usage.db'))
+    # An installed v13 summary has no video columns. Upgrade it in place, retaining totals.
+    names=('video_clips','video_seconds','video_frames','video_pixels','gpu_seconds')
+    with log.db:
+        for name in names:log.db.execute('ALTER TABLE usage_hours DROP COLUMN '+name)
+        _video_usage_columns(log.db.database,log.db)
+    recorded(log,monkeypatch,'2026-10-01T08:00:00+00:00','pat',model='wan',
+             video_clips=1,video_seconds=33/16,video_frames=33,video_pixels=832*480,gpu_seconds=144)
+    params={'start':'2026-10-01','end':'2026-10-01','timezone':'UTC'}
+    totals=report(log.db,params,'pat')['totals']
+    assert [totals[name] for name in names]==[1,33/16,33,832*480,144]
+    assert totals['total_tokens']==0 and totals['missing_usage']==1
+    with log.db:log.db.execute('DELETE FROM events')
+    assert report(log.db,params,'pat')['totals']==totals
+
+
 @pytest.mark.parametrize("day,hours", [("2025-03-09", 23), ("2025-11-02", 25)])
 def test_calendar_days_cover_dst_and_exclude_next_midnight(tmp_path, monkeypatch, day, hours):
     from datetime import timedelta

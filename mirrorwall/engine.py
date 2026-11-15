@@ -30,7 +30,7 @@ def stamped_build(stamps):
 def build_identity(options):
     """Fingerprint both native programs and the workflow/resource implementation."""
     files=[Path(shutil.which(options[key]) or options[key]).resolve() for key in ('executable','cli')]
-    files += [Path(__file__).with_name(name) for name in ('runtime.py','model.py','requests.py','telemetry.py')]
+    files += [Path(__file__).with_name(name) for name in ('runtime.py','model.py','requests.py','video.py','telemetry.py')]
     return stamped_build(tuple((str(path),path.stat().st_size,path.stat().st_mtime_ns,path.stat().st_ino) for path in files))
 
 
@@ -71,6 +71,11 @@ class SDCpp:
 
     def capabilities(self,settings):
         """Keep image generation distinct from language vision/chat capabilities."""
+        from mirrorwall.video import is_video
+        if is_video(settings):
+            return {'version':1,'video_generation':True,'image_generation':False,'chat':False,
+                    'streaming':False,'embeddings':False,'tokenize':False,'raw_completion':False,
+                    'prompt_rendering':False,'images':False,'tools':False,'adapters':True,'native_probes':False,'load_probes':True}
         return {"version":1,"chat":False,"streaming":False,"embeddings":False,"tokenize":False,
                 "raw_completion":False,"prompt_rendering":False,"images":False,"tools":False,
                 "image_generation":True,"image_editing":not model.text_only(settings),"image_streaming":True,
@@ -162,6 +167,10 @@ class SDCpp:
 
     def check_request(self,path,asked):
         """Refuse chat/tokenization routes before an image model is loaded."""
+        if path=='/v1/videos/generations':
+            from mirrorwall.video import checked_request as video_request
+            video_request(asked)
+            return
         if path not in ("/v1/images/generations","/v1/images/edits"):
             raise ValueError("This model supports image generation/editing only.")
         checked_request(asked)

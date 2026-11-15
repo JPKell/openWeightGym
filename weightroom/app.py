@@ -172,6 +172,14 @@ class Settings:
     mock_output_rate: float = 10.0  # USD per million output tokens when no recorded or model rate is known
     third_party_services: tuple[str, ...] = ("ollama", "docker")  # optional system services shown on Machine and in System Logs
     allow_image_generation: bool = True
+    allow_video_generation: bool = True
+    video_max_seconds: int = default_for('weightroom','video_max_seconds')
+    video_max_width: int = default_for('weightroom','video_max_width')
+    video_max_height: int = default_for('weightroom','video_max_height')
+    video_output_max_mib: int = default_for('weightroom','video_output_max_mib')
+    video_quota_gib: int = default_for('weightroom','video_quota_gib')
+    video_retention_days: int = default_for('weightroom','video_retention_days')
+    video_soundtrack_remux: bool = default_for('weightroom','video_soundtrack_remux')
     allow_speech: bool = True
     allow_audio_generation: bool = True
     allow_model_downloads: bool = True
@@ -4142,7 +4150,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if not ref and not request.query_params.get('model') and preferred:
             draft.setdefault('model', preferred)
         return page(request, template, person, status=400 if said else 200, conversations=listed["conversations"], talk=talk,
-                    models=[*[name for name in person.me.get("models", []) if not person.me.get("chat", {}).get("models", {}).get(name, {}).get("image_generation") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("audio") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("classifier") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("rerank")], *asked_as(person)], said=said, typed_in=draft,
+                    models=[*[name for name in person.me.get("models", []) if not person.me.get("chat", {}).get("models", {}).get(name, {}).get("video_generation") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("image_generation") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("audio") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("classifier") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("rerank")], *asked_as(person)], said=said, typed_in=draft,
                     adaptor_names={row["id"] for row in plugins.models(person.me)})  # fmt: skip
 
     async def collections_page(request: Request, person: Person, said='', result=None, form=None, failed=False, diagnostics=None) -> Response:
@@ -4180,7 +4188,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         levels=levels[:levels.index(maximum)+1] if maximum in levels else []
         response=page(request,'collections.html',person,status=400 if failed else 200,collections=listing['collections'],
             collection=selected,embedders=[m for m in models if m.get('embedding')],
-            answer_models=[m for m in models if not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and not m.get('capabilities', {}).get('classifier') and not m.get('rerank') and not m.get('capabilities', {}).get('rerank')],levels=levels,
+            answer_models=[m for m in models if not m.get('embedding') and not m.get('capabilities', {}).get('video_generation') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and not m.get('capabilities', {}).get('classifier') and not m.get('rerank') and not m.get('capabilities', {}).get('rerank')],levels=levels,
             said=said,failed=failed,unavailable=unavailable,result=result,form=form or {},diagnostics=diagnostics or {},
             inventory=inventory,query=query,status_filter=status_filter,
             new_open=bool(request.query_params.get('new') or (form or {}).get('do') == 'create' or not collection_rows),
@@ -4291,7 +4299,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         try:
             catalog=await ask('GET','/v1/models',person.key)
             if catalog.is_success:
-                models=[m for m in catalog.json()['data'] if m.get('owned_by')=='loadcoach' and not m.get('embedding') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and not m.get('capabilities', {}).get('classifier') and not m.get('rerank') and not m.get('capabilities', {}).get('rerank') and m.get('local_model_guard')]
+                models=[m for m in catalog.json()['data'] if m.get('owned_by')=='loadcoach' and not m.get('embedding') and not m.get('capabilities', {}).get('video_generation') and not m.get('capabilities', {}).get('image_generation') and not m.get('capabilities', {}).get('audio') and not m.get('capabilities', {}).get('classifier') and not m.get('rerank') and not m.get('capabilities', {}).get('rerank') and m.get('local_model_guard')]
             else:
                 unavailable='The model catalogue is unavailable. Saved prompts and outputs remain on the control node.'
         except ServiceUnavailable:
@@ -5217,6 +5225,25 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         fields = await typed_lists(request)
         form = {name: values[-1] for name, values in fields.items()}
         path, name = form.get("path", ""), Path(form.get("path", "")).name
+        if form.get('do')=='convert-video':
+            if 'manage-models' not in person.can:
+                return page(request,'refused.html',person,status=403,why='Model management is required.')
+            inventory=await all_files(request,person)
+            if isinstance(inventory,Response):
+                return inventory
+            machine=form.get('machine','')
+            local=next((file for node in inventory.get('nodes',[]) if node['name']==machine
+                        for file in node.get('files',[]) if file['path']==path),None)
+            if not local:
+                return await file_page(request,person,'Copy the source to the chosen node using Files first.',failed=True,path=path)
+            try:
+                body={'path':path,'ram_mib':int(form.get('ram_mib','16384')),'disk_mib':int(form.get('disk_mib','65536'))}
+            except ValueError:
+                return await file_page(request,person,'Use whole MiB budgets.',failed=True,path=path)
+            answer=await ask('POST',f'/turnstile/machines/{quote(machine,safe="")}/model-api/video-conversions',person.key,json=body,timeout=30)
+            if answer.status_code!=202:
+                return await file_page(request,person,answer.json()['error']['message'],failed=True,path=path)
+            return go('/files?type=image&said='+quote('Video conversion started. Progress appears on Files.'))
         if form.get('do') == 'convert-classifier':
             machine = form.get('machine', '')
             inventory = await all_files(request, person)

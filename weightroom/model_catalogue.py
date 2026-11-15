@@ -5,9 +5,11 @@ from loadcoach.log import LEGACY
 from urllib.parse import quote, urlencode
 
 
-def editor_address(name, engine, node):
+def editor_address(name, engine, node, settings=None):
     """Open the correct editor with this copy's local model name and compute node."""
     workspace = {'audiocpp': 'audio', 'whispercpp': 'audio', 'sdcpp': 'images'}.get(engine)
+    if engine=='sdcpp' and (settings or {}).get('sdcpp',{}).get('mode')=='vid_gen':
+        workspace='video'
     if workspace:
         return '/models/' + workspace + '?' + urlencode({'model': name, 'node': node}, quote_via=quote)
     return '/models/' + quote(name, safe='/:') + '?node=' + quote(node, safe='')
@@ -41,7 +43,7 @@ def catalogue(known, node=''):
                 label={'offline':'Node unavailable', 'missing':'File missing', 'disabled':'Placement disabled',
                        'in-use':'In use', 'loaded':'Loaded', 'loading':'Loading', 'installed':'Installed'}[state] +
                       (' · placement disabled' if copy.get('enabled') is False and state != 'disabled' else ''),
-                href=editor_address(copy['name'], copy.get('engine', model.get('engine')), machine)))
+                href=editor_address(copy['name'], copy.get('engine', model.get('engine')), machine,copy)))
             machines.add(machine)
         contexts = sorted({copy.get('flags', {}).get('ctx-size') for copy in copies
                            if isinstance(copy.get('flags', {}).get('ctx-size'), int) and copy['flags']['ctx-size'] > 0})

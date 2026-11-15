@@ -36,6 +36,7 @@ class Front:
         self.adult_previews_allowed=adult_previews_allowed
         self.progress={}
         self.transient={}
+        self.video_remux=lambda: True
 
     def adult_previews(self,user):
         """Require both global permission and the current stable owner's opt-in."""
@@ -56,12 +57,16 @@ class Front:
         """Additional stable-identity check for image-owned batch rows."""
         return self.store.visible(user.identity,batch)
 
-    async def catalogue(self,user):
+    async def catalogue(self,user,kind='image'):
         """Use the authenticated combined catalogue; never reveal forbidden models."""
         answer=await self.batches.door.get('/v1/models',headers={'authorization':'Bearer '+self.batches.internal_key(user.name), 'x-turnstile-no-wake':'1'})
         if answer.status_code!=200:
             raise ValueError("Image model inventory is unavailable.")
-        return [one for one in answer.json().get('data',[]) if one.get('capabilities',{}).get('image_generation')]
+        return [one for one in answer.json().get('data',[]) if one.get('capabilities',{}).get(kind+'_generation')]
+
+    async def media_catalogue(self,user,kind):
+        """Retain image catalogue callers while selecting the explicit video capability."""
+        return await self.catalogue(user) if kind=='image' else await self.catalogue(user,'video')
 
     def visible_presets(self,user,models):
         """Shared recipes follow immutable model identities when names are reused."""
@@ -77,20 +82,22 @@ class Front:
         if job and self.job_owner(job)!=user.identity:
             raise ValueError("There is no such image job of yours.")
         kind=event.get('type')
-        if job and kind in ('image_generation.partial_image','image_generation.progress','image_edit.partial_image','image_edit.progress'):
-            self.progress[job]={**event,'at':time.time()}
+        if job and kind in ('image_generation.partial_image','image_generation.progress','image_edit.partial_image','image_edit.progress','video_generation.partial_image','video_generation.progress'):
+            previous=self.progress.get(job,{}) if kind.startswith('video_generation.') else {}
+            self.progress[job]={**previous,**event,**({'preview_b64':event['b64_json']} if kind=='video_generation.partial_image' else {}),'at':time.time()}
         if job and 'error' in event:
             self.progress[job]={**event,'stage':'failed','at':time.time()}
-        if kind not in ('image_generation.completed','image_edit.completed'):
+        if kind not in ('image_generation.completed','image_edit.completed','video_generation.completed'):
             return event
         content=base64.b64decode(event['b64_json'],validate=True)
         metadata={k:v for k,v in event.items() if k not in ('b64_json','type')}
         if job:
             metadata.update(job=job,batch_line=line)
-        asset=self.store.save(user.identity,content,kind='output',filename='generated-'+str(event.get('seed',0))+'.png',
+        video=kind=='video_generation.completed'
+        asset=self.store.save(user.identity,content,kind='video' if video else 'output',filename='generated-'+str(event.get('seed',0))+('.webm' if video else '.png'),
                               metadata=metadata,temporary=quiet,job=job if job and not quiet else None,limits=self.limits.for_user(user))
         if job:
-            self.progress[job]={'type':'image_generation.progress','stage':'completed','at':time.time()}
+            self.progress[job]={'type':'video_generation.progress' if video else 'image_generation.progress','stage':'completed','at':time.time()}
         return {**event,'asset_id':asset['id'],'asset_url':'/mirrorwall/assets/'+asset['id']+'/content'}
 
     async def capture(self,request,user,response):
@@ -118,8 +125,14 @@ class Front:
             async def forwarded():
                 """Retain completed private renders while passing live preview events."""
                 try:
-                    async for event in stream.events(chunks()):
-                        yield stream.encode(self.retain_event(user,{**event,**provenance} if event.get('type') in ('image_generation.completed','image_edit.completed') else event,job,line,quiet))
+                    async for event in stream.events(chunks(),max_event=704*2**20 if request.url.path.startswith('/v1/videos/') else stream.MAX_EVENT):
+                        if event.get('type')=='video_generation.completed':
+                            from mirrorwall.video_media import prepare
+                            data,metadata=await asyncio.to_thread(prepare,base64.b64decode(event['b64_json'],validate=True),
+                                {key:value for key,value in event.items() if key not in ('b64_json','type')},
+                                remux=self.video_remux())
+                            event={**event,**metadata,'b64_json':base64.b64encode(data).decode()}
+                        yield stream.encode(self.retain_event(user,{**event,**provenance} if event.get('type') in ('image_generation.completed','image_edit.completed','video_generation.completed') else event,job,line,quiet))
                 except Exception as problem:
                     yield stream.encode({'type':'error','error':{'message':str(problem)}})
                 finally:
@@ -128,15 +141,22 @@ class Front:
                         await iterator.aclose()
             return StreamingResponse(forwarded(),media_type='text/event-stream',headers=headers,background=response.background)
         body=bytearray()
+        video=request.url.path.startswith('/v1/videos/')
         async for chunk in chunks():
             body.extend(chunk)
-            if len(body)>256*2**20:
+            if len(body)>(704 if video else 256)*2**20:
                 return error(502,"Image response exceeds the configured response limit.")
         try:
             decoded=json.loads(body)
             for index,item in enumerate(decoded.get('data',[])):
-                event=self.retain_event(user,{'type':'image_generation.completed','image_index':index,**item,**provenance},job,line,quiet)
+                if video:
+                    from mirrorwall.video_media import prepare
+                    data,metadata=await asyncio.to_thread(prepare,base64.b64decode(item['b64_json'],validate=True),
+                        {key:value for key,value in item.items() if key!='b64_json'},remux=self.video_remux())
+                    item={**item,**metadata,'b64_json':base64.b64encode(data).decode()}
+                event=self.retain_event(user,{'type':'video_generation.completed' if video else 'image_generation.completed','image_index':index,**item,**provenance},job,line,quiet)
                 item.update({k:v for k,v in event.items() if k not in ('type','image_index')})
+                decoded['data'][index]=item
             return JSONResponse(decoded,headers=headers,background=response.background)
         except (ValueError,KeyError,TypeError) as problem:
             return error(502,'Could not retain the generated image: '+str(problem))
@@ -145,10 +165,22 @@ class Front:
         """Execute an existing batch line through the same authenticated image API."""
         if self.job_owner(number)!=user.identity:
             return httpx.Response(403,json={'error':{'message':'Image job owner changed.'}})
-        previous=[asset for asset in self.store.listing(user.identity,kind='output',job=number) if str(asset['metadata'].get('batch_line'))==str(line['line'])]
+        batch=self.batches.store.get(number) if number not in self.transient else None
+        video=body.get('video_asset_ids') is not None or bool(batch and batch['endpoint'].startswith('/v1/videos/'))
+        if video and 'video_asset_ids' not in body:
+            from mirrorwall.video_api import prepare
+            from types import SimpleNamespace
+            envelope,prepared=await prepare(self,SimpleNamespace(headers={'x-loadcoach-log':'off'} if quiet else {}),user,body)
+            body=prepared[0]['body']
+            if not quiet:
+                with self.store.db:
+                    for identifier in set(envelope['references']):
+                        self.store.db.execute('INSERT INTO mirrorwall_job_assets VALUES (?,?,?) ON CONFLICT DO NOTHING',(number,identifier,'reference'))
+        previous=[asset for asset in self.store.listing(user.identity,kind='video' if video else 'output',job=number) if str(asset['metadata'].get('batch_line'))==str(line['line'])]
         if previous:
             return httpx.Response(200,json={'data':[{'asset_id':asset['id'],**asset['metadata']} for asset in previous]})
         sent=dict(body)
+        video_assets=sent.pop('video_asset_ids',{})
         references=sent.pop('reference_asset_ids',[])
         mask=sent.pop('mask_asset_id',None)
         try:
@@ -164,7 +196,19 @@ class Front:
                 if content is None:
                     raise ValueError('The mask image is unavailable.')
                 sent['mask']=base64.b64encode(content).decode()
-            checked_request(sent)
+            if video:
+                from mirrorwall.video import checked_request as check_video
+                for key,identifiers in video_assets.items():
+                    decoded=[]
+                    for identifier in identifiers:
+                        content=self.store.content(user.identity,identifier)
+                        if content is None:
+                            raise ValueError('A video input asset is no longer available.')
+                        decoded.append(base64.b64encode(content).decode())
+                    sent[key]=decoded if key in ('reference_images','control_video') else decoded[0]
+                check_video(sent)
+            else:
+                checked_request(sent)
         except ValueError as problem:
             return httpx.Response(400,json={'error':{'message':str(problem)}})
         sent['stream']=True
@@ -174,15 +218,15 @@ class Front:
             headers['x-loadcoach-log']='off'
         result=[]
         request_id=''
-        async with self.batches.door.stream('POST','/v1/images/edits' if references or mask else '/v1/images/generations',json=sent,headers=headers,timeout=None) as response:
+        async with self.batches.door.stream('POST','/v1/videos/generations' if video else '/v1/images/edits' if references or mask else '/v1/images/generations',json=sent,headers=headers,timeout=None) as response:
             request_id=response.headers.get('x-loadcoach-request-id','')
             if response.status_code>=400:
                 await response.aread()
                 return httpx.Response(response.status_code,content=response.content,headers=dict(response.headers))
-            async for event in stream.events(response.aiter_bytes()):
+            async for event in stream.events(response.aiter_bytes(),max_event=704*2**20 if video else stream.MAX_EVENT):
                 if 'error' in event:
                     return httpx.Response(502,json={'error':event['error']})
-                if event.get('type') in ('image_generation.completed','image_edit.completed'):
+                if event.get('type') in ('image_generation.completed','image_edit.completed','video_generation.completed'):
                     result.append({k:v for k,v in event.items() if k not in ('type','b64_json')})
         if not result:
             return httpx.Response(502,json={'error':{'message':'The image stream ended without a completed image.'}})
@@ -191,7 +235,7 @@ class Front:
     async def state(self,request,user):
         """List permitted models, private assets/jobs and versioned workflow presets."""
         for identifier,row in list(self.transient.items()):
-            if row['status']!='in_progress' and time.time()-row['created']>3600:
+            if row['status']!='in_progress' and time.time()-row.get('completed_at',row['created'])>3600:
                 self.transient.pop(identifier)
                 self.progress.pop(identifier,None)
         try:
@@ -221,7 +265,7 @@ class Front:
         """Page through the caller's retained image library without loading pixels."""
         try:
             kind=request.query_params.get('kind','output')
-            if kind not in ('output','reference'):
+            if kind not in ('output','reference','video'):
                 raise ValueError('Choose outputs or references.')
             before=request.query_params.get('before')
             if before is not None and not math.isfinite(float(before)):
@@ -270,9 +314,9 @@ class Front:
         if record.get('temporary'):
             headers['x-suite-image-temporary']='1'
         if request.query_params.get('download'):
-            suffix='.png' if content.startswith(b'\x89PNG') else '.jpg' if content.startswith(b'\xff\xd8') else '.webp'
+            suffix='.webm' if record['kind']=='video' else '.png' if content.startswith(b'\x89PNG') else '.jpg' if content.startswith(b'\xff\xd8') else '.webp'
             headers['content-disposition']='attachment; filename="'+identifier+suffix+'"'
-        return Response(content,media_type='image/png' if request.url.path.endswith('/thumbnail') or content.startswith(b'\x89PNG') else 'image/jpeg' if content.startswith(b'\xff\xd8') else 'image/webp',headers=headers)
+        return Response(content,media_type='image/png' if request.url.path.endswith('/thumbnail') or content.startswith(b'\x89PNG') else 'video/webm' if record['kind']=='video' else 'image/jpeg' if content.startswith(b'\xff\xd8') else 'image/webp',headers=headers)
 
     @staticmethod
     async def read_json(request,limits=None):
@@ -367,8 +411,13 @@ class Front:
         """Submit an image job to the established control node batch executor."""
         try:
             asked=await self.read_json(request)
-            lines=self.lines(asked)
-            models=await self.catalogue(user)
+            video=request.url.path=='/v1/videos'
+            if video:
+                from mirrorwall.video_api import prepare
+                asked,lines=await prepare(self,request,user,asked)
+            else:
+                lines=self.lines(asked)
+            models=await self.media_catalogue(user,'video' if video else 'image')
             selected=next((one for one in models if one['id']==lines[0]['body']['model']),None)
             if not selected:
                 raise ValueError('Choose an available image model you may use.')
@@ -376,7 +425,8 @@ class Front:
             for identifier in references:
                 if not self.store.asset(user.identity,identifier):
                     raise ValueError('There is no such reference image of yours.')
-            self.fits(selected,asked,user)
+            if not video:
+                self.fits(selected,asked,user)
             temporary=asked.get('temporary',False)
             if type(temporary) is not bool:
                 raise ValueError('temporary must be true or false.')
@@ -387,7 +437,7 @@ class Front:
                     return error(403,'Your account may not make no-log requests.')
                 observation.silence()
                 identifier='quiet_image_'+secrets.token_hex(12)
-                self.transient[identifier]={'owner':user.identity,'status':'in_progress','created':time.time(),'settings':asked.get('request',{}),'references':references}
+                self.transient[identifier]={'owner':user.identity,'status':'in_progress','created':time.time(),'settings':asked.get('request',{}),'references':references,'kind':'video' if video else 'image'}
                 async def execute():
                     """Run temporary image lines without retaining SQL job history."""
                     try:
@@ -404,6 +454,8 @@ class Front:
                         raise
                     except Exception as problem:
                         self.transient[identifier].update(status='failed',error=str(problem))
+                    finally:
+                        self.transient[identifier]['completed_at']=time.time()
                 task=asyncio.create_task(execute())
                 self.transient[identifier]['task']=task
                 self.batches.carrying.add(task)
@@ -412,7 +464,7 @@ class Front:
             self.batches.store.models=__import__('turnstile.batches',fromlist=['Pins']).Pins(await self.batches.model_ids(user))
             source=self.batches.store.put_file(user.name,'images.jsonl','batch',b'')
             self.store.bind_upload(source['id'],user.identity)
-            batch=self.batches.store.start(user.name,IMAGE_PATHS[0],source['id'],lines,{'mirrorwall':True,'owner_id':user.identity})
+            batch=self.batches.store.start(user.name,'/v1/videos/generations' if video else IMAGE_PATHS[0],source['id'],lines,{'mirrorwall':True,'owner_id':user.identity})
             self.store.bind_job(batch['id'],user.identity,selected.get('model_id',''),selected['id'],asked,references)
             self.batches.work(batch['id'],self.users.by_name)
             return JSONResponse({'id':batch['id'],'temporary':False},201)
@@ -475,14 +527,17 @@ class Front:
             settings=asked.get('settings',{})
             if not isinstance(settings,dict) or settings.keys()&{'model','prompt','image','references','mask','metadata','user'}:
                 raise ValueError('Workflow settings cannot contain model overrides, prompts or private image inputs.')
-            checked_request({'model':asked.get('model'),'prompt':'Validate preset',**settings})
-            selected=next((row for row in await self.catalogue(user) if row['id']==asked.get('model')),None)
+            video=request.query_params.get('kind')=='video'
+            from mirrorwall.video import checked_request as check_video
+            check=check_video if video else checked_request
+            check({'model':asked.get('model'),'prompt':'Validate preset',**settings})
+            selected=next((row for row in await self.media_catalogue(user,'video' if video else 'image') if row['id']==asked.get('model')),None)
             if not selected:
                 raise ValueError('Choose an available image model.')
-            profile=selected.get('image_workflow',{})
+            profile=selected.get('video_workflow' if video else 'image_workflow',{})
             if profile:
-                checked_request({'model':selected['id'],'prompt':'Validate preset',**settings},
-                    {'sdcpp':{**profile,'upscaler':profile.get('upscaling')},'alone':profile.get('exclusive',True)})
+                check({'model':selected['id'],'prompt':'Validate preset',**settings},
+                    {'sdcpp':{**profile,**({'mode':'vid_gen'} if video else {'upscaler':profile.get('upscaling')})},'alone':profile.get('exclusive',True)})
             owner='*' if asked.get('published') and user.can('manage-models') else user.identity
             if asked.get('published') and owner!='*':
                 return error(403,'Publishing presets requires model-management permission.')
@@ -493,7 +548,7 @@ class Front:
     async def workflows(self,request,user):
         """Read the permitted workflow library without fetching images or job history."""
         try:
-            models=await self.catalogue(user)
+            models=await self.media_catalogue(user,'video' if request.query_params.get('kind')=='video' else 'image')
         except ValueError as problem:
             return error(503,str(problem))
         return JSONResponse({'models':models,'presets':self.visible_presets(user,models),'can_manage':user.can('manage-models')},headers={'cache-control':'no-store'})
@@ -506,7 +561,7 @@ class Front:
             return error(404,'There is no such workflow.')
         if row['published']:
             try:
-                allowed=await self.catalogue(user)
+                allowed=await self.media_catalogue(user,'video' if request.query_params.get('kind')=='video' else 'image')
             except ValueError as problem:
                 return error(503,str(problem))
             if not any(m.get('model_id')==row['model_id'] if row['model_id'] else m['id']==row['model'] for m in allowed):

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 SERVICE_SETTINGS = {
     'allow_image_generation': 'images',
+    'allow_video_generation': 'videos',
     'allow_speech': 'speech',
     'allow_audio_generation': 'audio',
     'allow_model_downloads': 'downloads',
@@ -22,6 +23,7 @@ class PlatformServices:
     audio: bool = True
     downloads: bool = True
     classifiers: bool = True
+    videos: bool = True
 
     @classmethod
     def from_settings(cls, settings, overrides=None):
@@ -37,7 +39,7 @@ class PlatformServices:
 
     def kind_enabled(self, kind):
         """Check whether the platform enables this model or file kind."""
-        return self.classifiers if kind == 'classifier' else self.images if kind == 'image' else self.audio_models if kind == 'audio' else True
+        return self.images and self.videos if kind=='video' else self.classifiers if kind == 'classifier' else self.images if kind == 'image' else self.audio_models if kind == 'audio' else True
 
     def audio_task_enabled(self, task):
         """Apply the speech and audio switches to a specific task."""
@@ -46,6 +48,8 @@ class PlatformServices:
     def model_enabled(self, model):
         """Filter a model by its declared engine and media capabilities."""
         capabilities = model.get('capabilities', {})
+        if capabilities.get('video_generation') or model.get('sdcpp',{}).get('mode')=='vid_gen' or model.get('video_workflow'):
+            return self.images and self.videos
         if capabilities.get('classifier') or model.get('type') == 'classifier' or model.get('systemone'):
             return self.classifiers
         if model.get('engine_id', model.get('engine')) == 'sdcpp' or capabilities.get('image_generation'):
@@ -58,6 +62,9 @@ class PlatformServices:
     def file_enabled(self, file):
         """Filter file metadata through the enabled kinds and audio tasks."""
         facts = file.get('facts') or {}
+        identity=facts.get('image_identity') or {}
+        if identity.get('family') in ('wan2.1','wan2.2','ltx2','hunyuan-video-1.5','minimax-h3') and not (self.images and self.videos):
+            return False
         kind = facts.get('what', file.get('what'))
         if not self.kind_enabled(kind):
             return False
@@ -72,6 +79,8 @@ class PlatformServices:
         """Apply the same policy to visible links, bookmarked pages and service requests."""
         path = path.rstrip('/') or '/'
         query = query or {}
+        if path.startswith(('/chat/video','/models/video','/settings/video','/video-api','/video-models','/v1/videos')):
+            return self.images and self.videos
         if path.startswith(('/chat/classifier', '/owg/classifier')) or path in ('/v1/systemone', '/v1/classifier'):
             return self.classifiers
         if path.startswith(('/civitai', '/mirrorwall-discovery')):

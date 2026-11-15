@@ -4,6 +4,7 @@ The batch executor remains openWeightGym's existing control node executor; this 
 image jobs to immutable account IDs and keeps binary renders out of the database.
 """
 import hashlib
+import base64
 import io
 import json
 import os
@@ -65,15 +66,34 @@ class Store:
 
     def save(self,owner,content,*,kind="reference",filename="image.png",metadata=None,temporary=False,job=None,limits=None):
         """Atomically retain one validated asset, or hold it only in bounded temporary memory."""
-        if not owner or kind not in ("reference","output","mask"):
+        if not owner or kind not in ("reference","output","mask","video"):
             raise ValueError("Invalid image owner/kind.")
-        width,height,thumb=self.decoded(content,kind=='output',limits)
+        metadata=dict(metadata or {})
+        if kind=='video':
+            if not isinstance(content,bytes) or not content.startswith(b'\x1aE\xdf\xa3') or len(content)>limit_value(limits,'video_output_max_mib')*2**20:
+                raise ValueError('Video exceeds its output limit or is not WebM.')
+            width,height=metadata.get('width'),metadata.get('height')
+            if any(type(value) is not int or not 256<=value<=1280 for value in (width,height)):
+                raise ValueError('Invalid video dimensions.')
+            seconds=metadata.get('seconds')
+            from mirrorwall.video import number
+            number(seconds,'Video duration',.01,limit_value(limits,'video_max_seconds'))
+            poster=metadata.pop('poster_b64',None)
+            thumb=self.decoded(base64.b64decode(poster,validate=True),limits=limits)[2] if poster else b''
+            metadata['poster_available']=bool(thumb)
+        else:
+            width,height,thumb=self.decoded(content,kind=='output',limits)
         identifier="image_"+secrets.token_hex(16)
         filename=Path(str(filename).replace("\\","/")).name[:160] or "image.png"
         record={"id":identifier,"kind":kind,"filename":filename,"sha256":hashlib.sha256(content).hexdigest(),
                 "width":width,"height":height,"bytes":len(content),"created":time.time(),"metadata":metadata or {},"temporary":temporary}
         if temporary:
             self.expire()
+            if kind=='video':
+                used=self.db.execute("SELECT COALESCE(SUM(bytes),0) FROM mirrorwall_assets WHERE owner_id=? AND kind='video'",(owner,)).fetchone()[0]
+                used+=sum(row['record']['bytes'] for row in self.temporary.values() if row['owner']==owner and row['record']['kind']=='video')
+                if used+len(content)>limit_value(limits,'video_quota_gib')*2**30:
+                    raise ValueError('Your video quota is full. Delete clips or ask an administrator to raise your quota.')
             if sum(len(row["content"])+len(row["thumbnail"]) for row in self.temporary.values())+len(content)+len(thumb)>256*2**20:
                 raise ValueError("Temporary image memory is full; remove temporary images and retry.")
             self.temporary[identifier]={"owner":owner,"record":record,"content":content,"thumbnail":thumb,"until":time.monotonic()+3600}
@@ -92,6 +112,15 @@ class Store:
                     stream.flush()
                     os.fsync(stream.fileno())
             with self.db:
+                if kind=='video':
+                    if self.db.engine=='postgresql':
+                        self.db.execute('SELECT pg_advisory_xact_lock(?)',(int.from_bytes(hashlib.sha256(('video-quota:'+owner).encode()).digest()[:8],signed=True),))
+                    else:
+                        self.db.execute("UPDATE mirrorwall_assets SET created=created WHERE owner_id=? AND kind='video'",(owner,))
+                    used=self.db.execute("SELECT COALESCE(SUM(bytes),0) FROM mirrorwall_assets WHERE owner_id=? AND kind='video'",(owner,)).fetchone()[0]
+                    used+=sum(row['record']['bytes'] for row in self.temporary.values() if row['owner']==owner and row['record']['kind']=='video')
+                    if used+len(content)>limit_value(limits,'video_quota_gib')*2**30:
+                        raise ValueError('Your video quota is full. Delete clips or ask an administrator to raise your quota.')
                 self.db.execute("INSERT INTO mirrorwall_assets VALUES (?,?,?,?,?,?,?,?,?,?)",(identifier,owner,kind,filename,record["sha256"],width,height,len(content),record["created"],json.dumps(metadata or {})))
                 if job:
                     self.db.execute("INSERT INTO mirrorwall_job_assets VALUES (?,?,?)",(job,identifier,"output"))
@@ -119,6 +148,28 @@ class Store:
             return self.temporary[identifier]["thumbnail" if thumbnail else "content"]
         path=self.path(identifier,thumbnail)
         return path.read_bytes() if path.is_file() else None
+
+    def poster(self,owner,identifier,content):
+        """Attach only a decoded image derivative to the caller's video, including memory-only runs."""
+        record=self.asset(owner,identifier)
+        if not record or record['kind']!='video':
+            raise ValueError('There is no such video of yours.')
+        thumbnail=self.decoded(content)[2]
+        if record['temporary']:
+            row=self.temporary[identifier]
+            row['thumbnail']=thumbnail;row['record']['metadata']['poster_available']=True
+            return
+        path=self.path(identifier,True)
+        temporary=path.with_name(path.name+'.'+secrets.token_hex(8)+'.part')
+        try:
+            with temporary.open('xb') as stream:
+                os.chmod(temporary,0o600);stream.write(thumbnail);stream.flush();os.fsync(stream.fileno())
+            temporary.replace(path)
+            with self.db:
+                metadata={**record['metadata'],'poster_available':True}
+                self.db.execute('UPDATE mirrorwall_assets SET metadata=? WHERE id=? AND owner_id=?',(json.dumps(metadata),identifier,owner))
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def listing(self,owner,*,kind=None,limit=100,before=None,job=None):
         """Return bounded private gallery metadata without loading full image bytes."""
@@ -175,6 +226,12 @@ class Store:
         row=self.db.execute("SELECT owner_id FROM mirrorwall_jobs WHERE id=?",(identifier,)).fetchone()
         return row[0] if row else None
 
+    def job(self,owner,identifier):
+        """Read one owned job directly, including records older than the gallery window."""
+        row=self.db.execute('SELECT id,model_id,model_name,payload,created FROM mirrorwall_jobs WHERE id=? AND owner_id=?',
+                            (identifier,owner)).fetchone()
+        return {'id':row[0],'model_id':row[1],'model':row[2],'settings':json.loads(row[3]),'created':row[4]} if row else None
+
     def bind_upload(self,identifier,owner):
         """Bind new batch input files to stable identities before exposing their bytes."""
         with self.db:
@@ -187,12 +244,46 @@ class Store:
             'SELECT owner_id FROM mirrorwall_uploads WHERE file_id=?',(row['id'],row['id'],row['id'])).fetchall()
         if owners:
             return all(identifier==owner for identifier, in owners)
-        return not row.get('endpoint','').startswith('/v1/images/')
+        return not row.get('endpoint','').startswith(('/v1/images/','/v1/videos/'))
 
     def jobs(self,owner,limit=40):
         """Return image batch IDs and saved settings for the signed-in owner."""
         rows=self.db.execute("SELECT id,model_id,model_name,payload,created FROM mirrorwall_jobs WHERE owner_id=? ORDER BY created DESC LIMIT ?",(owner,min(100,max(1,int(limit))))).fetchall()
         return [{"id":r[0],"model_id":r[1],"model":r[2],"settings":json.loads(r[3]),"created":r[4]} for r in rows]
+
+    def video_jobs(self,owner,limit=21,*,after=None,ascending=False):
+        """Page complete video history using portable SQL and stable creation/ID cursors."""
+        result=[]
+        direction='ASC' if ascending else 'DESC'
+        compare='>' if ascending else '<'
+        cursor=after
+        while len(result)<limit:
+            condition=' AND (created'+compare+'? OR (created=? AND id'+compare+'?))' if cursor else ''
+            values=[owner,*( (cursor[0],cursor[0],cursor[1]) if cursor else () ),100]
+            rows=self.db.execute('SELECT id,payload,created FROM mirrorwall_jobs WHERE owner_id=?'+condition+' ORDER BY created '+direction+', id '+direction+' LIMIT ?',tuple(values)).fetchall()
+            if not rows:
+                break
+            for identifier,payload,created in rows:
+                cursor=(created,identifier)
+                if json.loads(payload).get('kind')=='video':
+                    result.append({'id':identifier,'created':created})
+                    if len(result)==limit:
+                        break
+            if len(rows)<100:
+                break
+        return result
+
+    def prune_videos(self,owner,days):
+        """Apply the current owner's retention policy while protecting active batch references."""
+        if days<=0:
+            return
+        rows=self.db.execute("SELECT id FROM mirrorwall_assets WHERE owner_id=? AND kind='video' AND created<?",
+                             (owner,time.time()-days*86400)).fetchall()
+        for identifier, in rows:
+            try:
+                self.delete(owner,identifier)
+            except ValueError:
+                pass
 
     def preferences(self,owner,settings=None):
         """Persist only validated non-secret display preferences."""

@@ -4,12 +4,12 @@ import json
 MAX_EVENT=192*1024*1024
 
 
-async def events(chunks):
+async def events(chunks, *, max_event=MAX_EVENT):
     """Decode complete data events across arbitrary transport chunk boundaries."""
     pending=bytearray()
     async for chunk in chunks:
         pending.extend(chunk.replace(b"\r",b""))
-        if len(pending)>MAX_EVENT:
+        if len(pending)>max_event:
             raise ValueError("Image stream event exceeds its size limit.")
         while b"\n\n" in pending:
             frame,_,rest=pending.partition(b"\n\n")
@@ -42,7 +42,7 @@ def completed(whole):
                 value=json.loads(line[5:])
             except ValueError:
                 continue
-            if isinstance(value,dict) and value.get("type") in ("image_generation.completed","image_edit.completed"):
+            if isinstance(value,dict) and value.get("type") in ("image_generation.completed","image_edit.completed","video_generation.completed"):
                 return True
     return False
 
@@ -50,7 +50,7 @@ def completed(whole):
 def metadata(value):
     """Keep reproducibility/settings/error facts without duplicating image bytes in logs."""
     if isinstance(value,dict):
-        return {key:metadata(item) for key,item in value.items() if key not in ('b64_json','references','image','mask')}
+        return {key:metadata(item) for key,item in value.items() if key not in ('b64_json','poster_b64','references','image','mask','init_image','end_image','reference_images','control_video')}
     if isinstance(value,list):
         return [metadata(item) for item in value]
     return value
@@ -58,9 +58,10 @@ def metadata(value):
 
 class Capture:
     """Bound diagnostic memory independently of preview count and image batch size."""
-    def __init__(self,content_type):
+    def __init__(self,content_type,*,max_event=MAX_EVENT):
         """Initialize private image state without loading model weights."""
         self.sse='text/event-stream' in content_type
+        self.max_event=max_event
         self.buffer=bytearray()
         self.records=[]
         self.overflow=False
@@ -73,9 +74,9 @@ class Capture:
             return
         if value.get('error'):
             self.error=True
-        if value.get('type') in ('image_generation.completed','image_edit.completed'):
+        if value.get('type') in ('image_generation.completed','image_edit.completed','video_generation.completed'):
             self.count+=1
-        if value.get('type') in ('image_generation.completed','image_edit.completed','error') or 'error' in value:
+        if value.get('type') in ('image_generation.completed','image_edit.completed','video_generation.completed','error') or 'error' in value:
             self.records.append(metadata(value))
 
     def feed(self,chunk):
@@ -83,7 +84,7 @@ class Capture:
         if self.overflow:
             return
         self.buffer.extend(chunk.replace(b"\r",b"") if self.sse else chunk)
-        if len(self.buffer)>MAX_EVENT:
+        if len(self.buffer)>self.max_event:
             self.overflow=True
             self.buffer.clear()
             return
@@ -108,6 +109,10 @@ class Capture:
             value=json.loads(self.buffer)
             self.error=bool(value.get('error'))
             self.count=len(value.get('data',[]))
+            if not self.records:
+                for row in value.get('data',[]):
+                    if row.get('mime_type')=='video/webm':
+                        self.records.append({'type':'video_generation.completed',**metadata(row)})
             return json.dumps(metadata(value)).encode()
         except (ValueError,AttributeError):
             return bytes(self.buffer[:4096])
@@ -117,3 +122,11 @@ class Capture:
         if self.error:
             return 'error'
         return 'success' if self.count else 'unscored' if self.overflow else 'error'
+
+    def video_usage(self):
+        """Count actual completed clips without fabricating language-token usage."""
+        clips=[row for row in self.records if row.get('type')=='video_generation.completed']
+        return {'video_clips':len(clips),'video_seconds':sum(row.get('seconds',0) for row in clips),
+                'video_frames':sum(row.get('frame_count',0) for row in clips),
+                'video_pixels':sum(row.get('width',0)*row.get('height',0) for row in clips),
+                'gpu_seconds':sum(row.get('gpu_seconds',0) for row in clips)} if clips else {}

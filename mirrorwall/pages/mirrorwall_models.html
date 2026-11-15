@@ -1,18 +1,20 @@
 {% extends "frame.html" %}
 {% from 'parts.html' import page_header, card, alert, more %}
 {% from 'image_design_parts.html' import templates %}
-{% block title %}Images · Image models · openWeightGym{% endblock %}
+{% set video = media_kind|default('image') == 'video' %}
+{% set media_label = 'Video' if video else 'Images' %}
+{% block title %}{{ media_label }} · {{ 'Video models' if video else 'Image models' }} · openWeightGym{% endblock %}
 {% block scripts %}
 <link rel="stylesheet" href="/mirrorwall-static/images.css?v=4"><link rel="stylesheet" href="/static/image-studio.css?v=1">
-<script src="/mirrorwall-static/image-profiles.js?v=2" defer></script>
+<script src="/mirrorwall-static/image-profiles.js?v=2" defer></script>{% if video %}<script src="/mirrorwall-static/video-profiles.js?v=1" defer></script>{% endif %}
 {% if studio_manage %}<script src="/static/model-settings.js?v=3" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/mirrorwall-static/models.js?v=14" defer></script>{% endif %}
 <script src="/mirrorwall-static/workflows.js?v=3" defer></script>
 {% endblock %}
 {% block main %}
-<div id="image-studio" data-manage="{{ 'true' if studio_manage else 'false' }}">
-{% call page_header('Images') %}
-<a href="/chat/images" class="btn btn-outline-secondary">Generate images</a>
-{% if studio_manage %}<button id="mw-new" class="btn btn-outline-secondary">Add image model</button>{% endif %}
+<div id="image-studio" data-media-kind="{{ media_kind|default('image') }}" data-video-profiles='{{ video_profiles|default({})|tojson }}' data-manage="{{ 'true' if studio_manage else 'false' }}">
+{% call page_header(media_label) %}
+<a href="{{ '/chat/video' if video else '/chat/images' }}" class="btn btn-outline-secondary">Generate {{ 'video' if video else 'images' }}</a>
+{% if studio_manage %}<button id="mw-new" class="btn btn-outline-secondary">Add {{ 'video' if video else 'image' }} model</button>{% endif %}
 <button id="studio-new-workflow" class="btn btn-primary" disabled>New workflow</button>
 {% endcall %}
 {% call alert('danger', role='alert', attrs={'id':'studio-error','hidden':''}) %}{% endcall %}
@@ -21,13 +23,13 @@
 <aside id="models-panel" aria-label="Image model library">
 {% call card('Models') %}
 {% if studio_manage %}<label for="mw-node" class="visually-hidden">Compute node</label><select id="mw-node" name="node" class="form-select mb-3"><option value="">All</option></select>{% endif %}
-<label class="visually-hidden" for="studio-model-search">Search models</label><input id="studio-model-search" type="search" class="form-control mb-3" placeholder="Find a model…"><div id="studio-model-list" class="model-list"></div><p id="studio-models-empty" class="small text-secondary" hidden>No image models on this node. Add an image model to begin.</p>
+<label class="visually-hidden" for="studio-model-search">Search models</label><input id="studio-model-search" type="search" class="form-control mb-3" placeholder="Find a model…"><div id="studio-model-list" class="model-list"></div><p id="studio-models-empty" class="small text-secondary" hidden>No {{ 'video' if video else 'image' }} models on this node. Add a model to begin.</p>
 {% endcall %}
 </aside>
 <div id="selected-panel">
 {% call card(class_='selected-model', body_class='d-flex flex-wrap justify-content-between align-items-center gap-3') %}
-<div class="min-w-0"><div class="eyebrow mb-2">MODEL SETUP</div><strong id="studio-model-name" class="model-title">Choose an image model</strong><span id="studio-family" class="badge bg-blue-lt ms-2"></span><p id="studio-model-detail" class="small text-secondary mt-2 mb-0"></p></div>
-{% if studio_manage %}<button id="studio-edit-model" class="btn btn-outline-secondary btn-sm" disabled>Edit model setup</button>{% endif %}
+<div class="min-w-0"><div class="eyebrow mb-2">MODEL SETUP</div><strong id="studio-model-name" class="model-title">Choose a {{ 'video' if video else 'image' }} model</strong><span id="studio-family" class="badge bg-blue-lt ms-2"></span><p id="studio-model-detail" class="small text-secondary mt-2 mb-0"></p></div>
+{% if studio_manage %}<div class="d-flex flex-wrap gap-2"><button id="studio-edit-model" class="btn btn-outline-secondary btn-sm" disabled>Edit model setup</button>{% if video %}<button id="studio-qualify" class="btn btn-outline-primary btn-sm" disabled>Run qualification clip</button>{% endif %}</div>{% endif %}
 {% endcall %}
 <p id="studio-unavailable" class="small text-secondary" hidden></p>
 </div>

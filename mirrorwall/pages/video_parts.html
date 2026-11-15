@@ -1,0 +1,75 @@
+{# Shared video controls for the live studio and its offline proposals. #}
+{% from 'parts.html' import card, form_section, alert %}
+{% from 'image_design_parts.html' import field, select, lora_template %}
+{% from 'generation_design_parts.html' import viewer %}
+
+{% macro controls(samplers, schedulers, preview=false) %}
+{% call card('Generation settings') %}
+<form id="video-form" data-hold-refresh>
+<label for="video-model" class="form-label">Video model</label><select id="video-model" name="model" class="form-select" required></select>
+<p id="video-model-note" class="form-text" role="status"></p>
+<label for="video-mode" class="form-label">Mode</label><select id="video-mode" class="form-select"><option value="text">Text</option></select>
+<div class="row g-3 mt-1">
+{{ field('video-seconds','Length · seconds','number',5,0.1,10,'any',name='seconds') }}
+{{ field('video-fps','Frames per second','number',16,1,60,1,name='fps') }}
+{{ select('video-size','Resolution',['832x480','480x832','1280x720'],name='size') }}
+{{ field('video-seed','Seed · −1 is random','number',-1,-1,2147483647,1,name='seed') }}
+</div><output id="video-length" class="form-text d-block" aria-live="polite"></output>
+<label class="form-check mt-3" id="video-soundtrack-row" hidden><input id="video-soundtrack" name="soundtrack" type="checkbox" class="form-check-input"><span class="form-check-label">Soundtrack · describe the sound in your prompt</span></label>
+<details class="mt-3"><summary>Advanced</summary><div class="row g-3 mt-1">
+{{ field('video-steps','Steps','number',20,1,200,name='steps') }}
+{{ field('video-guidance','Guidance','number',6,0,30,0.1,name='guidance') }}
+{{ select('video-sampler','Sampler',samplers,name='sampler') }}{{ select('video-scheduler','Scheduler',schedulers,name='scheduler') }}
+{{ field('video-flow-shift','Flow shift','number',5,0,100,0.1,name='flow_shift') }}
+<div class="col-12" id="video-high-noise" hidden><div class="row g-3">
+{{ field('video-high-steps','High-noise steps','number',10,1,200,name='high_noise_steps') }}
+{{ field('video-high-guidance','High-noise guidance','number',6,0,30,0.1,name='high_noise_guidance') }}
+{{ field('video-moe','MoE boundary','number',0.875,0,1,0.001,name='moe_boundary') }}
+</div></div>
+<div class="col-12" id="video-vace-row" hidden>{{ field('video-vace','VACE strength','number',1,0,2,0.05,name='vace_strength') }}</div>
+<div class="col-12" id="video-loras"></div>
+<label class="col-12 form-check"><input id="video-vae-tiling" name="vae_tiling" type="checkbox" class="form-check-input"><span class="form-check-label">VAE tiling</span></label>
+<label class="col-12 form-check"><input id="video-temporal-tiling" name="temporal_tiling" type="checkbox" class="form-check-input"><span class="form-check-label">Temporal tiling</span></label>
+<label class="col-12 form-check" id="video-hires-row" hidden><input id="video-hires" name="hires" type="checkbox" class="form-check-input"><span class="form-check-label">2× latent upscale</span></label>
+<label class="col-12 form-check"><input id="video-live-previews" name="live_previews" type="checkbox" class="form-check-input"><span class="form-check-label">Live preview frames</span></label>
+</div></details>
+<label class="form-check mt-3"><input id="video-temporary" type="checkbox" class="form-check-input"><span class="form-check-label">Temporary · no retained history</span></label>
+<div class="d-flex gap-2 mt-3"><button id="video-generate" class="btn btn-primary" type="submit">{{ 'Simulate run' if preview else 'Generate' }}</button><button id="video-stop" class="btn btn-outline-danger" type="button" disabled>Stop</button></div>
+</form>{% endcall %}
+{{ lora_template('video-lora-template',required=false) }}
+{% endmacro %}
+
+{% macro compose(preview=false) %}
+{% call card('Describe the clip') %}
+<label for="video-prompt" class="form-label">Prompt</label><textarea id="video-prompt" name="prompt" form="video-form" class="form-control" rows="4" required maxlength="24000">{{ 'A tiger cub shelters beneath a banana leaf. Rain falls softly; the camera moves slowly closer.' if preview else '' }}</textarea>
+<label for="video-negative" class="form-label mt-3">Negative prompt</label><textarea id="video-negative" name="negative_prompt" form="video-form" class="form-control" rows="2" maxlength="24000"></textarea>
+<div id="video-inputs" class="mt-3" hidden>
+{% for id,label,multiple,accept in [('start','Start image',false,'image/png,image/jpeg,image/webp'),('end','End image',false,'image/png,image/jpeg,image/webp'),('references','Reference images',true,'image/png,image/jpeg,image/webp'),('control','Control video',false,'video/*')] %}
+<div id="video-{{ id }}-row" class="mt-2" hidden><label for="video-{{ id }}" class="form-label">{{ label }}</label><input id="video-{{ id }}" type="file" accept="{{ accept }}" class="form-control"{% if multiple %} multiple{% endif %}><p id="video-{{ id }}-note" class="form-text"></p></div>
+{% endfor %}
+</div>{% endcall %}
+{% endmacro %}
+
+{% macro library() %}
+{% call card('Your clips') %}
+<div class="row g-2 mb-3"><div class="col-sm-4"><label class="form-label" for="video-filter-model">Model</label><select class="form-select" id="video-filter-model"><option value="">All models</option></select></div><div class="col-sm-4"><label class="form-label" for="video-filter-mode">Mode</label><select class="form-select" id="video-filter-mode"><option value="">All modes</option><option value="text">Text</option><option value="start">Start image</option><option value="ends">Start and end images</option><option value="references">Reference images</option><option value="control">Control video</option></select></div><div class="col-sm-4"><label class="form-label" for="video-filter-date">Created since</label><input id="video-filter-date" type="date" class="form-control"></div></div>
+<label for="video-sort" class="visually-hidden">Sort clips</label><select id="video-sort" class="form-select form-select-sm mb-3"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select>
+<div id="video-gallery" class="ig-thumbnails" role="listbox" aria-label="Private video library"></div><p id="video-library-empty" class="small text-secondary mb-0">Generate a clip to start your private library.</p>
+<button id="video-load-more" type="button" class="btn btn-sm btn-outline-secondary mt-3" hidden>Load earlier clips</button>
+{% endcall %}
+<template id="video-clip-template"><button type="button" class="ig-thumbnail" role="option" aria-selected="false"><img alt=""><strong data-title></strong><small data-detail></small></button></template>
+{% endmacro %}
+
+{% macro jobs() %}
+{% call card('Run queue') %}<div id="video-jobs" role="status" aria-live="polite">Your next run will appear here.</div><progress id="video-progress" max="100" value="0" class="w-100" aria-label="Video generation progress"></progress><img id="video-preview" class="img-fluid" alt="Latest video generation preview" hidden>{% endcall %}
+{% endmacro %}
+
+{% macro workspace(samplers, schedulers, preview=false, samples={}) %}
+<div id="video-workspace" class="video-workspace" data-layout="canvas">
+<aside class="video-controls">{{ controls(samplers,schedulers,preview) }}</aside>
+<section class="video-compose">{{ compose(preview) }}</section>
+<div class="video-viewer">{{ viewer(media_kind='video',samples=samples) }}</div>
+<section class="video-queue">{{ jobs() }}</section>
+<section class="video-library">{{ library() }}</section>
+</div>
+{% endmacro %}

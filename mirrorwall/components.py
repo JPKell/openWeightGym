@@ -50,7 +50,16 @@ GET.update({'moss-image-base': ('leejet/MOSS-Image-Base-GGUF', 'MOSS-Image-Base-
 SLOTS = (("diffusion", "Diffusion weights"), ("text_encoder", "Text encoder"), ("vae", "VAE"),
          ("clip_l", "CLIP L"), ("clip_g", "CLIP G"), ("upscaler", "Image upscaler"), ("tokenizer", "Tokenizer JSON"))
 FORMATS = (".gguf", ".safetensors", ".pth", ".json")
-IDENTITY_VERSION = 3  # MOSS diffusion, Qwen3.5 encoders and external tokenizer JSON
+IDENTITY_VERSION = 4  # video transformers, encoders and temporal VAEs
+VIDEO_SLOTS=(("diffusion","Diffusion weights"),("text_encoder","Text encoder"),("vae","VAE"),
+             ("high_noise_diffusion_model","High-noise diffusion weights"),("audio_vae","Audio VAE"),
+             ("embeddings_connectors","Embeddings connector"),("byt5","ByT5 GlyphXL"),
+             ("clip_vision","CLIP Vision"),("latent_upscaler","Latent upscaler"),("tae","Preview decoder"))
+LABELS.update({'t2v-1.3b':'WAN 2.1 T2V 1.3B','t2v-14b':'WAN T2V 14B','i2v-14b':'WAN I2V 14B',
+               'flf2v-14b':'WAN first/last-frame 14B','ti2v-5b':'WAN 2.2 TI2V 5B',
+               'wan2.1-vae':'WAN 2.1 VAE','wan2.2-vae':'WAN 2.2 TI2V VAE','umt5-xxl':'umT5 XXL text encoder',
+               'ltx-2.3':'LTX-2.3','ltx-2.5':'LTX-2.5','ltx-conv-vae':'LTX conv video VAE',
+               'hunyuan-video-1.5':'HunyuanVideo 1.5','minimax-h3':'MiniMax-H3'})
 
 
 def shapes_of(path):
@@ -80,6 +89,9 @@ def classify(shapes):
         width = next((shape[0] for name, shape in shapes.items() if "img_attn.proj" in name and ("lora_B" in name or "lora_up" in name)), None)
         return "lora", "flux2" if any("double_blocks" in name for name in names) else None, FLUX2.get(width)
     flat = {plain(name): shape for name, shape in shapes.items()}
+    video=classify_video(flat)
+    if video:
+        return video
     if (flat.get('video_embedder.weight') == (3072, 128)
             and flat.get('text_embedder.proj.weight') == (3072, 4096)
             and any(name.startswith('layers.') for name in flat)):
@@ -132,6 +144,77 @@ def classify(shapes):
     return "unknown", None, None
 
 
+def classify_video(shapes):
+    """Recognize video headers using native architecture signatures, never a filename guess."""
+    names=set(shapes)
+    audio={n.removeprefix('audio_vae.'):s for n,s in shapes.items()}
+    if {'latents_mean','latents_std','dec_in_proj.weight'}<=audio.keys() and any(n.startswith('decoder.') for n in audio):
+        return 'audio_vae',None,'minimax-audio-vae'
+    tiny=shapes.get('decoder.1.weight')
+    if tiny and len(tiny)==4 and tiny[1] in (16,24,32,48,128) and any('.conv.6.weight' in n or '.conv.0.weight' in n for n in names):
+        return 'tae',None,'video-tae-'+str(tiny[1])
+    if 'video_patch_proj.weight' in names and 'audio_patch_proj.weight' in names:
+        return 'diffusion','minimax-h3','minimax-h3'
+    if 'audio_patchify_proj.weight' in names and 'adaln_single.emb.timestep_embedder.linear_1.bias' in names:
+        return 'diffusion','ltx2','ltx-2.5' if 'keyframes_abs_pos_embedding' in names else 'ltx-2.3'
+    if 'txt_in.individual_token_refiner.blocks.0.adaLN_modulation.1.weight' in names and any(n.startswith('byt5_in.') for n in names):
+        return 'diffusion','hunyuan-video-1.5','hunyuan-video-1.5'
+    if 'patch_embedding.weight' in names and 'blocks.0.cross_attn.norm_k.weight' in names:
+        shape=shapes['patch_embedding.weight']
+        width=shape[0]
+        channels=shape[1] if len(shape)==5 else None
+        if any(n.startswith(('casual_audio_encoder.','audio_injector.')) for n in names):
+            return 'diffusion','wan-s2v','s2v-deferred'
+        if channels==48:
+            return 'diffusion','wan2.2','ti2v-5b'
+        variant='flf2v-14b' if 'img_emb.emb_pos' in names else 'i2v-14b' if any(n.startswith('img_emb.') for n in names) else 't2v-1.3b' if width==1536 else 't2v-14b'
+        if any(n.startswith('vace_') or n.startswith('vace_blocks.') for n in names):
+            variant='vace-1.3b' if width==1536 else 'vace-14b'
+        return 'diffusion','wan2.1',variant
+    # Standalone parts may carry their canonical loader prefix.
+    parts={n.removeprefix('first_stage_model.'):s for n,s in shapes.items()}
+    if 'decoder.x_embedder.weight' in parts and 'decoder.register_tokens' in parts:
+        return 'vae',None,'minimax-video-vae'
+    conv=parts.get('decoder.conv1.weight')
+    if conv and len(conv) in (4,5):
+        return 'vae',None,'wan2.2-vae' if conv[1]==48 else 'wan2.1-vae' if conv[1]==16 else 'unknown-video-vae'
+    conv=parts.get('decoder.conv_in.conv.weight')
+    if conv and len(conv)==5 and conv[1]==128:
+        return 'vae',None,'ltx-conv-vae'
+    conv=parts.get('decoder.conv_in.weight')
+    if conv and len(conv)==5:
+        if conv[1]==24:
+            return 'vae',None,'minimax-video-vae'
+        if conv[1]==32:
+            return 'vae',None,'hunyuan-video-vae'
+    if any(n.endswith('per_channel_statistics.std-of-means') for n in names):
+        return 'vae',None,'ltx-diffusion-vae-unsupported'
+    if any(n.startswith('audio_vae.') for n in names):
+        return 'audio_vae',None,'ltx-audio-vae'
+    if any(n.startswith(('vocoder.','audio_autoencoder.')) for n in names):
+        return 'audio_vae',None,'minimax-audio-vae'
+    shared=shapes.get('shared.weight') or shapes.get('encoder.embed_tokens.weight') or (
+        shapes.get('token_embd.weight') if any(n.startswith('enc.blk.') for n in names) else None)
+    if shared and shared[1]==4096 and shared[0]>=250000:
+        return 'text_encoder',None,'umt5-xxl'
+    if shared and shared[1]==1472 and shared[0]<=512:
+        return 'text_encoder',None,'byt5-glyphxl'
+    if 'vision_model.embeddings.patch_embedding.weight' in names and shapes['vision_model.embeddings.patch_embedding.weight'][0]==1280:
+        return 'clip_vision',None,'clip-vision-h'
+    embed=next((s for n,s in shapes.items() if n.endswith(('embed_tokens.weight','token_embd.weight'))),None)
+    if embed and len(embed)==2 and embed[1]==3840:
+        gemma4=any(n.endswith('.layer_scalar') for n in names)
+        projected=any(n.startswith('text_embedding_projection.') for n in names)
+        return 'text_encoder',None,'ltx-gemma4-12b' if gemma4 and projected else 'gemma4-stock-unsupported' if gemma4 else 'gemma3-12b'
+    if embed and len(embed)==2 and embed[1]==5120 and any(n.startswith(('visual.','model.visual.')) for n in names):
+        return 'text_encoder',None,'qwen3-vl-32b'
+    if any(n.startswith('text_embedding_projection.') for n in names):
+        return 'embeddings_connectors',None,'ltx-connector'
+    if 'initial_norm.weight' in names and 'final_conv.weight' in names and any(n.startswith('res_blocks.') for n in names):
+        return 'latent_upscaler',None,'ltx-latent-upscaler'
+    return None
+
+
 # Keep one bounded library scan plus its selected components without LRU churn.
 @lru_cache(maxsize=2048)
 def _identified(path, modified, size):
@@ -143,12 +226,14 @@ def _identified(path, modified, size):
         if file.suffix.lower() == '.json':
             return identify_tokenizer(file)
         kind, family, variant = classify(shapes_of(file))
-        if file.suffix.lower()=='.gguf' and kind=='text_encoder' and variant in ('qwen2.5-7b','qwen3-8b'):
+        if file.suffix.lower()=='.gguf' and kind=='text_encoder' and variant in ('qwen2.5-7b','qwen3-8b','llm-5120'):
             architecture=read_metadata(str(file)).get('general.architecture')
             if variant=='qwen2.5-7b' and architecture=='qwen2vl':
                 variant='qwen2.5-vl-7b'
             elif variant=='qwen3-8b' and architecture=='qwen3vl':
                 variant='qwen3-vl-8b'
+            elif variant=='llm-5120' and architecture=='qwen3vl':
+                variant='qwen3-vl-32b'
     except (OSError, ValueError, KeyError, IndexError, TypeError, struct.error):
         return {"kind": "unreadable", "family": None, "variant": None, "label": "Not a readable GGUF, safetensors or tokenizer JSON file"}
     label = LABELS.get(variant) or {"lora": "LoRA adapter", "upscaler": "Image upscaler", "flux1": "Flux 1 (not supported here)",
@@ -206,6 +291,33 @@ def scan(folder, roots=None):
 def needs(family, variant):
     """What each slot must hold: (required, expected kind, expected variant, why) by slot."""
     upscaler = (False, "upscaler", None, "Enlarges reference images smaller than the reference size, and outputs when asked to upscale.")
+    from mirrorwall.video import FAMILIES
+    if family in FAMILIES:
+        def slot(kind,variant,why,required=True):
+            """Keep the same slot contract for image and video component checklists."""
+            return (required,kind,variant,why)
+        channels=48 if variant=='ti2v-5b' else 16 if family.startswith('wan') else 128 if family=='ltx2' else 32 if family=='hunyuan-video-1.5' else 24
+        tae={'tae':slot('tae','video-tae-'+str(channels),'Optional tiny video autoencoder; selecting it also changes native decoding.',False)}
+        if family.startswith('wan'):
+            result={'text_encoder':slot('text_encoder','umt5-xxl','WAN uses the umT5 XXL encoder.'),
+                    'vae':slot('vae','wan2.2-vae' if variant=='ti2v-5b' else 'wan2.1-vae','Only TI2V 5B uses the Wan 2.2 VAE.'),
+                    'high_noise_diffusion_model':slot('diffusion',variant,'A14B requires a compatible separate high-noise model.',family=='wan2.2' and variant!='ti2v-5b')}
+            if family=='wan2.1' and variant in ('i2v-14b','flf2v-14b'):
+                result['clip_vision']=slot('clip_vision','clip-vision-h','WAN 2.1 image conditioning requires CLIP Vision H.')
+            return {**result,**tae}
+        if family=='ltx2':
+            return {**tae,'text_encoder':slot('text_encoder','ltx-gemma4-12b' if variant=='ltx-2.5' else 'gemma3-12b','LTX-2.5 needs its bundled projection, not stock Gemma 4.'),
+                    'vae':slot('vae','ltx-conv-vae','Use the conv VAE; diffusion decoding is unsupported.'),
+                    'audio_vae':slot('audio_vae','ltx-audio-vae','LTX audio decoder.'),
+                    'embeddings_connectors':None if variant=='ltx-2.5' else slot('embeddings_connectors','ltx-connector','LTX-2.3 requires its embeddings connector.'),
+                    'latent_upscaler':slot('latent_upscaler','ltx-latent-upscaler','Optional 2× latent enlargement.',False)}
+        if family=='hunyuan-video-1.5':
+            return {**tae,'text_encoder':slot('text_encoder','qwen2.5-vl-7b','Shared Qwen2.5-VL 7B image/video encoder.'),
+                    'vae':slot('vae','hunyuan-video-vae','Use the causal HunyuanVideo 1.5 VAE.'),
+                    'byt5':slot('text_encoder','byt5-glyphxl','Glyph-aware text conditioning needs ByT5 GlyphXL.')}
+        return {**tae,'text_encoder':slot('text_encoder','qwen3-vl-32b','MiniMax uses its Qwen3-VL 32B encoder.'),
+                'vae':slot('vae','minimax-video-vae','MiniMax video VAE.'),
+                'audio_vae':slot('audio_vae','minimax-audio-vae','MiniMax stereo audio decoder.')}
     if family == 'moss-image':
         return {'text_encoder': (True, 'text_encoder', 'qwen3.5-9b', 'MOSS-Image Base and SFT use Qwen3.5 9B, not Qwen3 or Qwen-VL encoders.'),
                 'vae': (True, 'vae', 'flux2-vae', 'MOSS-Image uses the Flux 2 VAE (32 latent channels).'),
@@ -253,9 +365,12 @@ def check(settings, folder, roots=None, *, inventory=None):
                                 'label':'File is not available in the current model library'})
     diffusion = identity(chosen["diffusion"]) if chosen["diffusion"] else None
     family, variant = (diffusion or {}).get("family"), (diffusion or {}).get("variant")
+    video=options.get('mode')=='vid_gen'
+    if video and family=='wan2.1' and options.get('family')=='wan2.2' and options.get('components',{}).get('high_noise_diffusion_model'):
+        family='wan2.2'  # A14B and 2.1 headers overlap; the explicit two-model bundle confirms the choice.
     wanted = needs(family, variant)
     slots, ready = [], True
-    for slot, label in SLOTS:
+    for slot, label in VIDEO_SLOTS if video else SLOTS:
         path = chosen.get(slot, "")
         found = identity(path) if path else None
         rule = (True, "diffusion", None, "The model itself.") if slot == "diffusion" else wanted.get(slot)
@@ -294,9 +409,10 @@ def check(settings, folder, roots=None, *, inventory=None):
         loras.append({"name": name, "found": found, "status": "ok" if fits else "wrong",
                       "message": found["label"] if fits else (found or {}).get("label", "Not a LoRA") + (f"; this model is {LABELS.get(variant, variant)}." if found and found["kind"] == "lora" else ".")})
         ready &= fits
-    detected = family if family in ("flux2-klein", "flux2-dev", "sdxl",'qwen-image','qwen-image-2.1','moss-image') else None
+    from mirrorwall.video import FAMILIES
+    detected = family if family in (*FAMILIES,"flux2-klein", "flux2-dev", "sdxl",'qwen-image','qwen-image-2.1','moss-image') else None
     if detected and options.get("family") and options["family"] != detected:
         ready = False
     return {"detected_family": detected, "variant": variant, "variant_label": LABELS.get(variant, ""), "family_matches": not detected or options.get("family") == detected,
             "slots": slots, "loras": loras, "ready": bool(ready and diffusion and detected), "folder": str(folder or ""),
-            "get_diffusion": [{"label": LABELS[key], "repository": GET[key][0], "file": GET[key][1]} for key in ("klein-4b", "klein-9b", "dev", "checkpoint",'qwen-image','qwen-image-2.1','moss-image-base','moss-image-sft')]}
+            "get_diffusion": [] if video else [{"label": LABELS[key], "repository": GET[key][0], "file": GET[key][1]} for key in ("klein-4b", "klein-9b", "dev", "checkpoint",'qwen-image','qwen-image-2.1','moss-image-base','moss-image-sft')]}
