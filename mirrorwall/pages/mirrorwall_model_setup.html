@@ -1,3 +1,4 @@
+{% from 'navigation_parts.html' import image_family_choices %}
 {% from "parts.html" import form_section, more, hardware, card, empty_row %}
 {% from "model_form.html" import number, choice %}
 {% from 'models_parts.html' import node_targets, node_target %}
@@ -9,9 +10,9 @@
 <p class="col-12 small text-secondary mb-0" id="mw-target-note">Select the nodes that should receive this model. Its complete bundle is copied and verified before the model is created on each node. Hardware settings must be valid on every selected node.</p>
 {% call form_section("Model and files", "All nodes") %}
 <div class="col-md-6"><label for="mw-name" class="form-label">Model name</label><input id="mw-name" name="name" class="form-control" required maxlength="128"></div>
-<div class="col-md-6"><label for="mw-family" class="form-label">Family</label><select id="mw-family" name="family" class="form-select"><option value="flux2-klein">Flux 2 klein</option><option value="flux2-dev">Flux 2 Dev</option><option value="sdxl">SDXL</option><option value="qwen-image">Qwen Image (original / 2512)</option><option value="qwen-image-2.1">Qwen Image 2.1</option></select></div>
+<div class="col-md-6"><label for="mw-family" class="form-label">Family</label><select id="mw-family" name="family" class="form-select">{{ image_family_choices() }}</select></div>
 <div id="mw-family-help" class="col-12" hidden></div>
-{% for name,label in [('diffusion','Diffusion weights'),('text_encoder','Text encoder'),('vae','VAE'),('clip_l','CLIP L'),('clip_g','CLIP G'),('upscaler','Image upscaler')] %}<div id="mw-row-{{name}}" class="col-12"><label for="mw-{{name}}" class="form-label">{{label}} <span id="mw-need-{{name}}" class="badge rounded-pill text-bg-light border fw-normal"></span></label><select id="mw-{{name}}" name="{{name}}" class="form-select" aria-describedby="mw-says-{{name}}" {{'required' if name=='diffusion'}}><option value="">Choose a file from cache/storage</option></select><div id="mw-says-{{name}}" class="mw-says form-text"></div></div>{% endfor %}
+{% for name,label in [('diffusion','Diffusion weights'),('text_encoder','Text encoder'),('vae','VAE'),('clip_l','CLIP L'),('clip_g','CLIP G'),('upscaler','Image upscaler'),('tokenizer','Tokenizer JSON')] %}<div id="mw-row-{{name}}" class="col-12"><label for="mw-{{name}}" class="form-label">{{label}} <span id="mw-need-{{name}}" class="badge rounded-pill text-bg-light border fw-normal"></span></label><select id="mw-{{name}}" name="{{name}}" class="form-select" aria-describedby="mw-says-{{name}}" {{'required' if name=='diffusion'}}><option value="">Choose a file from cache/storage</option></select><div id="mw-says-{{name}}" class="mw-says form-text"></div></div>{% endfor %}
 <div class="col-12"><div id="mw-check" class="mw-check frame" aria-live="polite"></div></div>
 {% endcall %}
 {% call form_section('Hardware', 'This node') %}

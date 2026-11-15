@@ -33,3 +33,6 @@
   </div>
 </nav>
 {%- endmacro %}
+{% macro image_family_choices() %}
+{% for value, label in [('flux2-klein','Flux 2 klein'),('flux2-dev','Flux 2 Dev'),('sdxl','SDXL'),('qwen-image','Qwen Image (original / 2512)'),('qwen-image-2.1','Qwen Image 2.1'),('moss-image','MOSS-Image (Base / SFT)')] %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+{% endmacro %}

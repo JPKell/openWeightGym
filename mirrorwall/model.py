@@ -7,7 +7,7 @@ import re
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}")
 
 OUR_FLAGS = frozenset()
-FAMILIES = ("flux2-klein", "flux2-dev", "sdxl", "qwen-image", "qwen-image-2.1")
+FAMILIES = ("flux2-klein", "flux2-dev", "sdxl", "qwen-image", "qwen-image-2.1", "moss-image")
 SPLITS = ("single", "components", "layer", "row")
 SAMPLERS = ("euler", "euler_a", "heun", "dpm2", "dpmpp2s_a", "dpmpp2m", "dpmpp2mv2", "lcm", "ipndm", "ipndm_v")
 SCHEDULERS = ("flux2", "discrete", "karras", "exponential", "ays", "simple", "smoothstep", "sgm_uniform", "flux")
@@ -20,6 +20,11 @@ def path(value, label):
     return value
 
 
+def text_only(settings):
+    """Families whose integrated profiles accept prompts without reference images."""
+    return settings.get('sdcpp', {}).get('family') in ('qwen-image', 'qwen-image-2.1', 'moss-image')
+
+
 def defaults(settings):
     """Resolve bounded workflow defaults without inheriting language-model defaults."""
     options=settings.get("sdcpp",{})
@@ -27,16 +32,17 @@ def defaults(settings):
     sdxl=options.get("family")=="sdxl"
     qwen=options.get("family","").startswith('qwen-image')
     qwen21=options.get("family")=="qwen-image-2.1"
-    return {"width":1024,"height":1024,"steps":50 if qwen else 28 if dev or sdxl else 6,
-            "guidance":4.0 if dev else 1.0,"cfg_scale":6.0 if qwen21 else 4.0 if qwen else 7.0 if sdxl else 1.0,
-            "sampler":"euler","scheduler":"flux" if qwen21 else "discrete" if sdxl or qwen else "flux2",
+    moss=options.get("family")=="moss-image"
+    return {"width":1024,"height":1024,"steps":50 if qwen or moss else 28 if dev or sdxl else 6,
+            "guidance":4.0 if dev else 1.0,"cfg_scale":6.0 if qwen21 else 4.0 if qwen else 3.0 if moss else 7.0 if sdxl else 1.0,
+            "sampler":"euler","scheduler":"flux" if qwen21 else "discrete" if sdxl or qwen or moss else "flux2",
             "seed":-1,"n":1,"upscale":1,**options.get("defaults",{})}
 
 
 def limits(settings):
     """Resolve per-profile limits that a request or saved preset cannot expand."""
     return {"max_width":2048,"max_height":2048,"max_pixels":2097152,
-            "max_steps":100,"max_images":8,"max_references":0 if settings.get('sdcpp',{}).get('family','').startswith('qwen-image') else 1 if settings.get('sdcpp',{}).get('family')=='sdxl' else 2,
+            "max_steps":100,"max_images":8,"max_references":0 if text_only(settings) else 1 if settings.get('sdcpp',{}).get('family')=='sdxl' else 2,
             "max_upscale":4 if settings.get('sdcpp',{}).get('upscaler') else 1,
             **settings.get("sdcpp",{}).get("limits",{})}
 
@@ -67,9 +73,11 @@ def check_model(name,settings,cards):
     if options.get("family") not in FAMILIES or options.get("split_mode","single") not in SPLITS:
         raise ValueError("Choose a supported image family and split mode.")
     components=options.get("components",{})
-    required={"vae","text_encoder"} if options["family"].startswith(("flux2","qwen-image")) else set()
-    if not isinstance(components,dict) or not required<=components.keys() or components.keys()-{"vae","text_encoder","clip_l","clip_g"}:
-        raise ValueError("Flux 2 and Qwen Image require explicit VAE and text-encoder components.")
+    required={"vae","text_encoder"} if options["family"]!="sdxl" else set()
+    if options['family']=='moss-image':
+        required.add('tokenizer')
+    if not isinstance(components,dict) or not required<=components.keys() or components.keys()-{"vae","text_encoder","clip_l","clip_g","tokenizer"}:
+        raise ValueError("Flux 2, Qwen Image and MOSS-Image require explicit VAE and text-encoder components; MOSS-Image also requires its tokenizer JSON.")
     for key,value in components.items():
         path(value,key)
     for key in ("upscaler","preparation_python"):
@@ -114,6 +122,8 @@ def check_model(name,settings,cards):
         raise ValueError("SDXL starts from one image (image-to-image); set max_references to 0 or 1.")
     if options['family'].startswith('qwen-image') and maximum['max_references']!=0:
         raise ValueError('Qwen Image profiles currently support text-to-image generation; set max_references to 0. Qwen Image Edit and vision conditioning require a separate profile integration.')
+    if options['family']=='moss-image' and maximum['max_references']!=0:
+        raise ValueError('MOSS-Image Base / SFT profiles support text-to-image generation; set max_references to 0.')
     configured=options.get("defaults",{})
     if configured.keys()-defaults({}).keys():
         raise ValueError("Unknown image default field.")

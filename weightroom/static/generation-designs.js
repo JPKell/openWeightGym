@@ -7,7 +7,7 @@
   const numeric = new Set(['width','height','steps','n','seed','guidance','cfg_scale','upscale','strength','reference_megapixels','lora-strength']);
   const descriptions = {
     'flux2-dev':'Precise composition · ordered references', 'flux2-klein':'Fast exploration · distilled model',
-    sdxl:'Flexible styles · image-to-image', 'qwen-image':'Typography & multilingual text', 'qwen-image-2.1':'Detailed typography · 32px alignment',
+    sdxl:'Flexible styles · image-to-image', 'qwen-image':'Typography & multilingual text', 'qwen-image-2.1':'Detailed typography · 32px alignment', 'moss-image':'Text rendering & layout · Base / SFT',
   };
   const notes = {
     canvas:'Canvas studio · an image-first workspace with tools on the left and a focused inspector on the right.',
@@ -45,15 +45,15 @@
     const spec = profiles.spec(family);
     $('model-description').textContent = descriptions[family]; $('family-caption').textContent = spec.label.toUpperCase();
     $('negative-wrap').hidden = !spec.negative; $('cfg-wrap').hidden = !spec.negative;
-    $('guidance-wrap').hidden = !spec.guidance; $('text-wrap').hidden = !spec.qwen;
+    $('guidance-wrap').hidden = !spec.guidance; $('text-wrap').hidden = !spec.textOnly;
     $('guidance').disabled = !spec.guidance; $('cfg_scale').disabled = !spec.negative;
     $('negative_prompt').disabled = !spec.negative;
-    $('reference-section').hidden = spec.qwen;
-    $('reference-upload').disabled = spec.qwen;
-    all('[data-tool=reference], [data-tool=mask]').forEach(button => { button.disabled = spec.qwen; button.title = spec.qwen ? 'This Qwen profile supports text-to-image only.' : ''; });
-    $('reference-tool-note').textContent = spec.strength ? 'One source image' : spec.qwen ? 'Needs an edit profile' : 'Ordered visual references';
-    $('steps-help').textContent = family === 'flux2-klein' ? '6-step app default. Distilled guidance is fixed; extra steps may not improve quality.' : spec.qwen ? '50-step app default. CFG and a negative prompt control adherence.' : family === 'sdxl' ? '28-step app default. Balance detail with render time.' : '28 steps for exploration; the upstream example also uses 50 for detail.';
-    $('prompt-help').textContent = spec.qwen ? 'Put exact lettering in quotes. Describe its placement and typography. This profile generates from text only.' : family === 'sdxl' ? 'Describe the subject and style; use the negative prompt for exclusions.' : 'Describe the subject, action, style and setting. Flux uses positive descriptions; negative prompts are unavailable.';
+    $('reference-section').hidden = spec.textOnly;
+    $('reference-upload').disabled = spec.textOnly;
+    all('[data-tool=reference], [data-tool=mask]').forEach(button => { button.disabled = spec.textOnly; button.title = spec.textOnly ? 'This profile supports text-to-image only.' : ''; });
+    $('reference-tool-note').textContent = spec.strength ? 'One source image' : spec.textOnly ? 'Needs an edit profile' : 'Ordered visual references';
+    $('steps-help').textContent = family === 'flux2-klein' ? '6-step app default. Distilled guidance is fixed; extra steps may not improve quality.' : spec.textOnly ? '50-step app default. CFG and a negative prompt control adherence.' : family === 'sdxl' ? '28-step app default. Balance detail with render time.' : '28 steps for exploration; the upstream example also uses 50 for detail.';
+    $('prompt-help').textContent = spec.textOnly ? 'Put exact lettering in quotes. Describe its placement and typography. This profile generates from text only.' : family === 'sdxl' ? 'Describe the subject and style; use the negative prompt for exclusions.' : 'Describe the subject, action, style and setting. Flux uses positive descriptions; negative prompts are unavailable.';
     $('width').step = $('height').step = spec.alignment;
     $('reference-help').textContent = spec.strength ? 'One start image. Image strength controls how much it changes.' : 'Up to two ordered references in this sample workflow. Mention image 1 or image 2 in the prompt. Inputs are prepared automatically.';
     document.querySelector('[data-sweep-guidance]').disabled = !spec.guidance;
@@ -125,7 +125,7 @@
   }
   async function addFiles(files) {
     const max=profiles.spec(family).strength?1:2;
-    if(profiles.spec(family).qwen) {say('This Qwen profile supports text-to-image only.',true);return;}
+    if(profiles.spec(family).textOnly) {say('This profile supports text-to-image only.',true);return;}
     if(references.length+files.length>max) {say(`This workflow accepts at most ${max} reference image${max===1?'':'s'}.`,true);return;}
     const uploadingFamily=family;
     try {
@@ -169,7 +169,7 @@
     if(!spec.negative) {delete raw.cfg_scale;delete raw.negative_prompt;}
     if(!spec.guidance) delete raw.guidance;
     if(!spec.strength||!references.length) delete raw.strength;
-    if(spec.qwen) delete raw.reference_megapixels;
+    if(spec.textOnly) delete raw.reference_megapixels;
     delete raw['image-text'];
     if(!raw.lora) {delete raw.lora;delete raw['lora-strength'];}
     return {...raw,family,node:$('node').value,reference_count:references.length,mask_mode:mask?'composite':null,temporary:$('temporary').checked,live_preview:$('live-preview').checked};

@@ -128,7 +128,7 @@ def checked_request(asked,settings=None):
     negative=result.get("negative_prompt","")
     if not isinstance(negative,str) or len(negative)>24000:
         raise ValueError("Invalid negative prompt.")
-    if negative and settings and settings["sdcpp"]["family"] not in ('sdxl','qwen-image','qwen-image-2.1'):
+    if negative and settings and settings["sdcpp"]["family"]!='sdxl' and not model.text_only(settings):
         raise ValueError("Negative prompts are not supported by this Flux workflow.")
     if 'strength' in asked and settings and settings['sdcpp']['family']!='sdxl':
         raise ValueError('Strength applies to SDXL image-to-image; Flux uses reference conditioning.')

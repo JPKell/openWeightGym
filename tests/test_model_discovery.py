@@ -16,6 +16,18 @@ from loadcoach import hub
 from mirrorwall import civitai
 
 
+def test_provider_lists_image_tokenizer_data_without_exposing_arbitrary_json_or_code():
+    names = ['MOSS-Image-Base-Q4_K.gguf', 'tokenizer/tokenizer.json', 'tokenizer_qwen3.5.json', 'config.json', 'model.py']
+    async def check():
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, json=[
+            {'type': 'file', 'path': name, 'size': 100} for name in names]))
+        async with httpx.AsyncClient(transport=transport) as client:
+            files = await hub.files(client, 'OpenMOSS-Team/MOSS-Image-Base')
+            assert [row['path'] for row in files] == names[:3]
+            assert [row['file'] for row in hub.rows(files)] == names[:3]
+    asyncio.run(check())
+
+
 def test_provider_cursor_pages_keep_requests_on_the_provider():
     seen = []
     def answer(request):

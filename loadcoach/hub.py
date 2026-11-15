@@ -214,7 +214,8 @@ async def decision_header(http, repository, filename, token=''):
 
 
 async def files(http: httpx.AsyncClient, repository: str, token: str = "", *, classifier=False) -> list[dict]:
-    """Every .gguf file of a repository: its path there, its size, and its SHA-256 where Hugging Face gives one."""
+    """Supported model weights and tokenizer data, with size and available SHA-256."""
+    from mirrorwall.assets import tokenizer_asset
     if repository.startswith('civitai/'):
         from mirrorwall.civitai import files as image_files
         return await image_files(http,repository,token)
@@ -223,7 +224,7 @@ async def files(http: httpx.AsyncClient, repository: str, token: str = "", *, cl
     return [
         {"path": one["path"], "size": one["size"], "sha256": one.get("lfs", {}).get("oid")}
         for one in listed
-        if one.get("type") == "file" and (one["path"].lower().endswith((".gguf", ".safetensors", ".pth"))
+        if one.get("type") == "file" and (one["path"].lower().endswith((".gguf", ".safetensors", ".pth")) or tokenizer_asset(one['path'])
             or Path(one['path']).name.startswith('ggml-') and one['path'].lower().endswith('.bin')
             or classifier and (one['path'].lower().endswith(('.json', '.model', '.txt', '.jinja')) or Path(one['path']).name in ('Modelfile', 'head.pt')))
         and not one['path'].lower().endswith('.py')

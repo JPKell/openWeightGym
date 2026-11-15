@@ -24,6 +24,8 @@ Create or edit images using a permitted image model and workflow.
 | **Set up a parameter sweep** | Open **Explore variations** and choose **Vary** and **Values · comma separated**. Advanced users can supply **Multiple axes · JSON**. |
 | **Temporary · no retained history** | Available only with the installation's no-log permission; temporary references need a temporary job. |
 
+**MOSS-Image Base / SFT** offers CFG, negative prompts and text layout controls. For its required components and starting settings, see [MOSS-Image setup](/docs/model-guides/image-models#moss-image).
+
 ## Resize and add detail {#resize}
 
 Choose **Resize & add detail**, select an uploaded or saved source and choose the final size. This needs an exclusive SDXL source-image workflow. Enlargement requires the configured AI upscaler; its failure stops the job. The original source remains available. Review changed fine details before using the new image.

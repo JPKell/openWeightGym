@@ -99,7 +99,7 @@ def native_command(job,port):
         command += ["--split-mode",mode]
     if options.get("staged",True):
         command += ["--params-backend","diffusion=disk,te=disk,vae=disk"]
-    for key,flag in (("text_encoder","--llm"),("vae","--vae"),("clip_l","--clip_l"),("clip_g","--clip_g")):
+    for key,flag in (("text_encoder","--llm"),("vae","--vae"),("clip_l","--clip_l"),("clip_g","--clip_g"),("tokenizer","--tokenizer")):
         if components.get(key):
             command += [flag,components[key]]
     return command
@@ -129,10 +129,10 @@ class Native:
             if self.job.get("qualification_log"):
                 with Path(self.job["qualification_log"]).open("a") as record:
                     record.write(text)
-            if re.search(r"(?:flux|qwen|diffusion|dit|unet).*graph-cut layer split:.*segments",text,re.I):
+            if re.search(r"(?:flux|qwen|moss|diffusion|dit|unet).*graph-cut layer split:.*segments",text,re.I):
                 if match:=re.search(r"CUDA\s*([0-9]+)",text,re.I):
                     self.split_devices.add(int(match[1]))
-            if re.search(r"(?:flux|qwen|diffusion|dit|unet).*row split: [1-9][0-9]* tensors .*split across 2 devices",text,re.I):
+            if re.search(r"(?:flux|qwen|moss|diffusion|dit|unet).*row split: [1-9][0-9]* tensors .*split across 2 devices",text,re.I):
                 self.row_split=True
             clean=re.sub(r'\x1b\[[0-9;]*m','',text).strip()
             clean=re.sub(r' --- [^\r\n]+:\d+$','',clean)

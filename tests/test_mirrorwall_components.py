@@ -91,6 +91,54 @@ def test_qwen3_vl_gguf_metadata_disambiguates_identical_text_embedding_shapes(li
     assert identify(text)['variant']=='qwen2.5-7b'
 
 
+@pytest.fixture
+def moss_parts(library):
+    folder = library['folder']
+    encoder = gguf(folder / 'qwen35.gguf', {'token_embd.weight': (248320, 4096)}, {'general.architecture': 'qwen35'})
+    tokenizer = folder / 'tokenizer.json'
+    tokenizer.write_text(json.dumps({'model': {'type': 'BPE', 'vocab': {str(i): i for i in range(248044)}},
+        'added_tokens': [{'content': name, 'id': number} for name, number in
+                         (('<|endoftext|>', 248044), ('<|im_start|>', 248045), ('<|im_end|>', 248046))]}))
+    return {'text_encoder': encoder, 'vae': library['vae'], 'tokenizer': str(tokenizer)}
+
+
+@pytest.mark.parametrize('format', ['gguf', 'safetensors'])
+def test_moss_requires_its_qwen35_encoder_external_tokenizer_and_flux2_vae(library, moss_parts, format):
+    from mirrorwall.assets import supported, image_asset
+    from loadcoach.file_index import FileIndex
+    folder = library['folder']
+    weights = (gguf if format == 'gguf' else safetensors)(folder / ('moss.' + format), {
+        'model.diffusion_model.video_embedder.weight': (3072, 128),
+        'model.diffusion_model.text_embedder.proj.weight': (3072, 4096),
+        'model.diffusion_model.layers.0.proj.qkv.weight': (9216, 3072)})
+    assert identify(weights)['family'] == 'moss-image'
+    assert identify(moss_parts['text_encoder'])['variant'] == 'qwen3.5-9b'
+    assert identify(moss_parts['tokenizer'])['variant'] == 'qwen3.5-tokenizer'
+    assert supported(moss_parts['tokenizer']) and image_asset(moss_parts['tokenizer'])
+    index = FileIndex(None)
+    index.scan({'image': str(folder)})
+    assert index.kept['files'][moss_parts['tokenizer']]['facts']['image_identity']['kind'] == 'tokenizer'
+    found = check(draft(weights, 'moss-image', **moss_parts), folder)
+    assert found['ready'] and found['detected_family'] == 'moss-image'
+    missing = check(draft(weights, 'moss-image', text_encoder=moss_parts['text_encoder'], vae=library['vae']), folder)
+    slot = next(row for row in missing['slots'] if row['slot'] == 'tokenizer')
+    assert not missing['ready'] and slot['status'] == 'missing'
+    assert slot['get'] == {'repository': 'OpenMOSS-Team/MOSS-Image-Base', 'file': 'tokenizer/tokenizer.json'}
+    assert slot['candidates'] == [moss_parts['tokenizer']]
+    wrong = check(draft(weights, 'moss-image', **{**moss_parts, 'text_encoder': library['qwen8']}), folder)
+    assert not wrong['ready'] and next(row for row in wrong['slots'] if row['slot'] == 'text_encoder')['status'] == 'wrong'
+    Path(moss_parts['tokenizer']).write_text('{"model":{"type":"BPE","vocab":{}},"added_tokens":[]}')
+    wrong = check(draft(weights, 'moss-image', **moss_parts), folder)
+    assert not wrong['ready'] and next(row for row in wrong['slots'] if row['slot'] == 'tokenizer')['status'] == 'wrong'
+
+
+@pytest.mark.parametrize('content', ['[]', '{"model":[]}', '{"model":{},"added_tokens":[null]}', '{broken'])
+def test_malformed_tokenizer_json_is_reported_without_breaking_the_library(tmp_path, content):
+    tokenizer = tmp_path / 'tokenizer.json'
+    tokenizer.write_text(content)
+    assert identify(tokenizer)['kind'] == 'unreadable'
+
+
 def test_the_check_names_the_wrong_part_and_offers_the_right_one_already_there(library):
     found = check(draft(library["klein9"], "flux2-klein", text_encoder=library["qwen4"], vae=library["vae"]), library["folder"])
     slots = {one["slot"]: one for one in found["slots"]}

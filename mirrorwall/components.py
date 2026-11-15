@@ -11,6 +11,7 @@ from itertools import islice
 from pathlib import Path
 
 from engines.llama_cpp.gguf import read_metadata
+from mirrorwall.assets import tokenizer_asset
 
 PREFIXES = ("model.diffusion_model.", "diffusion_model.", "transformer.", "unet.")
 FLUX2 = {3072: "klein-4b", 4096: "klein-9b", 6144: "dev"}  # transformer width -> variant
@@ -22,6 +23,9 @@ LABELS = {"klein-4b": "Flux 2 klein 4B", "klein-9b": "Flux 2 klein 9B", "dev": "
 LABELS.update({'qwen-image':'Qwen Image (original / 2512)', 'qwen-image-2.1':'Qwen Image 2.1',
                'qwen2.5-vl-7b':'Qwen2.5-VL 7B text encoder','qwen3-vl-8b':'Qwen3-VL 8B text encoder',
                'qwen-image-vae':'Qwen Image VAE (16 latent channels)', 'qwen-image-2.1-vae':'Qwen Image 2.1 VAE (64 latent channels)'})
+LABELS.update({'moss-image': 'MOSS-Image (Base / SFT)', 'moss-image-base': 'MOSS-Image Base',
+               'moss-image-sft': 'MOSS-Image SFT', 'qwen3.5-9b': 'Qwen3.5 9B text encoder',
+               'qwen3.5-tokenizer': 'Qwen3.5 tokenizer (JSON)'})
 # Where to get each missing part: a repository and file the Hugging Face page can bring down.
 GET = {"klein-4b": ("leejet/FLUX.2-klein-4B-GGUF", "flux-2-klein-4b-Q8_0.gguf"),
        "klein-9b": ("leejet/FLUX.2-klein-9B-GGUF", "flux-2-klein-9b-Q4_0.gguf"),
@@ -39,10 +43,14 @@ GET.update({'qwen-image':('QuantStack/Qwen-Image-GGUF','Qwen_Image-Q4_K_M.gguf')
             'qwen3-vl-8b':('Qwen/Qwen3-VL-8B-Instruct-GGUF','Qwen3VL-8B-Instruct-Q4_K_M.gguf'),
             'qwen-image-vae':('Comfy-Org/Qwen-Image_ComfyUI','split_files/vae/qwen_image_vae.safetensors'),
             'qwen-image-2.1-vae':('Comfy-Org/Qwen-Image-2.1','vae/qwen_image_2.1_vae_bf16.safetensors')})
+GET.update({'moss-image-base': ('leejet/MOSS-Image-Base-GGUF', 'MOSS-Image-Base-Q4_K.gguf'),
+            'moss-image-sft': ('leejet/MOSS-Image-SFT-GGUF', 'MOSS-Image-SFT-Q4_K.gguf'),
+            'qwen3.5-9b': ('unsloth/Qwen3.5-9B-GGUF', 'Qwen3.5-9B-Q4_K_M.gguf'),
+            'qwen3.5-tokenizer': ('OpenMOSS-Team/MOSS-Image-Base', 'tokenizer/tokenizer.json')})
 SLOTS = (("diffusion", "Diffusion weights"), ("text_encoder", "Text encoder"), ("vae", "VAE"),
-         ("clip_l", "CLIP L"), ("clip_g", "CLIP G"), ("upscaler", "Image upscaler"))
-FORMATS = (".gguf", ".safetensors", ".pth")
-IDENTITY_VERSION = 2  # SDXL GGUF checkpoints with converted CLIP names
+         ("clip_l", "CLIP L"), ("clip_g", "CLIP G"), ("upscaler", "Image upscaler"), ("tokenizer", "Tokenizer JSON"))
+FORMATS = (".gguf", ".safetensors", ".pth", ".json")
+IDENTITY_VERSION = 3  # MOSS diffusion, Qwen3.5 encoders and external tokenizer JSON
 
 
 def shapes_of(path):
@@ -72,6 +80,10 @@ def classify(shapes):
         width = next((shape[0] for name, shape in shapes.items() if "img_attn.proj" in name and ("lora_B" in name or "lora_up" in name)), None)
         return "lora", "flux2" if any("double_blocks" in name for name in names) else None, FLUX2.get(width)
     flat = {plain(name): shape for name, shape in shapes.items()}
+    if (flat.get('video_embedder.weight') == (3072, 128)
+            and flat.get('text_embedder.proj.weight') == (3072, 4096)
+            and any(name.startswith('layers.') for name in flat)):
+        return 'diffusion', 'moss-image', 'moss-image'
     if 'txt_in.text_norm.weight' in flat:
         return 'diffusion','qwen-image-2.1','qwen-image-2.1'
     if 'transformer_blocks.0.img_mod.1.weight' in flat and flat.get('img_in.weight',(0,0))[1] == 64:
@@ -103,6 +115,8 @@ def classify(shapes):
     embed = shapes.get('model.language_model.embed_tokens.weight') or shapes.get('language_model.model.embed_tokens.weight') or shapes.get("model.embed_tokens.weight") or shapes.get("token_embd.weight")
     if embed and len(embed) == 2:
         vocabulary, width = embed
+        if vocabulary == 248320 and width == 4096:
+            return 'text_encoder', None, 'qwen3.5-9b'
         if vocabulary==152064 and width==3584:
             vision=any(name.startswith(('model.visual.','visual.','model.language_model.','language_model.')) for name in names)
             return 'text_encoder',None,'qwen2.5-vl-7b' if vision else 'qwen2.5-7b'
@@ -126,6 +140,8 @@ def _identified(path, modified, size):
     if file.suffix.lower() == ".pth":
         return {"kind": "upscaler", "family": None, "variant": None, "label": "Image upscaler (.pth, ESRGAN family)"}
     try:
+        if file.suffix.lower() == '.json':
+            return identify_tokenizer(file)
         kind, family, variant = classify(shapes_of(file))
         if file.suffix.lower()=='.gguf' and kind=='text_encoder' and variant in ('qwen2.5-7b','qwen3-8b'):
             architecture=read_metadata(str(file)).get('general.architecture')
@@ -134,12 +150,32 @@ def _identified(path, modified, size):
             elif variant=='qwen3-8b' and architecture=='qwen3vl':
                 variant='qwen3-vl-8b'
     except (OSError, ValueError, KeyError, IndexError, TypeError, struct.error):
-        return {"kind": "unreadable", "family": None, "variant": None, "label": "Not a readable GGUF or safetensors file"}
+        return {"kind": "unreadable", "family": None, "variant": None, "label": "Not a readable GGUF, safetensors or tokenizer JSON file"}
     label = LABELS.get(variant) or {"lora": "LoRA adapter", "upscaler": "Image upscaler", "flux1": "Flux 1 (not supported here)",
                                     "sd1": "Stable Diffusion 1.x/2.x (not supported here)"}.get(family or kind, kind.replace("_", " "))
     if kind == "lora":
         label = "LoRA for " + LABELS[variant] if variant else "LoRA adapter"
     return {"kind": kind, "family": family, "variant": variant, "label": label}
+
+
+def identify_tokenizer(file):
+    """Read bounded tokenizer data and distinguish Qwen3.5's vocabulary from earlier Qwen versions."""
+    with file.open('rb') as stream:
+        raw = stream.read(32 * 2**20 + 1)
+    if len(raw) > 32 * 2**20:
+        raise ValueError('Tokenizer JSON exceeds 32 MiB.')
+    data = json.loads(raw)
+    if not isinstance(data, dict) or not isinstance(data.get('model'), dict) or not isinstance(data.get('added_tokens', []), list):
+        raise ValueError('Invalid tokenizer JSON.')
+    vocabulary = data.get('model', {})
+    if not isinstance(vocabulary.get('vocab', {}), dict) or any(not isinstance(token, dict) for token in data.get('added_tokens', [])):
+        raise ValueError('Invalid tokenizer vocabulary.')
+    special = {token['content']: token['id'] for token in data.get('added_tokens', [])}
+    matching = (vocabulary.get('type') == 'BPE' and len(vocabulary.get('vocab', {})) == 248044
+                and all(special.get(name) == number for name, number in
+                        (('<|endoftext|>', 248044), ('<|im_start|>', 248045), ('<|im_end|>', 248046))))
+    return {'kind': 'tokenizer', 'family': None, 'variant': 'qwen3.5-tokenizer' if matching else None,
+            'label': LABELS['qwen3.5-tokenizer'] if matching else 'Tokenizer JSON with an incompatible vocabulary'}
 
 
 def identify(path, roots=None):
@@ -151,8 +187,8 @@ def identify(path, roots=None):
         stat = file.stat()
     except OSError:
         return {"kind": "missing", "family": None, "variant": None, "label": "No such file on this compute node"}
-    if not file.is_file() or file.suffix.lower() not in FORMATS:
-        return {"kind": "unreadable", "family": None, "variant": None, "label": "Not a .gguf, .safetensors or .pth file"}
+    if not file.is_file() or file.suffix.lower() not in FORMATS or file.suffix.lower() == '.json' and not tokenizer_asset(file):
+        return {"kind": "unreadable", "family": None, "variant": None, "label": "Not a supported model or tokenizer data file"}
     return {**_identified(str(file), stat.st_mtime_ns, stat.st_size), "bytes": stat.st_size}
 
 
@@ -162,13 +198,19 @@ def scan(folder, roots=None):
     if not folder or not root.is_dir():
         return []
     roots = [folder] if roots is None else roots
-    files = islice((file for file in root.rglob("*") if file.suffix.lower() in FORMATS and file.is_file()), 2000)
+    files = islice((file for file in root.rglob("*") if (file.suffix.lower() in FORMATS and
+                   (file.suffix.lower() != '.json' or tokenizer_asset(file))) and file.is_file()), 2000)
     return sorted([{"path": str(file), **identify(file, roots)} for file in files], key=lambda row: row["path"])
 
 
 def needs(family, variant):
     """What each slot must hold: (required, expected kind, expected variant, why) by slot."""
     upscaler = (False, "upscaler", None, "Enlarges reference images smaller than the reference size, and outputs when asked to upscale.")
+    if family == 'moss-image':
+        return {'text_encoder': (True, 'text_encoder', 'qwen3.5-9b', 'MOSS-Image Base and SFT use Qwen3.5 9B, not Qwen3 or Qwen-VL encoders.'),
+                'vae': (True, 'vae', 'flux2-vae', 'MOSS-Image uses the Flux 2 VAE (32 latent channels).'),
+                'tokenizer': (True, 'tokenizer', 'qwen3.5-tokenizer', 'Supply the external tokenizer/tokenizer.json from MOSS-Image; the embedded Qwen vocabulary is incompatible.'),
+                'clip_l': None, 'clip_g': None, 'upscaler': upscaler}
     if family in ('qwen-image','qwen-image-2.1'):
         encoder='qwen3-vl-8b' if family=='qwen-image-2.1' else 'qwen2.5-vl-7b'
         vae='qwen-image-2.1-vae' if family=='qwen-image-2.1' else 'qwen-image-vae'
@@ -222,9 +264,9 @@ def check(settings, folder, roots=None, *, inventory=None):
         expected_kind, expected = (rule[1], rule[2]) if rule else (None, None)
         get = GET.get(expected or ("upscaler" if slot == "upscaler" else ""))
         if slot == "diffusion" and family in ("flux1", "sd1",'qwen-image-layered'):
-            entry["status"], entry["message"] = "wrong", found["label"] + ": Mirror Wall runs Flux 2 klein, Flux 2 Dev and SDXL, plus Qwen Image text-to-image profiles."
+            entry["status"], entry["message"] = "wrong", found["label"] + ": Mirror Wall runs Flux 2 klein, Flux 2 Dev and SDXL, plus Qwen Image and MOSS-Image text-to-image profiles."
         elif slot == "diffusion" and found and found["kind"] == "diffusion" and not variant:
-            entry["status"], entry["message"] = "wrong", "Diffusion weights of an unrecognized size; Mirror Wall knows Flux 2 klein 4B and 9B, Flux 2 Dev, SDXL, Qwen Image and Qwen Image 2.1."
+            entry["status"], entry["message"] = "wrong", "Diffusion weights of an unrecognized size; Mirror Wall knows Flux 2 klein 4B and 9B, Flux 2 Dev, SDXL, Qwen Image, Qwen Image 2.1 and MOSS-Image."
         elif found and found["kind"] in ("missing", "unreadable"):
             entry["status"], entry["message"] = "wrong", found["label"] + (": copy the file to this node from Files, or correct the path." if found["kind"] == "missing" else ".")
         elif found and rule is None:
@@ -252,9 +294,9 @@ def check(settings, folder, roots=None, *, inventory=None):
         loras.append({"name": name, "found": found, "status": "ok" if fits else "wrong",
                       "message": found["label"] if fits else (found or {}).get("label", "Not a LoRA") + (f"; this model is {LABELS.get(variant, variant)}." if found and found["kind"] == "lora" else ".")})
         ready &= fits
-    detected = family if family in ("flux2-klein", "flux2-dev", "sdxl",'qwen-image','qwen-image-2.1') else None
+    detected = family if family in ("flux2-klein", "flux2-dev", "sdxl",'qwen-image','qwen-image-2.1','moss-image') else None
     if detected and options.get("family") and options["family"] != detected:
         ready = False
     return {"detected_family": detected, "variant": variant, "variant_label": LABELS.get(variant, ""), "family_matches": not detected or options.get("family") == detected,
             "slots": slots, "loras": loras, "ready": bool(ready and diffusion and detected), "folder": str(folder or ""),
-            "get_diffusion": [{"label": LABELS[key], "repository": GET[key][0], "file": GET[key][1]} for key in ("klein-4b", "klein-9b", "dev", "checkpoint",'qwen-image','qwen-image-2.1')]}
+            "get_diffusion": [{"label": LABELS[key], "repository": GET[key][0], "file": GET[key][1]} for key in ("klein-4b", "klein-9b", "dev", "checkpoint",'qwen-image','qwen-image-2.1','moss-image-base','moss-image-sft')]}

@@ -83,11 +83,11 @@
     const spec = SuiteImageProfiles.spec(profile.family);
     $('guidance-wrap').hidden = !spec.guidance;
     $('cfg-wrap').hidden = !spec.negative;
-    $('text-wrap').hidden = !spec.qwen;
+    $('text-wrap').hidden = !spec.textOnly;
     $('family-caption').textContent = spec.label;
     $('model-description').textContent = spec.label + (profile.exclusive ? ' · exclusive workflow' : ' · shared residency');
     $('steps-help').textContent = profile.family === 'flux2-klein' ? 'Distilled guidance is fixed. Use the selected workflow’s step count.' : 'Start with the workflow default; more steps increase render time.';
-    $('prompt-help').textContent = spec.qwen ? 'Put exact text in quotes and describe its placement. This profile generates from text only.' : spec.negative ? 'Describe the subject and style. Use the negative prompt for exclusions.' : 'Describe the subject, action, style and setting. Flux does not use negative prompts.';
+    $('prompt-help').textContent = spec.textOnly ? 'Put exact text in quotes and describe its placement. This profile generates from text only.' : spec.negative ? 'Describe the subject and style. Use the negative prompt for exclusions.' : 'Describe the subject, action, style and setting. Flux does not use negative prompts.';
     $('negative').disabled = !spec.negative;
     for (const id of ['cfg','sampler','scheduler']) $(id).disabled = !profile.exclusive;
     $('guidance').disabled = !spec.guidance;

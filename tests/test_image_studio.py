@@ -18,7 +18,7 @@ def studio(desk,tmp_path):
     server,wire,users=desk
     library=Models(str(tmp_path/'loadcoach.db'))
     file=gguf(tmp_path/'image.gguf',general__architecture='fixture')
-    for name,family in [('sketch','sdxl'),('qwen','qwen-image'),('qwen21','qwen-image-2.1')]:
+    for name,family in [('sketch','sdxl'),('qwen','qwen-image'),('qwen21','qwen-image-2.1'),('moss','moss-image')]:
         library.put(name,{'engine':'sdcpp','flags':{'model':file,'ctx-size':0},'gpus':0,'alone':True,
             'sdcpp':{'family':family,'components':{},'defaults':{'width':512,'height':512},
                      'limits':{'max_references':1 if family=='sdxl' else 0}}})
@@ -26,7 +26,7 @@ def studio(desk,tmp_path):
         return [{'id':name,'model_id':library.identity(name),'image_workflow':{
             'family':library.get(name)['sdcpp']['family'],'exclusive':True,'defaults':model.defaults(library.get(name)),
             'limits':model.limits(library.get(name)),'reference_megapixels':1,'loras':{}}}
-            for name in ('sketch','qwen','qwen21')]
+            for name in ('sketch','qwen','qwen21','moss')]
     wire.front.state.mirrorwall.catalogue=catalogue
     sign_in(server,'jordan')
     return server,wire,users,library
@@ -237,6 +237,18 @@ def test_live_studio_versions_drafts_helpers_and_same_page_model_setup(studio,tm
         page.locator('#studio-model-list [data-model=qwen21]').click()
         playwright.expect(page.locator('#studio-workflow-helper')).to_contain_text('Qwen3-VL')
         playwright.expect(page.locator('#workflow-width')).to_have_attribute('step','32')
+        page.locator('#studio-model-list [data-model=moss]').click()
+        playwright.expect(page.locator('#studio-workflow-helper')).to_contain_text('Qwen3.5 9B')
+        playwright.expect(page.locator('#studio-workflow-helper')).to_contain_text('tokenizer JSON')
+        playwright.expect(page.locator('#workflow-width')).to_have_attribute('step','16')
+        playwright.expect(page.locator('#workflow-steps')).to_have_value('50')
+        playwright.expect(page.locator('#workflow-cfg_scale')).to_have_value('3')
+        playwright.expect(page.locator('#workflow-negative_prompt')).to_be_visible()
+        playwright.expect(page.locator('#workflow-strength')).not_to_be_visible()
+        page.locator('#studio-edit-model').click()
+        playwright.expect(page.locator('#mw-family')).to_have_value('moss-image')
+        assert page.locator('#mw-tokenizer').count() == 1
+        page.keyboard.press('Escape')
         page.locator('#studio-model-list [data-model=sketch]').click()
         page.locator('#studio-edit-model').click()
         playwright.expect(page.locator('#mw-ram')).to_have_value('16384')

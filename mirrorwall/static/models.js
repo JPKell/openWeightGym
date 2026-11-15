@@ -3,7 +3,7 @@
   const $ = id => document.getElementById('mw-' + id);
   const params = new URLSearchParams(location.search);
   let node = params.get('node') || '', defaultNode = '';
-  const SLOTS = ['diffusion', 'text_encoder', 'vae', 'clip_l', 'clip_g', 'upscaler'];
+  const SLOTS = ['diffusion', 'text_encoder', 'vae', 'clip_l', 'clip_g', 'upscaler', 'tokenizer'];
   const FAMILIES = SuiteImageProfiles.labels;
   const modelDrafts = new Map();
   const dialog = document.getElementById('model-dialog');
@@ -34,7 +34,7 @@
     const profile = {...selected?.sdcpp, family:$('family').value, split_mode:$('split').value, components:{},
       host_ram_mib:Number($('ram').value), reference_megapixels:Number($('ref-mp').value), threads:Number($('threads').value), staged:$('staged').checked,
       defaults:parsed('defaults', {}), limits:parsed('limits', {}), loras:parsed('loras', {})};
-    ['text_encoder','vae','clip_l','clip_g'].forEach(name => { if ($(name).value.trim()) profile.components[name] = $(name).value.trim(); });
+    ['text_encoder','vae','clip_l','clip_g','tokenizer'].forEach(name => { if ($(name).value.trim()) profile.components[name] = $(name).value.trim(); });
     if ($('upscaler').value.trim()) profile.upscaler = $('upscaler').value.trim(); else delete profile.upscaler;
     if ($('vram').value.trim()) profile.vram_limit_gib = $('vram').value.split(',').map(Number); else delete profile.vram_limit_gib;
     if ($('layer-weights').value.trim()) profile.layer_weights = $('layer-weights').value.split(',').map(Number); else delete profile.layer_weights;
@@ -49,7 +49,7 @@
     $('family').value = family;
     if (!selected) SuiteModelFields.load('mw-defaults', familyDefaults());
     if (!selected && family === 'sdxl') SuiteModelFields.load('mw-limits', {...SuiteModelFields.read('mw-limits'), max_references: 1});
-    if (!selected && family.startsWith('qwen-image')) SuiteModelFields.load('mw-limits', {...SuiteModelFields.read('mw-limits'), max_references:0});
+    if (!selected && SuiteImageProfiles.spec(family).textOnly) SuiteModelFields.load('mw-limits', {...SuiteModelFields.read('mw-limits'), max_references:0});
     familyHelp();
     remember();
     recheck(0);
@@ -139,7 +139,7 @@
       option.selected=true;
     };
     $('name').value = model?.name || ''; $('name').readOnly = Boolean(model); choose('diffusion', model?.flags?.model);
-    for (const name of ['text_encoder','vae','clip_l','clip_g']) choose(name, profile.components?.[name]);
+    for (const name of ['text_encoder','vae','clip_l','clip_g','tokenizer']) choose(name, profile.components?.[name]);
     $('family').value = profile.family || 'flux2-klein'; $('split').value = profile.split_mode || 'single';
     SuiteHardware.set('mw', model?.gpus ?? 1, nodeCardsByNode[activeNode()] || nodeCards);
     document.querySelector('[data-image-split]').hidden = model?.gpus === 0;

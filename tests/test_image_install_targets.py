@@ -67,7 +67,8 @@ def test_image_creation_forwards_all_selected_nodes_and_preserves_source():
         assert [job['id'] for job in response.json()['jobs']]==['first','second']
 
 
-def test_each_image_target_receives_diffusion_encoders_vae_adapters_and_upscaler():
+@pytest.mark.parametrize('family', ['flux2-klein', 'moss-image'])
+def test_each_image_target_receives_diffusion_encoders_vae_adapters_and_upscaler(family):
     files=['diffusion/base.gguf','text_encoders/qwen.gguf','vae/ae.safetensors','loras/style.safetensors','upscalers/4x.pth']
     nodes=[{'name':name,'answering':True,'places':[
         {'name':'image','folder':'/'+name+'/image','tier':'cache','free':10*SPARE},
@@ -77,6 +78,11 @@ def test_each_image_target_receives_diffusion_encoders_vae_adapters_and_upscaler
     settings={'engine':'sdcpp','flags':{'model':'/front/storage/'+files[0],'ctx-size':0},'gpus':0,
         'sdcpp':{'family':'flux2-klein','components':{'text_encoder':'/front/storage/'+files[1],'vae':'/front/storage/'+files[2]},
             'loras':{'style':{'file':'/front/storage/'+files[3],'scale':.5}},'upscaler':'/front/storage/'+files[4]}}
+    if family=='moss-image':
+        settings['sdcpp']['family']=family
+        files.append('tokenizer/tokenizer.json')
+        settings['sdcpp']['components']['tokenizer']='/front/storage/'+files[-1]
+        nodes[0]['files'].append({'path':'/front/storage/'+files[-1],'place':'storage_image','tier':'storage','size':100})
     for target in ('compute','rig'):
         prepared=plan(settings,nodes,target,'front')
         assert {step['relative'] for step in prepared['steps'] if step['node']==target}==set(files)
@@ -84,3 +90,5 @@ def test_each_image_target_receives_diffusion_encoders_vae_adapters_and_upscaler
         assert prepared['settings']['sdcpp']['components']['text_encoder']=='/'+target+'/image/'+files[1]
         assert prepared['settings']['sdcpp']['loras']['style']['file']=='/'+target+'/image/'+files[3]
         assert prepared['settings']['sdcpp']['upscaler']=='/'+target+'/image/'+files[4]
+        if family=='moss-image':
+            assert prepared['settings']['sdcpp']['components']['tokenizer']=='/'+target+'/image/tokenizer/tokenizer.json'

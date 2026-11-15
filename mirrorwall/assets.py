@@ -2,6 +2,12 @@
 from pathlib import Path
 
 EXTENSIONS = ('.gguf', '.safetensors', '.pth')
+TOKENIZER_NAMES = frozenset(('tokenizer.json', 'tokenizer_qwen3.5.json'))
+
+
+def tokenizer_asset(path):
+    """Explicit tokenizer data files supported by image bundle discovery and downloads."""
+    return Path(path).name in TOKENIZER_NAMES
 
 
 def supported(path):
@@ -12,7 +18,7 @@ def supported(path):
         return Path(path).suffix.lower() in ('.gguf', '.safetensors', '.json', '.model', '.txt', '.jinja') or Path(path).name in ('Modelfile', 'head.pt')
     audio_data = ('.json', '.bin', '.onnx', '.npz', '.npy', '.model', '.txt', '.tiktoken', '.pt', '.vocab', '.merges')
     tokenizer_files = {'vocab.json', 'merges.txt', 'token_type.json', 'chat_template.jinja'}
-    return Path(path).name in tokenizer_files or str(path).lower().endswith(EXTENSIONS + (audio_data if set(Path(path).parts) & {'audio', 'encoders'} else ()))
+    return tokenizer_asset(path) or Path(path).name in tokenizer_files or str(path).lower().endswith(EXTENSIONS + (audio_data if set(Path(path).parts) & {'audio', 'encoders'} else ()))
 
 
 def image_asset(path):
@@ -20,7 +26,7 @@ def image_asset(path):
     file = Path(path)
     if 'classifier' in file.parts:
         return False
-    return file.suffix.lower() in ('.safetensors', '.pth') or 'image' in file.parts or ('encoders' in file.parts and _image_encoder(file))
+    return tokenizer_asset(file) or file.suffix.lower() in ('.safetensors', '.pth') or 'image' in file.parts or ('encoders' in file.parts and _image_encoder(file))
 
 
 def _image_encoder(file):

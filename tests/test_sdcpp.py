@@ -215,16 +215,26 @@ def test_private_image_runtime_streams_previews_and_resolved_seeds(image_setting
 
 
 @pytest.mark.parametrize('family,cfg,scheduler,alignment',[
-    ('qwen-image',4,'discrete',16),('qwen-image-2.1',6,'flux',32)])
-def test_qwen_generation_keeps_native_sampling_negative_prompt_and_family_geometry(image_settings,family,cfg,scheduler,alignment):
+    ('qwen-image',4,'discrete',16),('qwen-image-2.1',6,'flux',32),('moss-image',3,'discrete',16)])
+def test_text_image_generation_keeps_native_sampling_negative_prompt_and_family_geometry(image_settings,family,cfg,scheduler,alignment):
     from copy import deepcopy
     settings=deepcopy(image_settings)
     settings['sdcpp']['family']=family
+    if family=='moss-image':
+        with pytest.raises(ValueError,match='tokenizer'):
+            model.check_model('moss',settings,('CUDA0','CUDA1'))
+        settings['sdcpp']['components']['tokenizer']=str(Path(settings['flags']['model']).with_name('tokenizer.json'))
+        Path(settings['sdcpp']['components']['tokenizer']).write_text('{}')
     model.check_model('qwen',settings,('CUDA0','CUDA1'))
     native=FakeNative();job=private_job(settings)
     command=native_command(job,12345)
     assert command[command.index('--diffusion-model')+1]==settings['flags']['model']
     assert command[command.index('--llm')+1]==settings['sdcpp']['components']['text_encoder']
+    if family=='moss-image':
+        assert command[command.index('--tokenizer')+1]==settings['sdcpp']['components']['tokenizer']
+        assert model.files_of(settings)['tokenizer']==settings['sdcpp']['components']['tokenizer']
+        assert engine_for('sdcpp').capabilities(settings)['image_editing'] is False
+        assert engine_for('sdcpp').capabilities(settings)['masks'] is False
     with TestClient(create_app(job,native)) as client:
         headers={'authorization':'Bearer '+job['token']}
         response=client.post('/v1/images/generations',headers=headers,json={
@@ -347,6 +357,23 @@ def test_native_diagnostics_require_real_split_and_complete_lora_application(ima
     assert not native.row_split
     assert native.applied_loras=={'/models/good.safetensors'}
     assert '/models/partial.safetensors' in native.incompatible_loras
+
+
+def test_moss_multi_gpu_diagnostics_recognize_applied_layer_and_row_splits(image_settings):
+    import asyncio
+    from types import SimpleNamespace
+    from mirrorwall.runtime import Native
+    native=Native(private_job(image_settings))
+    async def read():
+        output=asyncio.StreamReader()
+        output.feed_data(b'MOSS-Image graph-cut layer split: CUDA0, 2 segments\n')
+        output.feed_data(b'MOSS-Image graph-cut layer split: CUDA1, 3 segments\n')
+        output.feed_data(b'MOSS-Image row split: 42 tensors successfully split across 2 devices\n')
+        output.feed_eof()
+        native.process=SimpleNamespace(stdout=output)
+        await native.read_output()
+    asyncio.run(read())
+    assert native.split_devices=={0,1} and native.row_split
 
 
 def test_failed_generation_revokes_a_previous_successful_envelope(image_settings,monkeypatch):
