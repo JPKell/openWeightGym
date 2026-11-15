@@ -24,8 +24,8 @@ def test_transcribe_requires_identity_and_navigation_distinguishes_chat_modes(de
     from weightroom.navigation import navigation
     nav = navigation('/chat/transcribe', ['front-voice'], False)
     assert nav['active'] == '/chat/transcribe' and nav['section'] == 'Interact'
-    assert [('Text chat', '/chat'), ('Voice generation', '/chat/speech'), ('Transcribe', '/chat/transcribe'), ('Voice chat', '/voice')] == [
-        row for row in nav['links'] if row[1] in ('/chat', '/chat/speech', '/chat/transcribe', '/voice')]
+    assert {'Text chat': '/chat', 'Voice generation': '/chat/speech', 'Transcribe': '/chat/transcribe', 'Voice chat': '/voice'} == {
+        label: path for label, path in nav['links'] if path in ('/chat', '/chat/speech', '/chat/transcribe', '/voice')}
     assert 'Voice chat' in server.get('/voice').text
     speech = server.get('/chat/speech').text
     assert 'Voice generation' in speech and 'Spoken chat' not in speech
@@ -72,7 +72,7 @@ def test_transcription_upload_options_copy_and_all_exports(desk, tmp_path):
         page.locator('#tr-go').click()
         playwright.expect(page.locator('#tr-result')).to_contain_text(result['text'])
         assert not page.locator('#tr-result b').count()
-        assert transcribed == [{'asset': recording['id'], 'model': 'preferred', 'diarization_model': 'speakers', 'language': 'en'}]
+        assert transcribed == [{'asset': recording['id'], 'model': 'preferred', 'diarization_model': 'speakers', 'language': 'en', 'translate': False}]
         for format_ in ('txt', 'srt', 'vtt', 'json'):
             with page.expect_download() as download:
                 page.locator(f'[data-save="{format_}"]').click()

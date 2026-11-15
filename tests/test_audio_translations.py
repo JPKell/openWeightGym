@@ -20,6 +20,62 @@ from test_whispercpp import profile  # noqa: F401
 from test_soundroom import wav_bytes
 
 
+@pytest.mark.parametrize('translate', [False, True])
+def test_browser_transcribe_waits_for_native_work_beyond_management_timeout(translate):
+    import threading
+    import time
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from soundroom.ui import routes
+
+    received = []
+
+    class NativeWork(BaseHTTPRequestHandler):
+        def do_POST(self):
+            received.append((self.path, self.headers['authorization'],
+                             json.loads(self.rfile.read(int(self.headers['content-length'])))))
+            time.sleep(.15)
+            payload = b'{"text":"Good morning.","task":"translate"}'
+            self.send_response(200)
+            self.send_header('content-type', 'application/json')
+            self.send_header('content-length', str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), NativeWork)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    door = httpx.AsyncClient(base_url=f'http://127.0.0.1:{server.server_port}',
+                             timeout=httpx.Timeout(.05, connect=2))
+    person = SimpleNamespace(key='caller-key')
+
+    async def ask(method, path, key, **more):
+        return await door.request(method, path, headers={'authorization': 'Bearer '+key}, **more)
+
+    def signed_in(handler):
+        async def call(request):
+            return await handler(request, person)
+        return call
+
+    body = {'asset': 'own-recording', 'model': 'whisper', 'translate': translate}
+    try:
+        app = Starlette(routes=routes(signed_in, None, ask, None))
+        with TestClient(app) as client:
+            try:
+                answer = client.post('/soundroom-api/transcribe', json=body)
+                assert answer.status_code == 200 and answer.json()['text'] == 'Good morning.'
+                assert answer.headers['cache-control'] == 'no-store'
+                assert received == [('/soundroom/transcribe', 'Bearer caller-key', body)]
+            finally:
+                client.portal.call(door.aclose)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
 @pytest.mark.parametrize('form', ['json', 'text', 'srt', 'vtt'])
 def test_sdk_shaped_multipart_translation_uses_normal_admission(profile, fake_llama_server, monkeypatch, form):
     monkeypatch.setattr(WhisperCpp, 'check_available', lambda self, config, settings: None)

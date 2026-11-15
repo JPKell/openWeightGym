@@ -149,6 +149,9 @@ def routes(for_people, page, ask, model_api, settings=None, platform=None, refre
                 if "unlogged" not in person.can:
                     return JSONResponse({"error": {"message": "Your account may not use no-log audio."}}, 403)
                 observation.silence()
+        if action == 'transcribe':
+            # Native recognition and translation outlast the console's short management timeout.
+            more['timeout'] = None
         answer = await ask(request.method, "/soundroom/" + action, person.key, params=dict(request.query_params), **more)
         if answer.headers.get("x-suite-audio-temporary") == "1":
             observation.silence()
