@@ -257,7 +257,7 @@ appears in the error file; output lines have the Responses body shape.
 
 ## W1. whisper.cpp engine
 
-**Implemented 2026-11-14:** pinned native engine, component install/skip/keep and backend controls, update/receipt/discard integration, Audio studio, native-profile model details and catalogue, fixed memory planning, Transcribe/Voice recognition and verified GGML format checks. CPU Docker large-v3 transcription and translation passed; the approved native runtime and model are active on box-main, with live Components and Transcribe choices verified. Live API results and the remaining browser-proxy deployment check are recorded in [Installation](installation.md).
+**Implemented 2026-11-14:** pinned native engine, component install/skip/keep and backend controls, update/receipt/discard integration, Audio studio, native-profile model details and catalogue, fixed memory planning, Transcribe/Voice recognition and verified GGML format checks. CPU Docker large-v3 transcription and translation passed; the approved native runtime and model are active on box-main, with live Components and Transcribe choices verified. Completed live API and browser qualification is recorded in [Installation](installation.md).
 
 **Goal:** add whisper.cpp as a new speech-to-text engine beside audio.cpp. It must be available
 everywhere engines already appear: the installer, `owg` updates, components, the engine sections

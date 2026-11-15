@@ -439,7 +439,7 @@ CPU Docker qualification on 2026-11-14 used large-v3: JFK transcription took 15.
 
 The approved box-main runtime is active at `~/openWeightGym/runtimes/whispercpp/current`, with weights in `~/openWeightGym/model-storage/audio/ggerganov--whisper.cpp/ggml-large-v3.bin`. After both installed application checkouts advanced to `ab3e84c`, the component installer activated the verified CPU release and the settings API registered that storage library. Model-install job `ZKx6zKj2MgQ` added `whisper-large-v3` to the active cache. Live Components reports v1.8.7 installed and ready; Telemetry lists it. Transcribe offers recognition and translation, displays saved results, and fits 1440/390 px in light/dark themes. Live multipart transcription request `1810895650947871` took 20.83 s; translation request `1810895650947873` took 19.89 s. Both returned the expected text.
 
-The live browser exposed its existing 10-second management timeout while native work continued successfully. The corrected proxy waits for transcription/translation; delayed-server regression tests cover both tasks. Deploying that correction and repeating both browser actions awaits the owner’s approval. The native runtime and API remain usable.
+The browser proxy waits for native transcription/translation instead of using its former 10-second management timeout; delayed-server regression tests cover both tasks. Final browser checks against the already-running control-node checkout `76a9686` passed: transcription took 14.78 s (request `43bea07e3ecdf46f0ac3adc5dda2a00d`), and Spanish-to-English translation took 20.95 s (request `e6311bf9db7175d93d32f4da3a2e4366`). Both results appeared in the page with no JavaScript errors; 1440/390 px light/dark layouts passed.
 
 ## Uninstalling
 
