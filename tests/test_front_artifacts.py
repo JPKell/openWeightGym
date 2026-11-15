@@ -447,6 +447,73 @@ def test_front_downloads_use_the_existing_verified_hub_contract(desk, tmp_path):
     assert not target.with_suffix('.gguf.part').exists()
 
 
+def test_front_download_uses_its_saved_token_with_compute_offline(desk, tmp_path):
+    browser, compute, _ = desk
+    sign_in(browser, 'jordan')
+    compute.off = True
+    storage = tmp_path / 'storage'
+    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': '',
+                                              'models_storage_folder': str(storage)})
+    store = compute.front.state.front_files
+    browser.portal.call(store.web.aclose)
+    store.web = compute.hub.client()
+    compute.hub.closed = True
+    endpoint = '/settings/downloads/front/credentials/hub_token'
+    for token in ['fake-old-token', 'good']:
+        saved = browser.post(endpoint, data={'operation': 'save', 'credential': token})
+        assert saved.status_code == 200
+    page = browser.get('/hub?repository=acme/tiny-GGUF')
+    assert page.status_code == 200 and 'tiny-q4.gguf' in page.text
+    assert compute.hub.seen[-1][2]['authorization'] == 'Bearer good'
+    started = browser.post('/hub', data={'repository': 'acme/tiny-GGUF', 'file': 'tiny-q4.gguf', 'place': 'storage_llm'})
+    assert started.status_code == 200 and 'coming down to storage_llm' in started.text
+    target = storage / 'llm' / 'acme--tiny-GGUF' / 'tiny-q4.gguf'
+    deadline = time.monotonic() + 3
+    while not target.exists() and time.monotonic() < deadline:
+        time.sleep(.02)
+    assert target.read_bytes() == compute.hub.files['tiny-q4.gguf']
+    assert all(headers.get('authorization') == 'Bearer good'
+               for host, path, headers in compute.hub.seen if host == 'huggingface.co')
+
+
+def test_front_civitai_uses_current_provider_token_for_discovery_and_download(desk, tmp_path, monkeypatch):
+    from mirrorwall import civitai
+    browser, compute, _ = desk
+    sign_in(browser, 'jordan')
+    compute.off = True
+    storage = tmp_path / 'storage'
+    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': '',
+                                              'models_storage_folder': str(storage)})
+    captured = []
+    async def search(http, words, token='', adult=False):
+        captured.append(('search', token))
+        return []
+    async def files(http, repository, token=''):
+        captured.append(('files', token))
+        return [{'path': 'model.safetensors', 'size': 4, 'sha256': 'a'*64}]
+    async def fetch(http, repository, entry, target, token, progress):
+        captured.append(('fetch', token))
+        target.write_bytes(b'data')
+    monkeypatch.setattr(civitai, 'search', search)
+    monkeypatch.setattr(civitai, 'files', files)
+    monkeypatch.setattr(civitai, 'fetch', fetch)
+    for token in ['fake-first-civitai', 'fake-current-civitai']:
+        saved = browser.post('/settings/downloads/front/credentials/civitai_token',
+                             data={'operation': 'save', 'credential': token})
+        assert saved.status_code == 200
+        assert browser.get('/mirrorwall-discovery?q=style').status_code == 200
+    assert captured == [('search', 'fake-first-civitai'), ('search', 'fake-current-civitai')]
+    started = browser.post('/mirrorwall-discovery', json={'repository': 'civitai/123',
+                           'files': ['model.safetensors'], 'place': 'storage_image'})
+    assert started.status_code == 202, started.text
+    target = storage / 'image' / 'civitai--123' / 'model.safetensors'
+    deadline = time.monotonic() + 3
+    while not target.exists() and time.monotonic() < deadline:
+        time.sleep(.02)
+    assert target.read_bytes() == b'data'
+    assert captured[-2:] == [('files', 'fake-current-civitai'), ('fetch', 'fake-current-civitai')]
+
+
 def test_front_downloads_never_go_into_the_cache(desk, tmp_path):
     """With a cache alone on the control node, nothing is offered or accepted as a download destination."""
     browser, compute, _ = desk

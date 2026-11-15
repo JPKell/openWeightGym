@@ -42,13 +42,14 @@ def checked_roots(values):
 class FrontFiles:
     """Use the shared file formats and copy/download helpers without starting an engine."""
 
-    def __init__(self, roots, log, index=None, every=lambda: 0):
+    def __init__(self, roots, log, index=None, every=lambda: 0, token=lambda kind: ''):
         """Read the control node's current file roots on each operation and retain active downloads.
 
         `index` is where the list of the control node's files is kept between looks (none: in memory), and
         `every` how many seconds a look is good for, 0 meaning until a Refresh asks again.
+        `token` reads the selected provider credential afresh for each operation.
         """
-        self.roots, self.log, self.every = roots, log, every
+        self.roots, self.log, self.every, self.token = roots, log, every, token
         self.index = FileIndex(index, describe=lambda path: self.describe(path)[0], accept=self.path)
         self.web = httpx.AsyncClient(timeout=30, follow_redirects=True)
         self.fetching, self.tasks, self.receiving = {}, set(), set()
@@ -197,22 +198,24 @@ class FrontFiles:
                         if query.get('source') == 'civitai':
                             from mirrorwall.civitai import search_page
                             return response(await search_page(self.web, query.get('search', ''),
+                                token=self.token('civitai_token'),
                                 adult=query.get('adult') == 'true', cursor=query.get('cursor', ''),
                                 kind=query.get('kind', ''), base=query.get('base', '')))
                         sort, direction = hub.search_order(query)
-                        return response(await hub.search_page(self.web, query['search'], cursor=query.get('cursor', ''), sort=sort, direction=direction, kind=query.get('kind', ''))
+                        return response(await hub.search_page(self.web, query['search'], self.token('hub_token'), cursor=query.get('cursor', ''), sort=sort, direction=direction, kind=query.get('kind', ''))
                                         if query.get('search') else {'found': [], 'next_cursor': ''})
                     if query.get('source') == 'civitai':
                         from mirrorwall.civitai import search
-                        return response({'found': await search(self.web, query['search'], adult=query.get('adult') == 'true')
+                        return response({'found': await search(self.web, query['search'], self.token('civitai_token'), adult=query.get('adult') == 'true')
                                          if query.get('search') else []})
-                    return response({'found': await hub.search(self.web, query['search']) if query.get('search') else []})
+                    return response({'found': await hub.search(self.web, query['search'], self.token('hub_token')) if query.get('search') else []})
                 if not hub.REPOSITORY.fullmatch(repository):
                     raise ValueError('A repository is written OWNER/NAME.')
-                rows = hub.rows(await hub.files(self.web, repository, classifier=query.get('kind') == 'classifier'))
+                token_kind = 'civitai_token' if repository.startswith('civitai/') else 'hub_token'
+                rows = hub.rows(await hub.files(self.web, repository, self.token(token_kind), classifier=query.get('kind') == 'classifier'))
                 if query.get('kind') == 'classifier':
                     for row in rows:
-                        row['decision_ready'] = row['file'].lower().endswith('.gguf') and await hub.decision_header(self.web, repository, row['file'])
+                        row['decision_ready'] = row['file'].lower().endswith('.gguf') and await hub.decision_header(self.web, repository, row['file'], self.token('hub_token'))
                 spots = self.places()
                 for row in rows:
                     names = [Path(part['path']).name for part in row['parts']]
@@ -400,7 +403,7 @@ class FrontFiles:
             self.receiving.discard(str(target))
 
     async def download(self, user, asked):
-        """Download verified public repository files into control node storage; the cache is never a destination."""
+        """Download verified repository files with this node's current credential into storage."""
         repository, names, place = asked.get('repository', ''), asked.get('files'), asked.get('place')
         if self.cleanup.get('state') == 'running':
             raise ValueError('Wait for cache maintenance to finish before downloading files.')
@@ -414,7 +417,8 @@ class FrontFiles:
             Path(folder).mkdir(exist_ok=True)
         if folder is None or not Path(folder).is_dir():
             raise ValueError('Downloads go into storage, never the cache. Choose a control node storage folder that exists.')
-        entries = hub.chosen(await hub.files(self.web, repository, classifier=Path(folder).name == 'classifier'), names)
+        token_kind = 'civitai_token' if repository.startswith('civitai/') else 'hub_token'
+        entries = hub.chosen(await hub.files(self.web, repository, self.token(token_kind), classifier=Path(folder).name == 'classifier'), names)
         targets = [self.path(str(Path(folder) / hub.folder_of(repository) / Path(entry['path']).name)) for entry in entries]
         if any(target.with_name(target.name + '.part').is_symlink() for target in targets):
             raise ValueError('A partial download cannot be a symbolic link.')
@@ -431,7 +435,7 @@ class FrontFiles:
             async def receive(entry=entry, target=target, progress=progress):
                 """Keep transfer state and incomplete files if stopped or interrupted."""
                 try:
-                    await hub.fetch(self.web, repository, entry, target, '', progress)
+                    await hub.fetch(self.web, repository, entry, target, self.token(token_kind), progress)
                     self.fetching.pop(str(target), None)
                     self.log.add('file', 'downloaded', user.name, machine='front', path=str(target))
                     await asyncio.to_thread(self.changed, target)

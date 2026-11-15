@@ -3589,6 +3589,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             download_context, selected = {}, ''
             if section == 'downloads':
                 from weightroom.download_views import context as download_context_for
+                choices = [*choices, {'name': 'front', 'state': 'ready'}]
                 selected = (typed_in or {}).get('machine') or request.query_params.get('machine') or (choices[0]['name'] if choices else '')
                 download_context = await download_context_for(ask, person, choices, selected, getattr(request.state, 'download_refused', ''))
                 found['programs'] = settings_views.filtered(node_programs.get(selected, []), 'downloads')

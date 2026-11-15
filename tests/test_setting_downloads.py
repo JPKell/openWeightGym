@@ -201,19 +201,60 @@ def test_native_download_forms_and_empty_save_preserve_file(desk):
     assert control['value']=='2'
 
 
+def test_download_settings_include_control_node_and_work_without_compute(desk, tmp_path):
+    browser,switch,users=desk;reported(switch);sign_in(browser,'jordan')
+    compute=selected(browser)
+    page=browser.get('/settings/downloads?machine=front')
+    assert page.status_code==200
+    assert f'<option value="{compute}"' in page.text
+    assert '<option value="front" selected>' in page.text
+    assert 'Download credentials are unavailable' not in page.text
+    endpoint='/settings/downloads/front/credentials/hub_token'
+    switch.off=True
+    for credential in ['fake-control-token', '']:
+        saved=browser.post(endpoint,data={'operation':'save','credential':credential})
+        assert saved.status_code==200 and 'Saved' in saved.text
+        assert fields(saved.text)['download-machine']['value']=='front'
+        assert 'fake-control-token' not in saved.text
+    token=tmp_path/'huggingface.token'
+    assert token.read_text().strip()=='fake-control-token'
+    assert token.stat().st_mode & 0o777 == 0o600
+    invalid=browser.post(endpoint,data={'operation':'save','credential':'fake\nrefused'})
+    assert invalid.status_code==400 and 'fake' not in invalid.text
+    assert fields(invalid.text)['download-machine']['value']=='front'
+    assert token.read_text().strip()=='fake-control-token'
+    assert 'fake-control-token' not in browser.get('/settings/history?export=json').text
+    assert browser.post(endpoint,data={'operation':'remove'}).status_code==200
+    assert not token.exists()
+    sign_in(browser,'pat')
+    assert browser.post(endpoint,data={'operation':'save','credential':'fake-denied'}).status_code==403
+    import httpx
+    async def direct_access():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=switch.front),base_url='http://front:8442') as api:
+            headers={'authorization':'Bearer '+browser.cookies['weightroom']}
+            path='/turnstile/machines/front/download-credentials'
+            assert (await api.get(path,headers=headers)).status_code==403
+            assert (await api.post(path,headers=headers,json={'kind':'hub_token','operation':'save','credential':'fake-denied'})).status_code==403
+    browser.portal.call(direct_access)
+    assert not token.exists()
+
+
 @pytest.mark.parametrize('width',[1440,390])
-def test_download_controls_fit_and_refused_values_are_not_retained(desk,width):
+@pytest.mark.parametrize('machine',['', 'front'])
+def test_download_controls_fit_and_refused_values_are_not_retained(desk,width,machine):
     browser,switch,users=desk;reported(switch);sign_in(browser,'jordan')
     with playwright.sync_playwright() as engine:
         chromium,page=browser_context(engine,browser)
         try:
-            page.set_viewport_size({'width':width,'height':1000});page.goto('http://console.test/settings/downloads')
+            url='http://console.test/settings/downloads'+('?machine='+machine if machine else '')
+            page.set_viewport_size({'width':width,'height':1000});page.goto(url)
+            assert page.locator('#download-machine option[value="front"]').count()==1
             heading=page.locator('summary').filter(has_text='Download credentials');heading.click()
             field=page.locator('#credential-loadcoach-hub_token')
             playwright.expect(field).to_be_visible()
             field.fill('fake-browser-provider-token')
             form=field.locator('xpath=ancestor::form');form.get_by_role('button',name='Save credential',exact=True).click()
-            page.goto('http://console.test/settings/downloads')
+            page.goto(url)
             page.locator('summary').filter(has_text='Download credentials').click()
             playwright.expect(field).to_have_value('')
             assert 'fake-browser-provider-token' not in page.content()

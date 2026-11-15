@@ -1155,7 +1155,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         minutes = live('turnstile', 'files_every', settings.files_every)
         return float(minutes) * 60 if type(minutes) in (int, float) and minutes >= 0 else settings.files_every * 60
 
-    front_files = FrontFiles(front_file_roots, log, index=Path(settings.data) / FRONT_INDEX, every=front_files_every)
+    from loadcoach.download_keys import DownloadKeys
+    front_download_keys = DownloadKeys(settings)
+    front_files = FrontFiles(front_file_roots, log, index=Path(settings.data) / FRONT_INDEX, every=front_files_every,
+                             token=front_download_keys.read)
 
     def file_store():
         """Prefer an explicitly selected store, then optional control node storage, then legacy workers."""
@@ -2855,14 +2858,30 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if not user.can('manage-settings'):
             return error(403, 'Download credentials require manage-settings.')
         name = node(request.path_params['name'])
-        if name not in machines.names:
+        if name != 'front' and name not in machines.names:
             return error(404, 'That node is not configured.')
         body = b''
         if request.method == 'POST':
             value = await accounts.read_json(request, {'kind', 'operation', 'credential'})
             if isinstance(value, Response):
                 return value
+            if name == 'front':
+                kind, operation = value.get('kind', ''), value.get('operation', '')
+                try:
+                    if operation == 'save':
+                        front_download_keys.save(kind, value.get('credential', ''))
+                    elif operation == 'remove':
+                        front_download_keys.remove(kind)
+                    else:
+                        raise ValueError('Choose Save or Remove.')
+                except ValueError as problem:
+                    return error(400, str(problem))
+                except OSError:
+                    return error(503, 'The credential file could not be updated on this node.')
+                log.add('settings', 'credential-changed', user.name, machine='front', name=kind, operation=operation)
             body = json.dumps(value).encode()
+        if name == 'front':
+            return JSONResponse({'credentials': front_download_keys.status()}, headers={'cache-control': 'private, no-store'})
         answer = await ask_compute(user, request.method, '/loadcoach/download-credentials', body, machine=name, timeout=5)
         if answer is None:
             return off(name)

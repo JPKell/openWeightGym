@@ -32,6 +32,8 @@ Use [settings-management access](/docs/system/abilities#ability-manage-settings)
 | **Machine configuration** | Read-only connection/source evidence and compatibility information. |
 | **Settings history** | Recorded changes, guarded revert and secret-free transfer. |
 
+**Downloads and credentials → Download node** lists the control node and every configured compute node. Choose a node, then save its provider credentials. To download onto the control node, first set its storage folder under **General settings → Model files**; download destinations come from configured storage.
+
 ## Limits and troubleshooting
 
 **Waiting for restart** records a pending setting; saving alone does not make it effective. Use the existing node-scoped restart control only after reviewing active work and its confirmation. Blank credential submissions retain saved values; use the explicit remove action to delete one. Saved credentials stay hidden. File-only settings remain read-only in the console.

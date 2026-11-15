@@ -1297,8 +1297,10 @@ at first use; ordinary API keys are unaffected. Group session lifetime remains a
 
 ## Download credentials and concurrency
 
-`/settings/downloads` selects a node for its live transfer cap and write-only Hugging Face/Civitai
-credentials. Existing `hub_token_file` and `civitai_token_file` paths stay authoritative and file-only.
+`/settings/downloads` lists the control node and all configured compute nodes for write-only
+Hugging Face/Civitai credentials, including when compute is offline. The control node reads its own
+credential files for discovery and downloads into its configured storage. Compute nodes also expose
+their live transfer cap. Existing `hub_token_file` and `civitai_token_file` paths stay authoritative and file-only.
 Without a path, the node uses `huggingface.token` / `civitai.token` in its existing machine-key folder
 (or the installation's `keys` folder). Saving is atomic with mode 0600; blank keeps the current
 credential and Remove is explicit. Credentials never enter settings reports, history transfers or
