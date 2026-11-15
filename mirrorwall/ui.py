@@ -1,5 +1,7 @@
 """Browser pages and narrow authenticated proxies into openWeightGym's existing APIs."""
 import asyncio
+import io
+import zipfile
 from urllib.parse import quote, urlsplit
 
 from starlette.responses import JSONResponse, Response
@@ -9,6 +11,41 @@ from loadcoach import observability as observation
 from mirrorwall.civitai import BASE_MODEL_GROUPS, MODEL_TYPE_CHOICES
 from mirrorwall.front import Front
 from mirrorwall.model import check_name, SAMPLERS, SCHEDULERS
+from mirrorwall.store import ASSET_ID
+
+
+async def image_archive(ask, person, asked):
+    """Download up to 200 owned images as a ZIP, bounded to 256 MiB of source data.
+
+    Every content read uses the existing owner-scoped API. Archives stay in memory so
+    temporary no-log images never acquire an on-disk export.
+    """
+    identifiers = asked.get('ids')
+    if (not isinstance(identifiers, list) or not 1 <= len(identifiers) <= 200 or
+        any(not isinstance(one, str) or not ASSET_ID.fullmatch(one) for one in identifiers)):
+        return JSONResponse({'error': {'message': 'Select between 1 and 200 images to download.'}}, 400)
+    headers = {'content-disposition': 'attachment; filename="images.zip"',
+               'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff'}
+    total = 0
+    with io.BytesIO() as content:
+        with zipfile.ZipFile(content, 'w', compression=zipfile.ZIP_STORED) as archive:
+            for identifier in dict.fromkeys(identifiers):
+                answer = await ask('GET', '/mirrorwall/assets/' + identifier + '/content', person.key)
+                if answer.headers.get('x-suite-image-temporary') == '1':
+                    observation.silence()
+                    headers['x-suite-image-temporary'] = '1'
+                if not answer.is_success:
+                    return Response(answer.content, answer.status_code, media_type='application/json',
+                                    headers={'cache-control': 'private, no-store'})
+                suffix = {'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp'}.get(
+                    answer.headers.get('content-type', '').split(';')[0])
+                if suffix is None:
+                    return JSONResponse({'error': {'message': 'Select image assets for this download.'}}, 400)
+                total += len(answer.content)
+                if total > 256 * 2**20:
+                    return JSONResponse({'error': {'message': 'Selected images exceed 256 MiB. Download a smaller selection.'}}, 400)
+                archive.writestr(identifier + suffix, answer.content)
+        return Response(content.getvalue(), media_type='application/zip', headers=headers)
 
 
 def routes(for_people, page, ask, model_api):
@@ -38,7 +75,7 @@ def routes(for_people, page, ask, model_api):
         parts = action.split("/")
         permitted = ((action in ("state", "preferences", "assets", "workflows") and request.method == "GET") or
                      (len(parts) == 2 and parts[0] == "presets" and request.method == "GET") or
-                     (action in ("assets", "jobs", "presets", "preferences") and request.method == "POST") or
+                     (action in ("assets", "assets/download", "jobs", "presets", "preferences") and request.method == "POST") or
                      (len(parts) == 2 and parts[0] == "jobs" and request.method == "POST") or
                      (len(parts) == 2 and parts[0] == "assets" and request.method == "DELETE") or
                      (len(parts) == 3 and parts[0] == "assets" and parts[2] in ("content", "thumbnail") and request.method == "GET"))
@@ -54,6 +91,8 @@ def routes(for_people, page, ask, model_api):
                 if "unlogged" not in person.can:
                     return JSONResponse({"error": {"message": "Your account may not use no-log images."}}, 403)
                 observation.silence()
+            if action == 'assets/download':
+                return await image_archive(ask, person, more['json'])
         answer = await ask(request.method, "/mirrorwall/" + action, person.key,
                            params=dict(request.query_params), **more)
         if answer.headers.get("x-suite-image-temporary") == "1":

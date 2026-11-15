@@ -3,6 +3,7 @@ import asyncio
 import base64
 import io
 import json
+import zipfile
 
 from PIL import Image
 import pytest
@@ -187,6 +188,32 @@ def test_browser_pages_assets_and_mutations_require_current_identity_and_origin(
     assert browser.delete('/mirrorwall-api/assets/'+identifier).status_code == 404
     sign_in(browser, 'jordan')
     assert browser.delete('/mirrorwall-api/assets/'+identifier).json()['deleted']
+
+
+def test_selected_image_zip_preserves_bytes_ownership_and_temporary_privacy(desk):
+    browser, switch, users = desk
+    sign_in(browser, 'jordan')
+    store = switch.front.state.mirrorwall.store
+    owner = users.by_name('jordan').identity
+    one = store.save(owner, image_bytes(), kind='output')
+    quiet = store.save(owner, image_bytes(), kind='output', temporary=True)
+    other = store.save(users.by_name('pat').identity, image_bytes(), kind='output')
+    endpoint = '/mirrorwall-api/assets/download'
+    result = browser.post(endpoint, json={'ids': [one['id'], quiet['id'], one['id']]})
+    assert result.status_code == 200 and result.headers['content-type'] == 'application/zip'
+    assert result.headers['x-suite-image-temporary'] == '1'
+    assert 'no-store' in result.headers['cache-control']
+    with zipfile.ZipFile(io.BytesIO(result.content)) as archive:
+        assert archive.namelist() == [one['id']+'.png', quiet['id']+'.png']
+        assert all(archive.read(name) == image_bytes() for name in archive.namelist())
+    assert not store.path(quiet['id']).exists()
+    assert browser.post(endpoint, json={'ids': [one['id'], other['id']]}).status_code == 404
+    assert browser.post(endpoint, json={'ids': [one['id']]}, headers={'origin': 'https://elsewhere.example'}).status_code == 403
+    for ids in ([], ['../private'], [True], [one['id']]*201):
+        assert browser.post(endpoint, json={'ids': ids}).status_code == 400
+    sign_in(browser, 'pat')
+    assert browser.post(endpoint, json={'ids': [one['id']]}).status_code == 404
+    assert store.asset(owner, one['id']) is not None
 
 
 @pytest.mark.parametrize('width', [1440, 390])

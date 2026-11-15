@@ -31,7 +31,8 @@
   let selected = null, references = [], mask = null, modelName = '', gallerySignature = '', jobsSignature = '';
   let runningPreview = '', polling = false, refreshProblem = false, referenceSignature = '', detailsSignature = '';
   let older = [], moreImages = false;
-  const drafts = new Map(), favorites = new Set();
+  const drafts = new Map(), favorites = new Set(), librarySelection = new Set(), deletedImages = new Set();
+  let libraryBusy = false, deleteTarget = null;
   let activeTool = 'generate', resizeSource = null, submitting = false, uploading = 0;
   const all = selector => [...root.querySelectorAll(selector)];
   const profile = () => state.models.find(row => row.id === $('model').value)?.image_workflow || {};
@@ -216,9 +217,11 @@
   }
   function showSelected() {
     const one=state.assets.find(row=>row.id===selected);
+    if(deleteTarget!==one?.id){deleteTarget=one?.id;resetConfirmation($('delete-form'));}
     $('empty').hidden=Boolean(one);$('canvas').hidden=!one;$('large').hidden=!one;
     $('preview-label').hidden=true;
     ['delete','reuse','prev','next','zoom','favorite','export-settings','fullscreen','resize-selected'].forEach(name=>$(name).disabled=!one);
+    $('delete').disabled=!one||libraryBusy;
     $('download').hidden=!one;
     $('result-title').textContent=one ? one.metadata?.settings?.detail_resize?'Resized with AI detail':'Generated image' : 'No image selected';
     $('result-counter').textContent=one ? (state.assets.indexOf(one)+1)+' / '+state.assets.length : '0 / '+state.assets.length;
@@ -237,7 +240,7 @@
       if(values.detail_resize)facts['Detail strength']=values.strength;
       if(changed)for(const [key,value] of Object.entries(facts)){const dt=element('dt',key),dd=element('dd',String(value));$('result-settings').append(dt,dd);}
     } else $('image-info').textContent='';
-    $('thumbnails').querySelectorAll('button').forEach(node=>node.setAttribute('aria-selected',String(node.dataset.id===selected)));
+    $('thumbnails').querySelectorAll('button').forEach(node=>node.setAttribute('aria-pressed',String(node.dataset.id===selected)));
     const before=$('compare-with').value;
     const choices=state.assets.filter(row=>row.id!==selected);
     if(resizeSource && !choices.some(row=>row.id===resizeSource.id) && resizeSource.id!==selected)choices.unshift(resizeSource);
@@ -252,21 +255,76 @@
     const index = state.assets.findIndex(row => row.id === selected);
     selected = state.assets[(index + direction + state.assets.length) % state.assets.length]?.id || null; showSelected();
   }
+  function resetConfirmation(form) {
+    document.dispatchEvent(new CustomEvent('suite:actionsChanged',{detail:{form}}));
+  }
+  function visibleImages() {
+    return state.assets.filter(row=>$('library-filter').value==='all'||favorites.has(row.id));
+  }
+  function renderLibrarySelection() {
+    const available=new Set(visibleImages().map(row=>row.id));
+    for(const id of librarySelection)if(!available.has(id)){librarySelection.delete(id);resetConfirmation($('library-actions'));}
+    $('selected-count').textContent=librarySelection.size+' selected'+(libraryBusy?' · Working…':'');
+    for(const name of ['clear-selection','download-selected','delete-selected'])$(name).disabled=libraryBusy||!librarySelection.size;
+    $('select-all').disabled=libraryBusy||!visibleImages().length;
+    $('library-filter').disabled=libraryBusy;
+    $('library-actions').setAttribute('aria-busy',String(libraryBusy));
+    for(const box of all('[data-select-image]')){box.checked=librarySelection.has(box.dataset.id);box.disabled=libraryBusy;}
+  }
+  function selectionChanged() {
+    resetConfirmation($('library-actions'));
+    renderLibrarySelection();
+  }
+  function forgetImage(id) {
+    deletedImages.add(id);librarySelection.delete(id);favorites.delete(id);
+    older=older.filter(row=>row.id!==id);state.assets=state.assets.filter(row=>row.id!==id);
+  }
+  async function deleteImages(ids) {
+    if(libraryBusy||!ids.length)return;
+    libraryBusy=true;renderLibrarySelection();showSelected();
+    const failures=[];
+    try{
+      for(const id of ids){
+        try{await api('assets/'+encodeURIComponent(id),undefined,'DELETE');forgetImage(id);}
+        catch(error){failures.push(error.message);}
+        renderLibrarySelection();
+      }
+    }finally{
+      libraryBusy=false;gallerySignature='';renderGallery();await refresh();
+    }
+    if(failures.length)throw new Error((ids.length-failures.length)+' deleted; '+failures.length+' could not be deleted. '+failures[0]);
+  }
+  async function downloadImages(ids) {
+    if(libraryBusy||!ids.length)return;
+    libraryBusy=true;renderLibrarySelection();showSelected();
+    try{
+      const response=await fetch('/mirrorwall-api/assets/download',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ids}),cache:'no-store'});
+      if(response.redirected){location.href='/sign-in';throw new Error('Please sign in again.');}
+      if(!response.ok){const value=await response.json();throw new Error(value.error?.message||'The image download failed.');}
+      const url=URL.createObjectURL(await response.blob()),link=element('a');
+      link.href=url;link.download='images.zip';document.body.append(link);link.click();link.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }finally{libraryBusy=false;renderLibrarySelection();showSelected();}
+  }
   function renderGallery() {
     const signature=JSON.stringify([state.assets.map(row=>[row.id,row.width,row.height]),[...favorites],$('library-filter').value]);
     if(signature!==gallerySignature){
       gallerySignature=signature;
       if(!state.assets.some(row=>row.id===selected))selected=state.assets[0]?.id||null;
       $('thumbnails').replaceChildren();
-      state.assets.filter(row=>$('library-filter').value==='all'||favorites.has(row.id)).forEach(row=>{
-        const fragment=clone('result'),button=fragment.querySelector('button');button.dataset.id=row.id;button.setAttribute('role','option');
+      visibleImages().forEach(row=>{
+        const fragment=clone('result'),button=fragment.querySelector('button');button.dataset.id=row.id;
         const image=fragment.querySelector('img');image.src=imageURL(row.id);image.alt='Image, seed '+(row.metadata?.seed??'unknown');image.loading='lazy';
         fragment.querySelector('[data-title]').textContent=(favorites.has(row.id)?'★ ':'')+(row.metadata?.settings?.detail_resize?'AI detail resize':'Generated image');
         fragment.querySelector('[data-detail]').textContent=row.width+' × '+row.height+' · seed '+(row.metadata?.seed??'unknown');
+        const checkbox=fragment.querySelector('[data-select-image]');checkbox.dataset.id=row.id;
+        checkbox.setAttribute('aria-label','Select '+(row.filename||row.id)+' · seed '+(row.metadata?.seed??'unknown'));
+        checkbox.onchange=()=>{if(checkbox.checked)librarySelection.add(row.id);else librarySelection.delete(row.id);selectionChanged();};
         button.onclick=()=>{selected=row.id;runningPreview='';showSelected();};$('thumbnails').append(fragment);
       });
       $('library-empty').hidden=Boolean($('thumbnails').children.length);
     }
+    renderLibrarySelection();
     showSelected();
   }
   function renderJobs() {
@@ -303,7 +361,7 @@
     }
   }
   async function refresh() {
-    if (polling || document.hidden || !root.isConnected) return;
+    if (polling || libraryBusy || document.hidden || !root.isConnected) return;
     polling = true;
     try {
       state = await api('state');
@@ -312,6 +370,7 @@
       if (!older.length) moreImages = state.assets.length === 100;
       const latest = new Set(state.assets.map(row => row.id));
       state.assets.push(...older.filter(row => !latest.has(row.id)));
+      state.assets=state.assets.filter(row=>!deletedImages.has(row.id));
       $('older').hidden = !moreImages;
       const before = $('model').value;
       if (JSON.stringify(state.models.map(row => row.id)) !== JSON.stringify([...$('model').options].map(row => row.value))) {
@@ -464,7 +523,15 @@
     const help=element('div');SuiteImageProfiles.help(help,p.family);content.append(help);
     const link=element('a','Open image generation guide','btn btn-outline-secondary btn-sm');link.href='/docs/modules/mirrorwall';content.append(link);dialog('Model guide',content);
   };
-  $('library-filter').onchange=renderGallery;
+  $('library-filter').onchange=()=>{librarySelection.clear();selectionChanged();renderGallery();};
+  $('select-all').onclick=()=>{visibleImages().forEach(row=>librarySelection.add(row.id));selectionChanged();};
+  $('clear-selection').onclick=()=>{librarySelection.clear();selectionChanged();};
+  $('library-actions').onsubmit=safe(async event=>{
+    event.preventDefault();
+    const ids=[...librarySelection];
+    if(event.submitter?.value==='download')await downloadImages(ids);
+    else if(event.submitter?.value==='delete')await deleteImages(ids);
+  });
   $('favorite').onclick=()=>{if(!selected)return;if(favorites.has(selected))favorites.delete(selected);else favorites.add(selected);renderGallery();};
   $('export-settings').onclick=()=>{const one=state.assets.find(row=>row.id===selected);if(one)downloadJSON({seed:one.metadata?.seed,settings:one.metadata?.settings||{},width:one.width,height:one.height});};
   $('compare').onclick=()=>{const enabled=$('compare-pane').hidden;$('compare-pane').hidden=!enabled;$('canvas').classList.toggle('is-comparing',enabled);$('compare').setAttribute('aria-pressed',String(enabled));if(enabled)$('compare-pane').querySelector('img').src=imageURL($('compare-with').value,'content');};
@@ -518,8 +585,8 @@
         else {if(!references.includes(row.id)&&references.length>=referenceRules().most){message('This workflow’s reference slots are full.');return;}if(!references.includes(row.id))references.push(row.id);renderReferences();}
         $('dialog').close();
       };
-      const remove = element('button', 'Delete', 'btn btn-link text-danger btn-sm');
-      remove.onclick = safe(async () => { if (!await window.suiteConfirmLoss('Delete this saved reference permanently?')) return; await api('assets/' + encodeURIComponent(row.id), undefined, 'DELETE'); references = references.filter(id => id !== row.id); if(resizeSource?.id===row.id){resizeSource=null;renderResizeSource();}renderReferences(); entry.remove(); await refresh(); });
+      const remove = clone('reference-delete').querySelector('form');
+      remove.onsubmit = safe(async event => { event.preventDefault(); const button=remove.querySelector('button');button.disabled=true;try{await api('assets/' + encodeURIComponent(row.id), undefined, 'DELETE'); references = references.filter(id => id !== row.id); if(resizeSource?.id===row.id){resizeSource=null;renderResizeSource();}renderReferences(); entry.remove(); await refresh();}finally{button.disabled=false;} });
       const download = element('a', 'Download', 'btn btn-link btn-sm'); download.href = imageURL(row.id, 'content') + '?download=1';
       entry.append(button, download, remove); list.append(entry);
     });
@@ -550,7 +617,7 @@
     if(values.detail_resize){const id=references[0]||originalJob?.references?.[0];resizeSource=state.references.find(row=>row.id===id)||state.assets.find(row=>row.id===id)||null;$('resize-scale').value='custom';$('resize-width').value=values.detail_resize.width;$('resize-height').value=values.detail_resize.height;$('resize-strength').value=values.strength;$('resize-prompt').value=values.prompt||'';renderResizeSource();}
     update(); $('clear-mask').hidden = !mask; $('clear-mask').textContent = 'Remove saved mask'; $('mask').value = ''; renderReferences();
   };
-  $('delete').onclick = safe(async () => { if (!selected || !await window.suiteConfirmLoss('Delete this generated image permanently?')) return; await api('assets/' + encodeURIComponent(selected), undefined, 'DELETE'); older = older.filter(row => row.id !== selected); await refresh(); });
+  $('delete-form').onsubmit = safe(async event => { event.preventDefault(); if(selected)await deleteImages([selected]); });
   const handleKey = event => {
     if(!root.isConnected||$('dialog').open)return;
     if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();setView('generate');$('form').requestSubmit();return;}

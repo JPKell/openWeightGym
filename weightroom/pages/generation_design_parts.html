@@ -1,5 +1,5 @@
 {# One settings form and DOM templates shared by the three generation layouts. #}
-{% from 'parts.html' import card, section_title, confirm_loss %}
+{% from 'parts.html' import card, section_title, confirm_loss, confirm_two %}
 {% from 'image_design_parts.html' import field, select, lora_template %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 
@@ -45,9 +45,24 @@
 
 {% macro templates(live=false) %}
 {% if live %}{{ lora_template('mw-lora-template',required=false) }}{% endif %}
-<template id="{{ dom('result-template',live) }}"><button type="button" class="ig-thumbnail{{ ' mw-thumb' if live }}"><img alt=""><span data-title></span><small data-detail></small></button></template>
+<template id="{{ dom('result-template',live) }}">{% if live %}<div class="ig-library-item position-relative" role="listitem">{% endif %}<button type="button" class="ig-thumbnail{{ ' mw-thumb' if live }}"><img alt=""><span data-title></span><small data-detail></small></button>{% if live %}<input type="checkbox" class="form-check-input position-absolute top-0 end-0 m-2" data-select-image aria-label="Select image"></div>{% endif %}</template>
+{% if live %}<template id="mw-reference-delete-template">{{ image_delete_form(label='Delete',class_='btn btn-link text-danger btn-sm') }}</template>{% endif %}
 <template id="{{ dom('reference-template',live) }}"><div class="ig-reference{{ ' mw-reference' if live }}"><img alt=""><span class="min-w-0"><strong class="small d-block text-truncate" data-name></strong><small class="text-secondary" data-detail></small>{% if live %}<span class="badge d-block mt-1" data-reference-state></span>{% endif %}</span><div class="d-flex ms-auto"><button type="button" class="btn btn-sm btn-outline-secondary" data-up aria-label="Move reference earlier">↑</button><button type="button" class="btn btn-sm btn-outline-secondary" data-remove aria-label="Remove reference">×</button></div></div></template>
 <template id="{{ dom('job-template',live) }}"><div class="ig-job{{ ' mw-job' if live }}"><div class="d-flex justify-content-between gap-2"><strong class="small" data-title></strong><span class="badge" data-state></span></div><p class="small text-secondary my-2" data-detail></p><progress max="100" value="0" class="w-100" aria-label="Job progress"></progress><div class="d-flex gap-2 mt-2"><button type="button" class="btn btn-sm btn-outline-secondary" data-pause>Pause</button><button type="button" class="btn btn-sm btn-outline-danger" data-stop>Stop</button></div></div></template>
+{% endmacro %}
+
+{% macro image_delete_form(id='', label='Delete image', button_id='', class_='btn btn-sm btn-outline-danger') %}
+<form{% if id %} id="{{ id }}"{% endif %} class="d-inline" method="post"><button type="submit"{% if button_id %} id="{{ button_id }}"{% endif %} class="{{ class_ }}" {{ confirm_two('Delete this image?') }}>{{ label }}</button></form>
+{% endmacro %}
+
+{% macro library_actions() %}
+<form id="mw-library-actions" method="post" class="d-flex flex-wrap align-items-center gap-2 mb-3">
+<span id="mw-selected-count" class="small text-secondary" role="status">0 selected</span>
+<button id="mw-select-all" type="button" class="btn btn-outline-secondary btn-sm">Select all shown</button>
+<button id="mw-clear-selection" type="button" class="btn btn-outline-secondary btn-sm" disabled>Clear selection</button>
+<button id="mw-download-selected" type="submit" name="action" value="download" class="btn btn-outline-secondary btn-sm" disabled>Download selected</button>
+<button id="mw-delete-selected" type="submit" name="action" value="delete" class="btn btn-outline-danger btn-sm" {{ confirm_two('Delete selected images?') }} disabled>Delete selected</button>
+</form>
 {% endmacro %}
 
 {% macro prompt(live=false, samples={}) %}
@@ -60,7 +75,7 @@
 <div class="ig-artboard" id="{{ dom('artboard',live) }}"{% if live %} hidden{% endif %}><img id="{{ dom('large-image',live) }}" {% if not live %}src="{{ samples.tiger }}"{% else %}hidden{% endif %} alt="{{ 'Selected generated image' if live else 'Illustrative sample: tiger cub sheltered by a banana leaf' }}"><div class="ig-compare-pane" id="{{ dom('compare-pane',live) }}" hidden><img {% if not live %}src="{{ samples.apple }}"{% endif %} alt="{{ 'Image selected for comparison' if live else 'Second illustrative sample for side-by-side comparison' }}"><span>{{ 'Comparison image' if live else 'Comparison · sample artwork' }}</span></div><span class="ig-art-label">{{ 'Private image' if live else 'SAMPLE ARTWORK · BLACK FOREST LABS' }}</span></div>
 <div id="{{ dom('canvas-empty',live) }}" class="ig-empty"{% if not live %} hidden{% endif %}><span aria-hidden="true">✧</span><strong>Your next idea starts here.</strong><p class="text-secondary">Describe an image, then choose Generate.</p></div>
 {% if live %}<div class="d-flex gap-2 px-3 pt-3"><button id="mw-prev" type="button" class="btn btn-sm btn-outline-secondary" aria-label="Previous image">←</button><button id="mw-next" type="button" class="btn btn-sm btn-outline-secondary" aria-label="Next image">→</button><label for="mw-compare-with" class="visually-hidden">Compare with image</label><select id="mw-compare-with" class="form-select form-select-sm" aria-label="Compare with image"></select></div>{% endif %}<div class="ig-result-bar"><div class="min-w-0"><strong id="{{ dom('result-title',live) }}">{{ 'No image selected' if live else 'Rainforest study' }}</strong><span class="small text-secondary d-block" id="{{ dom('result-detail',live) }}">{{ '' if live else 'Illustrative artwork · not a run from this workspace' }}</span></div><div class="d-flex gap-2"><button id="{{ dom('reuse',live) }}" type="button" class="btn btn-outline-secondary btn-sm">Reuse</button><button id="{{ dom('favorite',live) }}" type="button" class="btn btn-outline-secondary btn-sm" aria-pressed="false" aria-label="Favorite image">☆</button><{{ 'a' if live else 'button' }} id="{{ dom('download',live) }}"{% if not live %} type="button"{% else %} hidden{% endif %} class="btn btn-outline-secondary btn-sm">Download</{{ 'a' if live else 'button' }}></div></div>
-<details class="ig-result-details"><summary class="small">Image details & reproducibility</summary><dl id="{{ dom('result-settings',live) }}" class="ig-facts small mt-3"></dl><button type="button" class="btn btn-sm btn-outline-secondary" id="{{ dom('export-settings',live) }}">Export settings JSON</button><button type="button" class="btn btn-sm btn-outline-danger ms-1" id="{{ dom('delete-result',live) }}"{% if live %} {{ confirm_loss() }}{% endif %}>Delete image</button></details>
+<details class="ig-result-details"><summary class="small">Image details & reproducibility</summary><dl id="{{ dom('result-settings',live) }}" class="ig-facts small mt-3"></dl><button type="button" class="btn btn-sm btn-outline-secondary" id="{{ dom('export-settings',live) }}">Export settings JSON</button>{% if live %}{{ image_delete_form('mw-delete-form',button_id=dom('delete-result',live),class_='btn btn-sm btn-outline-danger ms-1') }}{% else %}<button type="button" class="btn btn-sm btn-outline-danger ms-1" id="{{ dom('delete-result',live) }}">Delete image</button>{% endif %}</details>
 {% if live %}<span id="mw-preview-label" class="badge mw-preview-label text-bg-dark" hidden>Live preview</span>{% endif %}</section>
 {% endmacro %}
 

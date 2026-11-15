@@ -1,6 +1,7 @@
 """Canvas studio uses real authenticated assets and the ordinary image job contract."""
 import base64
 import io
+import zipfile
 from copy import deepcopy
 from pathlib import Path
 
@@ -117,7 +118,7 @@ def test_canvas_drafts_upload_resize_and_existing_job_submission(canvas, width):
         page.locator('[data-mw-view=library]').click()
         page.locator('#mw-favorite').click()
         page.locator('#mw-library-filter').select_option('favorites')
-        playwright.expect(page.locator('#mw-thumbnails > button')).to_have_count(1)
+        playwright.expect(page.locator('#mw-thumbnails .mw-thumb')).to_have_count(1)
         page.locator('[data-mw-view=queue]').click()
         playwright.expect(page.locator('#mw-queue-empty')).to_be_visible()
         page.locator('[data-mw-view=generate]').click()
@@ -127,6 +128,110 @@ def test_canvas_drafts_upload_resize_and_existing_job_submission(canvas, width):
         folder.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(folder / f'canvas-{width}.png'), full_page=True)
         assert not errors
+        browser.close()
+
+
+def test_canvas_two_click_delete_resets_when_image_changes_or_escape_is_pressed(canvas):
+    server, wire, users, _ = canvas
+    store = wire.front.state.mirrorwall.store
+    owner = users.by_name('jordan').identity
+    original = store.listing(owner, kind='output')[0]
+    added = store.save(owner, picture(color='red'), kind='output', metadata={'seed': 43})
+    reference = store.save(owner, picture(), kind='reference', filename='saved-reference.png')
+    deleted = []
+    def capture(route, path):
+        if route.request.method == 'DELETE':
+            deleted.append(path.rsplit('/', 1)[-1])
+        return False
+    with playwright.sync_playwright() as driver:
+        browser, page = browser_context(driver, server, capture=capture)
+        page.goto('http://console.test/chat/images')
+        page.locator('.ig-result-details').evaluate('(details) => details.open=true')
+        button = page.locator('#mw-delete')
+        button.click()
+        playwright.expect(button).to_have_text('Delete this image?')
+        assert not deleted and not page.locator('#danger-confirmation').is_visible()
+        page.locator(f'.mw-thumb[data-id="{original["id"]}"]').click()
+        playwright.expect(button).to_have_text('Delete image')
+        button.click(); page.keyboard.press('Escape')
+        playwright.expect(button).to_have_text('Delete image')
+        assert not deleted
+        button.click(); button.click()
+        playwright.expect(page.locator(f'.mw-thumb[data-id="{original["id"]}"]')).to_have_count(0)
+        assert deleted == [original['id']]
+        assert store.asset(owner, added['id']) is not None
+        page.locator('[data-mw-tool=reference]').click()
+        page.locator('#mw-library').click()
+        remove_reference = page.locator('#mw-dialog [data-confirm-two]')
+        remove_reference.click()
+        assert store.asset(owner, reference['id']) is not None
+        assert not page.locator('#danger-confirmation').is_visible()
+        remove_reference.click()
+        playwright.expect(remove_reference).to_have_count(0)
+        assert store.asset(owner, reference['id']) is None
+        browser.close()
+
+
+@pytest.mark.parametrize('width', [1440, 390, 320])
+def test_canvas_library_selection_zip_and_partial_delete_preserve_remaining_images(canvas, tmp_path, width):
+    server, wire, users, _ = canvas
+    store = wire.front.state.mirrorwall.store
+    owner = users.by_name('jordan').identity
+    rows = [store.listing(owner, kind='output')[0],
+            store.save(owner, picture(color='red'), kind='output', metadata={'seed': 43}),
+            store.save(owner, picture(color='green'), kind='output', metadata={'seed': 44})]
+    refuse = [True]
+    def capture(route, path):
+        if refuse[0] and route.request.method == 'DELETE' and path.endswith('/'+rows[1]['id']):
+            route.fulfill(status=409,content_type='application/json',body='{"error":{"message":"This image is used by an unfinished job."}}')
+            return True
+        return False
+    with playwright.sync_playwright() as driver:
+        browser, page = browser_context(driver, server, capture=capture)
+        page.set_viewport_size({'width': width, 'height': 1100})
+        page.goto('http://console.test/chat/images')
+        page.locator('[data-mw-view=library]').click()
+        playwright.expect(page.locator('[data-select-image]')).to_have_count(3)
+        page.locator('#mw-select-all').click()
+        playwright.expect(page.locator('#mw-selected-count')).to_have_text('3 selected')
+        page.locator('#mw-clear-selection').click()
+        playwright.expect(page.locator('#mw-delete-selected')).to_be_disabled()
+        boxes = [page.locator(f'[data-select-image][data-id="{row["id"]}"]') for row in rows[:2]]
+        for box in boxes: box.check()
+        with page.expect_response(lambda response: response.url.endswith('/mirrorwall-api/state')):
+            pass
+        for box in boxes: playwright.expect(box).to_be_checked()
+        with page.expect_download() as downloading:
+            page.locator('#mw-download-selected').click()
+        target = tmp_path/'images.zip'; downloading.value.save_as(target)
+        with zipfile.ZipFile(target) as archive:
+            assert set(archive.namelist()) == {row['id']+'.png' for row in rows[:2]}
+            for row in rows[:2]:
+                assert archive.read(row['id']+'.png') == store.content(owner, row['id'])
+        button = page.locator('#mw-delete-selected')
+        button.click()
+        assert store.asset(owner, rows[0]['id']) is not None
+        boxes[0].uncheck()
+        playwright.expect(button).to_have_text('Delete selected')
+        boxes[0].check()
+        button.click(); button.click()
+        playwright.expect(page.locator('#mw-message')).to_contain_text('1 deleted; 1 could not be deleted')
+        playwright.expect(page.locator('#mw-selected-count')).to_have_text('1 selected')
+        playwright.expect(boxes[1]).to_be_checked()
+        assert store.asset(owner, rows[0]['id']) is None
+        assert store.asset(owner, rows[1]['id']) is not None
+        assert store.asset(owner, rows[2]['id']) is not None
+        assert not page.locator('#danger-confirmation').is_visible()
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        refuse[0] = False
+        page.locator('#mw-select-all').click()
+        playwright.expect(page.locator('#mw-selected-count')).to_have_text('2 selected')
+        button.click(); button.click()
+        playwright.expect(page.locator('[data-select-image]')).to_have_count(0)
+        playwright.expect(page.locator('#mw-library-empty')).to_be_visible()
+        playwright.expect(page.locator('#mw-download-selected')).to_be_disabled()
+        playwright.expect(button).to_be_disabled()
+        assert store.listing(owner, kind='output') == []
         browser.close()
 
 

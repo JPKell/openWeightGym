@@ -1,9 +1,9 @@
 {% extends "frame.html" %}
 {% from "parts.html" import page_header, card, section_title, alert %}
 {% from "navigation_parts.html" import pills, pill_button %}
-{% from "generation_design_parts.html" import settings, sweep, templates, prompt, viewer, tool_catalogue %}
+{% from "generation_design_parts.html" import settings, sweep, templates, prompt, viewer, tool_catalogue, library_actions %}
 {% block title %}Image generation · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/generation.css?v=1"><link rel="stylesheet" href="/mirrorwall-static/canvas.css?v=1"><script src="/mirrorwall-static/image-profiles.js?v=2" defer></script><script src="/mirrorwall-static/images.js?v=8" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/generation.css?v=1"><link rel="stylesheet" href="/mirrorwall-static/canvas.css?v=2"><script src="/mirrorwall-static/image-profiles.js?v=2" defer></script><script src="/mirrorwall-static/images.js?v=9" defer></script>{% endblock %}
 {% block main %}
 <div id="mirrorwall" class="ig-canvas" data-mode="studio" data-layout="canvas" data-view="generate" data-sweep="false">
 {% call page_header('Image generation') %}<button type="button" id="mw-toolkit" class="btn btn-outline-secondary btn-sm">Toolkit</button><button type="button" id="mw-model-guide" class="btn btn-outline-secondary btn-sm">Model guide</button><button type="button" id="mw-save-preset" class="btn btn-outline-secondary btn-sm">Save workflow</button><a class="btn btn-outline-secondary btn-sm" href="/models/images/workflows">Workflows</a>{% endcall %}
@@ -30,7 +30,7 @@
 </div>
 {% endcall %}
 <aside class="ig-settings-panel" aria-label="Settings inspector">{{ settings(image_samplers,image_schedulers,live=true) }}</aside>
-<section class="ig-history" aria-label="Private image library"><div class="d-flex flex-wrap justify-content-between gap-2 mb-3">{{ section_title('Your images',wrapper_class='mb-0') }}<label for="mw-library-filter" class="visually-hidden">Filter your images</label><select id="mw-library-filter" class="form-select form-select-sm w-auto"><option value="all">All images</option><option value="favorites">Session favorites</option></select></div><div id="mw-thumbnails" class="ig-thumbnails" role="listbox" aria-label="Generated images"></div><p id="mw-library-empty" class="small text-secondary" hidden>No images match this view.</p><button id="mw-older" class="btn btn-link btn-sm" type="button" hidden>Load older images</button></section>
+<section class="ig-history" aria-label="Private image library"><div class="d-flex flex-wrap justify-content-between gap-2 mb-3">{{ section_title('Your images',wrapper_class='mb-0') }}<label for="mw-library-filter" class="visually-hidden">Filter your images</label><select id="mw-library-filter" class="form-select form-select-sm w-auto"><option value="all">All images</option><option value="favorites">Session favorites</option></select></div>{{ library_actions() }}<div id="mw-thumbnails" class="ig-thumbnails" role="list" aria-label="Generated images"></div><p id="mw-library-empty" class="small text-secondary" hidden>No images match this view.</p><button id="mw-older" class="btn btn-link btn-sm" type="button" hidden>Load older images</button></section>
 <section class="ig-queue" aria-label="Generation queue">{% call card('Run queue') %}<div id="mw-jobs" class="d-grid gap-3"></div><p id="mw-queue-empty" class="small text-secondary mb-0">Your next run will appear here.</p><div id="mw-live" class="ig-live mt-3" hidden><img id="mw-live-image" alt="Current generation preview"><span id="mw-live-info" class="small text-secondary"></span></div>{% endcall %}</section>
 <section id="mw-sweep-panel" class="ig-sweep-panel" hidden>{{ sweep(live=true) }}</section>
 </div>

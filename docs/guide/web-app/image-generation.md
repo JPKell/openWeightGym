@@ -26,6 +26,18 @@ Create or edit images using a permitted image model and workflow.
 
 **MOSS-Image Base / SFT** offers CFG, negative prompts and text layout controls. For its required components and starting settings, see [MOSS-Image setup](/docs/model-guides/image-models#moss-image).
 
+## Library downloads and deletion
+
+Tick the checkboxes on image thumbnails to select several images, or use **Select all shown**.
+**Download selected** saves one ZIP containing the original images (up to 200 images and 256 MiB
+per archive). Selection survives library refreshes; changing the library filter clears it.
+
+**Delete image**, saved-reference **Delete**, and **Delete selected** require two clicks on the
+same button. The first click asks for confirmation; the second deletes. Escape, a changed selection,
+or ten seconds without confirmation cancels it. Deletion remains limited to your own images and
+refuses images used by unfinished jobs. If some selected images cannot be deleted, they stay selected
+and the error reports how many succeeded.
+
 ## Resize and add detail {#resize}
 
 Choose **Resize & add detail**, select an uploaded or saved source and choose the final size. This needs an exclusive SDXL source-image workflow. Enlargement requires the configured AI upscaler; its failure stops the job. The original source remains available. Review changed fine details before using the new image.
