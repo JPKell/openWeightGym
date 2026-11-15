@@ -9,7 +9,7 @@
 {{ page_header('Civitai', actions=source_navigation('civitai')) }}
 {% call alert('danger', role='alert', attrs={'id': 'mw-message', 'hidden': ''}) %}{% endcall %}
 {% call alert('success', role='status', attrs={'id': 'mw-success', 'hidden': ''}) %}{% endcall %}
-{% call search_surface('Discover image models', 'Explore checkpoints, LoRAs and upscalers. Find the right base model, then choose a verified file.') %}
+{% call search_surface('Discover image and video models', 'Explore checkpoints, LoRAs and upscalers. Find the right base model, then choose a verified file.') %}
 <form id="mw-search" class="row g-2">
   <div class="col-12 col-sm"><label for="mw-q" class="visually-hidden">Search Civitai</label><input id="mw-q" class="form-control" placeholder="Search models or styles" required maxlength="200"></div>
   <div class="col-12 col-sm-auto"><button class="btn btn-primary w-100">Search</button></div>
@@ -20,7 +20,7 @@
 {% call card('Refine discovery') %}
 <div class="discovery-filters">
 <div><label for="mw-type" class="form-label">Model type</label><select id="mw-type" class="form-select"><option value="">All types</option>{% for kind in ['Checkpoint', 'LORA', 'LoCon', 'TextualInversion', 'VAE', 'Controlnet', 'Upscaler', 'Embedding', 'Other'] %}<option>{{ kind }}</option>{% endfor %}</select></div>
-<div><label for="mw-base" class="form-label">Base model</label><select id="mw-base" class="form-select"><option value="">All base models</option>{% for base in ['SD 1.5', 'SD 2.1', 'SDXL 1.0', 'Pony', 'Illustrious', 'Flux.1 D', 'Flux.1 S', 'SD 3.5', 'Other'] %}<option>{{ base }}</option>{% endfor %}</select></div>
+<div><label for="mw-base" class="form-label">Base model</label><select id="mw-base" class="form-select"><option value="">All base models</option>{% for family, bases in civitai_base_model_groups %}<optgroup label="{{ family }}">{% for base in bases %}<option value="{{ base }}">{{ base }}</option>{% endfor %}</optgroup>{% endfor %}<option value="Other">Other</option></select></div>
 <div><label for="mw-format" class="form-label">File format</label><select id="mw-format" class="form-select"><option value="">All supported formats</option><option value=".gguf">GGUF</option><option value=".safetensors">Safetensors</option><option value=".pth">PTH upscaler</option></select><p class="form-hint mb-0">Applies when choosing files.</p></div>
 <div class="discovery-filter-note border-top pt-3 mt-2">
 <p class="small mb-2"><a href="/account/workspace#civitai-previews">My preview preferences</a></p>

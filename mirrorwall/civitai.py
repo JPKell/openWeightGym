@@ -12,6 +12,22 @@ from loadcoach import hub
 
 BASE='https://civitai.com'
 
+# Exact provider base-model names, not local runtime profile identifiers:
+# https://github.com/civitai/civitai/blob/main/packages/civitai-shared/src/basemodel.constants.ts
+BASE_MODEL_GROUPS = (
+    ('Stable Diffusion', ('SD 1.5', 'SD 2.1', 'SDXL 1.0', 'Pony', 'Illustrious', 'SD 3.5')),
+    ('Flux', ('Flux.1 D', 'Flux.1 S', 'Flux.1 Krea', 'Flux.1 Kontext', 'Flux.2 D',
+              'Flux.2 Klein 4B', 'Flux.2 Klein 4B-base', 'Flux.2 Klein 9B', 'Flux.2 Klein 9B-base',
+              'Flux.3', 'Flux.3 Klein', 'Flux.3 Klein-base')),
+    ('MOSS', ('MOSS Image',)),
+    ('Wan Video', ('Wan Video', 'Wan Video 1.3B t2v', 'Wan Video 14B t2v',
+                   'Wan Video 14B i2v 480p', 'Wan Video 14B i2v 720p',
+                   'Wan Video 2.2 I2V-A14B', 'Wan Video 2.2 T2V-A14B', 'Wan Video 2.2 TI2V-5B',
+                   'Wan Video 2.5 T2V', 'Wan Video 2.5 I2V', 'Wan Video 2.7', 'Wan Video 3.0')),
+    ('Other video models', ('MiniMax H3', 'Hunyuan Video', 'Mochi', 'CogVideoX',
+                            'LTXV', 'LTXV2', 'LTXV 2.3', 'LTXV 2.5', 'SVD', 'SVD XT', 'Flux 3 Video')),
+)
+
 
 async def get(http,path,token='',**params):
     """Never put the private token in a URL or expose provider response bodies."""

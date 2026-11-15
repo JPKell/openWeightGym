@@ -16,7 +16,13 @@ Use an account with [model management](/docs/system/abilities#ability-manage-mod
 
 1. Open **Hugging Face**, search models or enter `owner/name`, then select the required file or quantization. Split weights are selected as complete sets.
 2. Choose an available storage destination and start the offered download action. Review the download queue's state and errors.
-3. For image sources, **Civitai** offers its supported model/version search. Install a downloaded file through the relevant model editor after the transfer completes.
+3. For image and video sources, **Civitai** offers its supported model/version search. Install a downloaded file through the relevant model editor after the transfer completes.
+
+## Civitai filters
+
+Use **Base model** to narrow searches by family. Choices include Wan video variants, MiniMax H3, MOSS Image and the Flux Dev, Schnell, Krea, Kontext and Klein variants. Video families also include Hunyuan Video, Mochi, CogVideoX and LTXV. Changing the base model starts a fresh provider search; **All base models** clears that restriction. **Model type** filters checkpoints, LoRAs and other asset types; **File format** applies when choosing a file.
+
+These choices filter downloads. Runtime compatibility is checked separately when configuring a model or workflow.
 
 ## Civitai previews
 

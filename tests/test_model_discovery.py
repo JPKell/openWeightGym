@@ -237,7 +237,7 @@ def test_civitai_bounded_pages_filters_errors_and_download(desk, tmp_path, width
             else:
                 start, count = (25, 2) if 'cursor' in params else (0, 25)
                 value = {'found': [{'name': f'Landscape model {i} · v1', 'repository': f'civitai/{i+1}',
-                    'kind': 'Checkpoint', 'base_model': 'SDXL 1.0', 'url': f'https://civitai.com/models/{i+1}',
+                    'kind': 'Checkpoint', 'base_model': params.get('base', ['SDXL 1.0'])[0], 'url': f'https://civitai.com/models/{i+1}',
                     'trigger_words': ['landscape']} for i in range(start, start + count)],
                     'next_cursor': 'provider-next' if start == 0 else ''}
         route.fulfill(content_type='application/json', body=json.dumps(value)); return True
@@ -263,6 +263,16 @@ def test_civitai_bounded_pages_filters_errors_and_download(desk, tmp_path, width
         page.get_by_role('link', name='Previous', exact=True).click()
         playwright.expect(page.locator('#mw-found article')).to_have_count(1)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        for base in ('Wan Video 2.2 I2V-A14B', 'MiniMax H3', 'MOSS Image',
+                     'Flux.1 Kontext', 'Flux.2 Klein 9B-base', 'Flux.3 Klein'):
+            page.locator('#mw-base').select_option(base)
+            playwright.expect(page.locator('#mw-found article')).to_have_count(12)
+            playwright.expect(page.locator('#mw-found [data-model-meta]').first).to_contain_text(base)
+            assert requests[-1]['base'] == [base]
+            assert 'cursor' not in requests[-1]
+            assert page.get_by_role('link', name='Previous', exact=True).is_hidden()
+        page.locator('#mw-base').select_option('')
+        playwright.expect(page.locator('#mw-found [data-model-meta]').first).to_contain_text('SDXL 1.0')
         fail = True
         page.get_by_role('button', name='Search', exact=True).click()
         playwright.expect(page.locator('#mw-message')).to_contain_text('Provider unavailable')
