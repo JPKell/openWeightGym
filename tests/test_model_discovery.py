@@ -237,7 +237,7 @@ def test_civitai_bounded_pages_filters_errors_and_download(desk, tmp_path, width
             else:
                 start, count = (25, 2) if 'cursor' in params else (0, 25)
                 value = {'found': [{'name': f'Landscape model {i} · v1', 'repository': f'civitai/{i+1}',
-                    'kind': 'Checkpoint', 'base_model': params.get('base', ['SDXL 1.0'])[0], 'url': f'https://civitai.com/models/{i+1}',
+                    'kind': params.get('kind', ['Checkpoint'])[0], 'base_model': params.get('base', ['SDXL 1.0'])[0], 'url': f'https://civitai.com/models/{i+1}',
                     'trigger_words': ['landscape']} for i in range(start, start + count)],
                     'next_cursor': 'provider-next' if start == 0 else ''}
         route.fulfill(content_type='application/json', body=json.dumps(value)); return True
@@ -273,6 +273,17 @@ def test_civitai_bounded_pages_filters_errors_and_download(desk, tmp_path, width
             assert page.get_by_role('link', name='Previous', exact=True).is_hidden()
         page.locator('#mw-base').select_option('')
         playwright.expect(page.locator('#mw-found [data-model-meta]').first).to_contain_text('SDXL 1.0')
+        page.locator('#mw-base').select_option('Wan Video 2.2 I2V-A14B')
+        for kind in ('MotionModule', 'TextEncoder', 'UNet', 'VAE', 'CLIPVision', 'DoRA'):
+            page.locator('#mw-type').select_option(kind)
+            playwright.expect(page.locator('#mw-found [data-model-meta]').first).to_contain_text(kind+' · Wan Video 2.2 I2V-A14B')
+            assert requests[-1]['kind'] == [kind]
+            assert requests[-1]['base'] == ['Wan Video 2.2 I2V-A14B']
+            assert 'cursor' not in requests[-1]
+            assert page.get_by_role('link', name='Previous', exact=True).is_hidden()
+        page.locator('#mw-type').select_option('')
+        page.locator('#mw-base').select_option('')
+        playwright.expect(page.locator('#mw-found [data-model-meta]').first).to_have_text('Checkpoint · SDXL 1.0')
         fail = True
         page.get_by_role('button', name='Search', exact=True).click()
         playwright.expect(page.locator('#mw-message')).to_contain_text('Provider unavailable')

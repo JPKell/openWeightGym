@@ -20,7 +20,9 @@ Use an account with [model management](/docs/system/abilities#ability-manage-mod
 
 ## Civitai filters
 
-Use **Base model** to narrow searches by family. Choices include Wan video variants, MiniMax H3, MOSS Image and the Flux Dev, Schnell, Krea, Kontext and Klein variants. Video families also include Hunyuan Video, Mochi, CogVideoX and LTXV. Changing the base model starts a fresh provider search; **All base models** clears that restriction. **Model type** filters checkpoints, LoRAs and other asset types; **File format** applies when choosing a file.
+Use **Base model** to narrow searches by family. Choices include Wan video variants, MiniMax H3, MOSS Image and the Flux Dev, Schnell, Krea, Kontext and Klein variants. Video families also include Hunyuan Video, Mochi, CogVideoX and LTXV. Changing the base model starts a fresh provider search; **All base models** clears that restriction.
+
+**Model type** covers Civitai's image and video asset types, including checkpoints, diffusion weights (UNet), motion modules, text encoders, VAEs, CLIP/CLIP vision, LoRA/LoCon/DoRA adapters and ControlNet. Combine a component type with a video base model to find its parts, or use **All types** to include every category. **File format** applies when choosing a file.
 
 These choices filter downloads. Runtime compatibility is checked separately when configuring a model or workflow.
 

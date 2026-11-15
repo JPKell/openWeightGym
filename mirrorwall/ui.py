@@ -6,7 +6,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from loadcoach import observability as observation
-from mirrorwall.civitai import BASE_MODEL_GROUPS
+from mirrorwall.civitai import BASE_MODEL_GROUPS, MODEL_TYPE_CHOICES
 from mirrorwall.front import Front
 from mirrorwall.model import check_name, SAMPLERS, SCHEDULERS
 
@@ -135,7 +135,8 @@ def routes(for_people, page, ask, model_api):
         """Render image and video source discovery for model administrators."""
         if 'manage-models' not in person.can:
             return page(request,'refused.html',person,status=403,why='Model management is required.')
-        return page(request,'mirrorwall_discovery.html',person,civitai_base_model_groups=BASE_MODEL_GROUPS)
+        return page(request,'mirrorwall_discovery.html',person,civitai_base_model_groups=BASE_MODEL_GROUPS,
+                    civitai_model_type_choices=MODEL_TYPE_CHOICES)
 
     async def discovery(request,person):
         """Search or download Civitai versions through the existing artifact authority."""

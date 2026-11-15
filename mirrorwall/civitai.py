@@ -12,6 +12,20 @@ from loadcoach import hub
 
 BASE='https://civitai.com'
 
+# Provider ModelType values, with readable labels for component searches:
+# https://github.com/civitai/civitai/blob/main/packages/civitai-db-schema/src/enums.ts
+MODEL_TYPE_CHOICES = (
+    ('Checkpoint', 'Checkpoint'), ('UNet', 'Diffusion weights (UNet)'), ('VAE', 'VAE'),
+    ('TextEncoder', 'Text encoder'), ('CLIP', 'CLIP'), ('CLIPVision', 'CLIP vision'),
+    ('VisionLanguage', 'Vision-language model'), ('MotionModule', 'Motion module'),
+    ('LORA', 'LoRA'), ('LoCon', 'LoCon'), ('DoRA', 'DoRA'), ('Controlnet', 'ControlNet'),
+    ('Upscaler', 'Upscaler'), ('TextualInversion', 'Textual inversion / embedding'),
+    ('Hypernetwork', 'Hypernetwork'), ('AestheticGradient', 'Aesthetic gradient'),
+    ('Poses', 'Poses'), ('Detection', 'Detection'), ('Wildcards', 'Wildcards'),
+    ('Workflows', 'Workflow'), ('ComfyWorkflows', 'ComfyUI workflow'), ('LLM', 'LLM'),
+    ('Other', 'Other'),
+)
+
 # Exact provider base-model names, not local runtime profile identifiers:
 # https://github.com/civitai/civitai/blob/main/packages/civitai-shared/src/basemodel.constants.ts
 BASE_MODEL_GROUPS = (
