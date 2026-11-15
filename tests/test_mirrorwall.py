@@ -141,7 +141,8 @@ def test_adult_previews_require_global_permission_and_each_users_opt_in(desk,mon
     assert captured==[False]*len(searches)
     assert api.post(setting,headers=jordan,json={'image_adult_previews':'true'}).status_code==400
     assert api.post(setting,headers=jordan,json={'image_adult_previews':True}).status_code==200
-    assert 'id="mw-adult"' in browser.get('/civitai').text
+    assert 'id="mw-adult"' not in browser.get('/civitai').text
+    assert 'id="mw-adult"' in browser.get('/account/workspace').text
     # Global permission alone does not opt anyone in, even through a forged query.
     assert api.get(searches[0],headers=jordan).status_code==200 and captured[-1] is False
     assert browser.post('/mirrorwall-api/preferences',json={'adult_previews':True}).json()['adult_previews'] is True
@@ -186,6 +187,49 @@ def test_browser_pages_assets_and_mutations_require_current_identity_and_origin(
     assert browser.delete('/mirrorwall-api/assets/'+identifier).status_code == 404
     sign_in(browser, 'jordan')
     assert browser.delete('/mirrorwall-api/assets/'+identifier).json()['deleted']
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_civitai_preview_choice_is_saved_in_user_workspace(desk, monkeypatch, width):
+    from test_console_browser import browser_context, playwright
+    server, switch, _ = desk
+    policy = [True]
+    monkeypatch.setattr(switch.front.state.mirrorwall, 'adult_previews_allowed', lambda: policy[0])
+    sign_in(server, 'jordan')
+    assert server.post('/account/preferences/images', headers={'origin': 'https://other.test'}, data={'mw-adult': 'on'}).status_code == 403
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.set_viewport_size({'width': width, 'height': 1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto('http://console.test/civitai')
+        assert page.get_by_label('Enable adult previews', exact=True).count() == 0
+        page.get_by_role('link', name='My preview preferences', exact=True).click()
+        adult = page.get_by_label('Enable adult previews', exact=True)
+        playwright.expect(adult).not_to_be_checked()
+        adult.check()
+        page.get_by_role('button', name='Save preview preferences', exact=True).click()
+        playwright.expect(adult).to_be_checked()
+        assert server.get('/mirrorwall-api/preferences').json()['adult_previews'] is True
+        assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+        policy[0] = False
+        page.goto('http://console.test/account/workspace')
+        assert adult.count() == 0
+        playwright.expect(page.get_by_text('Adult previews are disabled in system settings.', exact=True)).to_be_visible()
+        refused = server.post('/account/preferences/images', data={'mw-adult': 'on'})
+        assert refused.status_code == 400 and 'Adult previews are disabled' in refused.text
+        policy[0] = True
+        page.goto('http://console.test/account/workspace')
+        playwright.expect(adult).to_be_checked()
+        adult.uncheck()
+        page.get_by_role('button', name='Save preview preferences', exact=True).click()
+        playwright.expect(adult).not_to_be_checked()
+        assert server.get('/mirrorwall-api/preferences').json()['adult_previews'] is False
+        assert not errors, errors
+        browser.close()
+    sign_in(server, 'pat')
+    assert 'id="mw-adult"' not in server.get('/account/workspace').text
+    assert server.post('/account/preferences/images', data={'mw-adult': 'on'}).status_code == 403
 
 
 def test_sweeps_expand_to_bounded_sequential_image_lines():

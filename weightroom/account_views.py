@@ -71,6 +71,9 @@ def routes(for_people, page, ask, typed, go, platform, workflows, *, notificatio
             stored = person.me.get('choices', {}).get('start_page', '/status')
             if stored not in {path for path, _ in context['destinations']}:
                 context['destinations'].append((stored, stored + ' · currently unavailable'))
+            if platform().path_enabled('/civitai') and 'manage-models' in person.can:
+                preferences = await ask('GET', '/mirrorwall/preferences', person.key)
+                context['image_preferences'] = preferences.json() if preferences.is_success else {}
         elif section == 'privacy':
             if notifications is not None:
                 from weightroom.notification_views import context as notification_context
@@ -107,6 +110,17 @@ def routes(for_people, page, ask, typed, go, platform, workflows, *, notificatio
         if answer.status_code != 200:
             return await render(request, person, section, answer.json()['error']['message'], True)
         return go('/account/' + ('privacy' if section=='notifications' else section) + '?said=Preferences+saved.')
+
+    async def save_images(request, person):
+        """Save the caller's Civitai preview opt-in through the existing image policy API."""
+        if not platform().path_enabled('/civitai') or 'manage-models' not in person.can:
+            return Response('Civitai settings are unavailable to your account.', status_code=403)
+        form = await typed(request)
+        answer = await ask('POST', '/mirrorwall/preferences', person.key,
+                           json={'adult_previews': 'mw-adult' in form})
+        if not answer.is_success:
+            return await render(request, person, 'workspace', answer.json()['error']['message'], True)
+        return go('/account/workspace?said=Preview+preferences+saved.#civitai-previews')
 
     async def end_session(request, person):
         """Revoke the selected owned sign-in or all other sign-ins through the account API."""
@@ -153,6 +167,7 @@ def routes(for_people, page, ask, typed, go, platform, workflows, *, notificatio
             return await render(request,person,'privacy',said,failed)
         extra = notification_routes('/account/notifications',for_people,typed,go,notifications,notify_render,notification_note,personal=True)
     return extra + [Route('/account/' + section, for_people(render)) for section in ('keys', 'workspace', 'privacy')] + [
+        Route('/account/preferences/images', for_people(save_images), methods=['POST']),
         Route('/account/preferences/{section}', for_people(save), methods=['POST']),
         Route('/account/sessions/{identifier}/remove', for_people(end_session), methods=['POST']),
         Route('/account/sessions/end-others', for_people(end_session), methods=['POST']),

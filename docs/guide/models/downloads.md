@@ -18,6 +18,10 @@ Use an account with [model management](/docs/system/abilities#ability-manage-mod
 2. Choose an available storage destination and start the offered download action. Review the download queue's state and errors.
 3. For image sources, **Civitai** offers its supported model/version search. Install a downloaded file through the relevant model editor after the transfer completes.
 
+## Civitai previews
+
+Open **My account → Workspace → Civitai previews**, select **Enable adult previews**, then **Save preview preferences**. This choice applies only to your account and is available when you can use Civitai and the administrator permits adult previews. Existing choices are retained. Search Civitai again after saving to refresh previews.
+
 ## Limits and troubleshooting
 
 Downloads require the platform download switch; Civitai also requires image generation. Provider credentials belong to the destination node and can be managed under **Settings → Downloads**. Current concurrency limits apply to new transfer admission; active transfers finish when a limit is lowered. Downloads do not directly populate the active model cache.

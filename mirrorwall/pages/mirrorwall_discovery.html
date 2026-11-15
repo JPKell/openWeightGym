@@ -4,7 +4,7 @@
 {% from "discovery_parts.html" import source_navigation, search_surface, empty_state, download_queue %}
 {% from "icons.html" import icon %}
 {% block title %}Civitai · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/discovery.css?v=1"><script src="/mirrorwall-static/discovery.js?v=6" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/discovery.css?v=1"><script src="/mirrorwall-static/discovery.js?v=7" defer></script>{% endblock %}
 {% block main %}
 {{ page_header('Civitai', actions=source_navigation('civitai')) }}
 {% call alert('danger', role='alert', attrs={'id': 'mw-message', 'hidden': ''}) %}{% endcall %}
@@ -23,7 +23,7 @@
 <div><label for="mw-base" class="form-label">Base model</label><select id="mw-base" class="form-select"><option value="">All base models</option>{% for base in ['SD 1.5', 'SD 2.1', 'SDXL 1.0', 'Pony', 'Illustrious', 'Flux.1 D', 'Flux.1 S', 'SD 3.5', 'Other'] %}<option>{{ base }}</option>{% endfor %}</select></div>
 <div><label for="mw-format" class="form-label">File format</label><select id="mw-format" class="form-select"><option value="">All supported formats</option><option value=".gguf">GGUF</option><option value=".safetensors">Safetensors</option><option value=".pth">PTH upscaler</option></select><p class="form-hint mb-0">Applies when choosing files.</p></div>
 <div class="discovery-filter-note border-top pt-3 mt-2">
-{% if adult_previews_allowed %}<label id="mw-adult-control" class="form-check-label"><input id="mw-adult" type="checkbox" class="form-check-input me-2"{% if adult_previews %} checked{% endif %}>Enable adult previews</label>{% else %}<p class="text-secondary small mb-2">Safe previews enabled</p>{% endif %}
+<p class="small mb-2"><a href="/account/workspace#civitai-previews">My preview preferences</a></p>
 {% if 'manage-settings' in person.can %}<a class="small" href="/settings/image">Image preview settings</a>{% endif %}
 </div>
 </div>

@@ -21,7 +21,7 @@ Use the account menu to change your own preferences and security choices.
 | **API keys** | Manage application credentials in the [API keys guide](/docs/web-app/api-keys). |
 | **Appearance** | Preview **Color theme** and **Light or dark**, then **Save theme**. **Use default** resumes inheritance. Display/accessibility settings follow the account; theme choices belong to this account in this browser. |
 | **Audio** | Save personal playback and audio workspace choices. |
-| **Workspace** | Choose **Open after sign-in**, **Default chat model or role** and **Time zone**. Existing chats keep their selected model. |
+| **Workspace** | Choose **Open after sign-in**, **Default chat model or role** and **Time zone**. Existing chats keep their selected model. For Civitai preview controls, see [Downloads](/docs/model-guides/downloads#civitai-previews). |
 | **Alerts & privacy** | Choose personal notices and optional delivery; inspect **My delivery status**, **Recent notices** and **Data & access**. |
 | **Logs** | Review your own account activity and usage. |
 

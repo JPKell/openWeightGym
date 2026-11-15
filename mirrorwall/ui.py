@@ -134,11 +134,7 @@ def routes(for_people, page, ask, model_api):
         """Render image source discovery for model administrators."""
         if 'manage-models' not in person.can:
             return page(request,'refused.html',person,status=403,why='Model management is required.')
-        preferences=await ask('GET','/mirrorwall/preferences',person.key)
-        value=preferences.json() if preferences.is_success else {}
-        return page(request,'mirrorwall_discovery.html',person,
-                    adult_previews_allowed=value.get('adult_previews_allowed',False),
-                    adult_previews=value.get('adult_previews',False))
+        return page(request,'mirrorwall_discovery.html',person)
 
     async def discovery(request,person):
         """Search or download Civitai versions through the existing artifact authority."""

@@ -36,21 +36,6 @@
     $('empty').querySelector('[data-empty-title]').textContent = title;
     $('empty').querySelector('[data-empty-description]').textContent = description;
   }
-  async function refreshPreferences() {
-    const value = await api('/mirrorwall-api/preferences');
-    if ($('adult')) {
-      $('adult-control').hidden = !value.adult_previews_allowed;
-      $('adult').checked = Boolean(value.adult_previews);
-    }
-  }
-  if ($('adult')) $('adult').onchange = safe(async () => {
-    ++revision; pages = []; current = 0; busy = false; controls();
-    $('found').replaceChildren(); $('paging').hidden = true;
-    empty('Preview preference changed', 'Search again to refresh model previews.');
-    try { await api('/mirrorwall-api/preferences', {adult_previews: $('adult').checked}); }
-    finally { await refreshPreferences(); }
-    $('status').textContent = 'Preview preference saved. Search to refresh results.';
-  });
   function renderResults() {
     const page = pages[current], rows = page?.rows || [];
     $('found').replaceChildren(); $('empty').hidden = Boolean(rows.length);
@@ -117,8 +102,6 @@
     busy = true; controls(); $('status').textContent = 'Searching Civitai…';
     if (reset) { $('found').replaceChildren(); $('paging').hidden = true; empty('Searching Civitai…', 'Finding model versions that match your search.'); }
     try {
-      await refreshPreferences();
-      if (ticket !== revision) return;
       const params = new URLSearchParams({q: query, paged: '1', cursor, kind: $('type').value, base: $('base').value});
       const value = await api('/mirrorwall-discovery?' + params);
       if (ticket !== revision) return;
@@ -162,5 +145,5 @@
     event.preventDefault(); query = $('q').value.trim(); if (!query) return;
     await load('', true);
   });
-  controls(); refreshPreferences().catch(error => message(error.message));
+  controls();
 })();
