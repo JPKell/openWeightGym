@@ -16,7 +16,7 @@ Use an account with [model management](/docs/system/abilities#ability-manage-mod
 
 1. Open **Models**. Choose a compute-node filter and model type, then search or sort the catalogue.
 2. Expand a row to inspect its node copies. Select a name or node chip to open its configuration or media studio.
-3. Open **Add a model**, select destination nodes and the source file, then review engine, projector and context before adding it.
+3. Open **Add model**, select destination nodes and the source file, then review engine, projector and context before selecting **Add model** below the fields. Image, video and audio setup use the same model-name field and action layout, with runtime-specific file and hardware controls.
 
 ## Limits and troubleshooting
 

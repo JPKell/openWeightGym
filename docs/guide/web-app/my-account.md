@@ -34,3 +34,5 @@ Docs **Ask** keeps unanswered question text anonymously for documentation improv
 ## Related
 
 [API keys](/docs/web-app/api-keys) · [Find your way](/docs/getting-started/navigation)
+
+[Shared form controls and confirmations](/docs/getting-started/navigation#forms-and-confirmations)

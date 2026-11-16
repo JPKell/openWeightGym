@@ -1,5 +1,5 @@
 {% extends 'frame.html' %}
-{% from 'parts.html' import page_header, said_box, swaps, card, section_title, more, alert, confirm_two %}
+{% from 'parts.html' import form_actions, page_header, said_box, swaps, card, section_title, more, alert, confirm_two %}
 {% from 'navigation_parts.html' import pills %}
 {% from 'role_parts.html' import request_path, role_link, candidate %}
 {% block title %}Roles · openWeightGym{% endblock %}
@@ -11,11 +11,11 @@
 {% if publication_warning %}{% call alert('warning', tag='p') %}{{ publication_warning }}{% endcall %}{% endif %}
 {{ request_path(role.name if role else 'your role') }}
 
-{% call card('Create a role', not names or (failed and not role), id='create-role') %}
+{% call card('Create role', not names or (failed and not role), id='create-role') %}
 <form method="post" action="/roles" class="row g-3 align-items-end" data-role-create-form data-hold-refresh {{ swaps() }}>
   <div class="col-md-5"><label class="form-label" for="new-role">New role</label><input id="new-role" name="name" class="form-control" autocapitalize="none" spellcheck="false" placeholder="such as chat" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}" autocomplete="off" data-name-validation="Letters, digits, dots, underscores, and dashes. Start with a letter or digit."></div>
   <div class="col-md-5"><label class="form-label" for="first-model">Its first model</label><select id="first-model" name="model" class="form-select" required>{% for model in models %}<option>{{ model }}</option>{% endfor %}</select><input type="hidden" name="weight" value="1"></div>
-  <div class="col-md-2"><button class="btn btn-primary" name="do" value="add"{% if not models %} disabled{% endif %}>Create role</button></div>
+  {% call form_actions() %}<button class="btn btn-primary" name="do" value="add"{% if not models %} disabled{% endif %}>Create role</button>{% endcall %}
   {% if not models %}<p class="small text-secondary mb-0">Add a model on the Models page before creating a role.</p>{% endif %}
 </form>
 {% endcall %}
@@ -92,7 +92,7 @@
 {% endcall %}
 <template id="role-candidate-template">{{ candidate() }}</template>
 {% else %}
-{% call card('No roles yet.') %}<p class="text-secondary mb-0">Create a role above to give your app one name for a group of models. Until there is one, a model is asked for by its own name.</p>{% endcall %}
+{% call card('No roles yet.') %}<p class="text-secondary mb-0">Create role above to give your app one name for a group of models. Until there is one, a model is asked for by its own name.</p>{% endcall %}
 {% endif %}
 </div>
 {% endblock %}

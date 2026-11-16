@@ -25,3 +25,5 @@ A new group allows nothing until configured. Individual account overrides can fu
 ## Related
 
 [Users](/docs/administration/users) · [Settings reference](/docs/operations/settings-reference)
+
+[Shared form controls and confirmations](/docs/getting-started/navigation#forms-and-confirmations)

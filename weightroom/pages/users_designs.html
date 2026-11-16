@@ -1,5 +1,5 @@
 {# Standalone sample proposals for Settings › Users and an account's page. users.html is the production page (01). #}
-{% from 'parts.html' import page_header, card, section_title, alert, more, empty_row %}
+{% from 'parts.html' import form_actions, confirmation_status, page_header, card, section_title, alert, more, empty_row %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% from 'user_design_parts.html' import user_choice, user_row, group_lane, user_card, ability_category, ability_row, key_row, model_choice, secret_row %}
 {% from 'user_parts.html' import account_avatar, account_status %}
@@ -54,7 +54,7 @@
         <div class="col-sm-6"><label for="add-group" class="form-label">Group</label><select id="add-group" name="group" class="form-select" required><option value="" disabled selected>Choose a group</option></select><small class="form-hint" id="add-group-hint">Choose deliberately: none is given by default.</small></div>
         <div class="col-sm-6"><label class="form-check"><input type="checkbox" class="form-check-input" id="add-password" name="password" checked><span class="form-check-label">Make a temporary password</span></label></div>
         <div class="col-sm-6"><label class="form-check"><input type="checkbox" class="form-check-input" id="add-key" name="key"><span class="form-check-label">Make an API key</span></label><label for="add-key-label" class="visually-hidden">A label for the key</label><input id="add-key-label" name="label" class="form-control form-control-sm mt-2" maxlength="60" placeholder="Key label: what it is for"></div>
-        <div class="col-12 d-flex flex-wrap align-items-center gap-2"><button class="btn btn-primary" id="add-submit">Add account</button><span class="small text-secondary">Each secret is shown once, straight afterwards.</span><span class="small text-danger" id="add-error" role="alert"></span></div>
+        {% call form_actions() %}<button class="btn btn-primary" id="add-submit">Add account</button><span class="small text-secondary">Each secret is shown once, straight afterwards.</span><span class="small text-danger" id="add-error" role="alert"></span>{% endcall %}
       </div>
     </form>
   {% endcall %}
@@ -164,9 +164,9 @@
 <dialog id="action-dialog" aria-labelledby="action-title">
   {% call card('Confirm', header_id='action-title', class_='mb-0') %}
   <form method="dialog" id="action-form"><p id="action-impact"></p>
-    <label class="form-check" id="action-check-row"><input type="checkbox" class="form-check-input" id="action-check"><span class="form-check-label" id="action-check-label"></span></label>
+    <p class="small text-secondary" id="action-note"></p>
     <p class="small text-secondary">Preview only · this changes sample data in this browser.</p>
-    <div class="d-flex justify-content-end gap-2"><button class="btn btn-outline-secondary btn-sm" value="cancel" formnovalidate>Cancel</button><button class="btn btn-danger btn-sm" id="confirm-action" value="confirm">Confirm</button></div></form>
+    <div class="d-flex justify-content-end gap-2"><button class="btn btn-outline-secondary btn-sm" value="cancel" formnovalidate>Cancel</button><button class="btn btn-danger btn-sm" id="confirm-action" data-confirm-two value="confirm">Confirm</button></div></form>
   {% endcall %}
 </dialog>
 <template id="user-choice-template">{{ user_choice() }}</template>
@@ -181,6 +181,7 @@
 <template id="secret-row-template">{{ secret_row() }}</template>
 <script id="sample-data" type="application/json">{{ sample|tojson }}</script>
 <noscript>{% call alert('warning') %}Enable JavaScript to try these interactive design previews.{% endcall %}</noscript>
+{{ confirmation_status() }}
 <script>{{ javascript|safe }}</script>
 </body>
 </html>

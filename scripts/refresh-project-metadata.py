@@ -36,6 +36,7 @@ def refresh(root: Path, run=subprocess.run):
 
 
 def main():
+    """Refresh editable package discovery for the installed checkout or report a repair error."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', required=True, type=Path)
     args = parser.parse_args()

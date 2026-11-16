@@ -30,7 +30,7 @@ def test_engine_model_selection_and_pending_node_settings_in_browser(desk, tmp_p
         page.locator("#file").select_option(index=1)
         page.locator("#ctx").fill("2048")
         assert page.locator("#cards, #allow-split").count() == 0
-        page.get_by_role("button", name="Add", exact=True).click()
+        page.get_by_role("button", name="Add model", exact=True).click()
         page.get_by_role('link',name='Open model',exact=True).click(timeout=10000)
         # The ASGI bridge follows redirects internally; HTTP tests cover their URLs.
         playwright.expect(page.get_by_role("heading", name="engine-example", exact=True)).to_be_visible()
@@ -39,11 +39,11 @@ def test_engine_model_selection_and_pending_node_settings_in_browser(desk, tmp_p
         assert library.stored("engine-example")["engine"] == "llama_cpp"
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.goto("http://console.test/compute-nodes?machine=compute")
-        settings = page.get_by_role("region", name="llama.cpp engine settings")
-        settings.get_by_label("Executable on compute", exact=True).fill("/pending/server")
-        settings.get_by_role("button", name="Save", exact=True).click()
+        settings = page.get_by_role("form", name="llama.cpp engine settings")
+        settings.get_by_label("Executable", exact=True).fill("/pending/server")
+        settings.get_by_role("button", name="Save llama.cpp", exact=True).click()
         playwright.expect(settings).to_contain_text("Changes pending restart")
-        playwright.expect(settings.get_by_label("Executable on compute", exact=True)).to_have_value("/pending/server")
+        playwright.expect(settings.get_by_label("Executable", exact=True)).to_have_value("/pending/server")
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.screenshot(path=str(tmp_path / f"engine-node-{width}.png"), full_page=True)
         assert not errors
@@ -78,15 +78,16 @@ def test_strata_selection_renders_its_own_fields_and_node_settings(desk, tmp_pat
         page.locator("#name").fill("strata-example")
         page.locator("#file").select_option(index=1)
         page.locator("#tokenizer").fill(str(tokenizer))
-        page.get_by_role("button", name="Add", exact=True).click()
+        page.get_by_role("button", name="Add model", exact=True).click()
         page.get_by_role('link',name='Open model',exact=True).click(timeout=10000)
         playwright.expect(page.get_by_role("heading", name="strata-example", exact=True)).to_be_visible()
         playwright.expect(page.locator("#tokenizer")).to_have_value(str(tokenizer))
         assert page.locator("#placement-cpu").count() == page.locator("#allow-split").count() == 0
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.goto("http://console.test/compute-nodes?machine=compute")
-        strata = page.get_by_role("region", name="Strata engine settings")
-        playwright.expect(strata.get_by_label("Pinned Strata source directory on compute", exact=True)).to_be_visible()
+        strata = page.get_by_role("form", name="Strata engine settings")
+        strata.locator("[data-runtime-options] > summary").click()
+        playwright.expect(strata.get_by_label("Pinned Strata source directory", exact=True)).to_be_visible()
         playwright.expect(strata.get_by_label("Allow Strata hybrid host RAM use", exact=True)).not_to_be_checked()
         assert not errors
         browser.close()

@@ -231,8 +231,8 @@ def test_api_cpu_set_request_renew_release_and_ordinary_hold_are_independent(nat
         owner = add_user(caller, 'owner', 'admin')
         stranger = add_user(caller, 'other', 'admin', by=owner)
         plain = add_user(caller, 'plain', 'plain', by=owner)
-        post = lambda **body: caller.post('/loadcoach/loadouts', headers=owner, json=body)
-        assert caller.get('/loadcoach/loadouts', headers=plain).status_code == 403
+        post = lambda **body: caller.post('/turnstile/machines/compute/control/loadouts', headers=owner, json=body)
+        assert caller.get('/turnstile/machines/compute/control/loadouts', headers=plain).status_code == 403
         assert post(action='save', name='Work', models=[chosen(), chosen('two', 1024)]).status_code == 200
         preview = post(action='preview', name='Work').json()
         assert preview['can_request'], preview
@@ -240,7 +240,7 @@ def test_api_cpu_set_request_renew_release_and_ordinary_hold_are_independent(nat
         ready = post(action='request', name='Work', token=preview['token'], acknowledge=True)
         assert ready.status_code == 200 and ready.json()['seconds'] == 600, ready.text
         lease = ready.json()['lease']
-        assert caller.post('/loadcoach/loadouts', headers=stranger, json={'action': 'release', 'lease': lease}).status_code == 404
+        assert caller.post('/turnstile/machines/compute/control/loadouts', headers=stranger, json={'action': 'release', 'lease': lease}).status_code == 404
         assert post(action='renew', lease=lease).status_code == 200
         assert caller.post('/loadcoach/hold', headers=owner, json={'model': 'one', 'seconds': 600}).status_code == 400
         assert caller.post('/loadcoach/hold', headers=owner, json={'model': 'one', 'seconds': 30}).status_code == 200
@@ -280,9 +280,9 @@ def test_requesting_a_set_preserves_the_callers_model_access(native):  # noqa: F
         owner = add_user(caller, 'owner', 'admin')
         restricted = add_user(caller, 'restricted', 'narrow', by=owner)
         body = {'action': 'save', 'name': 'Work', 'models': [chosen(), chosen('two')]}
-        assert caller.post('/loadcoach/loadouts', headers=owner, json=body).status_code == 200
-        preview = caller.post('/loadcoach/loadouts', headers=restricted, json={'action': 'preview', 'name': 'Work'}).json()
-        refused = caller.post('/loadcoach/loadouts', headers=restricted,
+        assert caller.post('/turnstile/machines/compute/control/loadouts', headers=owner, json=body).status_code == 200
+        preview = caller.post('/turnstile/machines/compute/control/loadouts', headers=restricted, json={'action': 'preview', 'name': 'Work'}).json()
+        refused = caller.post('/turnstile/machines/compute/control/loadouts', headers=restricted,
             json={'action': 'request', 'name': 'Work', 'token': preview['token'], 'acknowledge': True})
         assert refused.status_code == 403
         assert all(one['flags']['ctx-size'] == 2048 for one in caller.get('/loadcoach/models', headers=owner).json()['models'])

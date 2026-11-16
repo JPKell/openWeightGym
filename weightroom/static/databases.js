@@ -32,7 +32,7 @@
     async function busy(button, work) {
       button.disabled = true;
       try { await work(); } catch (error) { notice(error); $('cleanup-result').textContent = error.message; }
-      finally { button.disabled = button.id === 'apply-maintenance' ? !review || !$('confirm-maintenance').checked : false; }
+      finally { button.disabled = button.id === 'apply-maintenance' ? !review : false; }
     }
     function render() {
       const activeRow = document.activeElement?.closest('[data-database]');
@@ -160,11 +160,15 @@
       const stores = scope === 'all' ? snapshot.databases : selected();
       $('export-summary').textContent = `${stores.length} database${stores.length === 1 ? '' : 's'} · ZIP with SQL dumps and manifest`;
       $('export-list').replaceChildren(...stores.map(db => { const li = document.createElement('li'); li.textContent = `${window.suiteNodeLabel(db.machine)} / ${db.name} · ${db.engine}${db.error ? ' · unavailable' : ''}`; return li; }));
-      $('partial-option').hidden = scope !== 'all' || snapshot.complete; $('allow-partial').checked = false;
-      $('download-export').disabled = scope === 'all' && !snapshot.complete;
+      document.dispatchEvent(new CustomEvent('suite:actionsChanged'));
+      const partial = scope === 'all' && !snapshot.complete;
+      $('partial-option').hidden = !partial;
+      $('download-export').toggleAttribute('data-confirm-two', partial);
+      $('download-export').dataset.confirmText = 'Export reachable databases only?';
+      $('download-export').textContent = partial ? 'Start partial export' : 'Start export job';
       $('export-dialog').showModal();
     }
-    function invalidateReview() { review = null; $('maintenance-preview').hidden = true; $('confirm-maintenance').checked = false; $('apply-maintenance').disabled = true; }
+    function invalidateReview() { review = null; $('maintenance-preview').hidden = true; document.dispatchEvent(new CustomEvent('suite:actionsChanged')); $('apply-maintenance').disabled = true; }
     function openCleanup(keys) {
       cleanupKeys = keys; invalidateReview(); $('cleanup-result').textContent = '';
       $('cleanup-scope').textContent = snapshot.databases.filter(db => keys.includes(db.key)).map(db => `${window.suiteNodeLabel(db.machine)} / ${db.name}`).join(' · ');
@@ -184,6 +188,7 @@
       }));
       $('maintenance-notice').textContent = `Review expires ${when(result.expires_at)}. A verified recovery copy is created before changing each store. Purge keeps the cutoff date; disk reclamation is separate. Completed batches cannot be cancelled or rolled back automatically.`;
       $('maintenance-preview').hidden = false;
+      $('apply-maintenance').disabled = false;
     }
     async function refreshJobs() {
       if (jobsBusy || !root.isConnected) return;
@@ -227,17 +232,15 @@
     $('refresh').onclick = refresh;
     $('export-all').onclick = root.querySelector('[data-all-export]').onclick = () => openExport('all');
     $('export-selected').onclick = () => openExport([...state.selected]);
-    $('allow-partial').onchange = () => { $('download-export').disabled = !$('allow-partial').checked; };
-    $('download-export').onclick = () => busy($('download-export'), async () => { const job = await request(api + 'export', {scope: exportScope, partial: $('allow-partial').checked}); $('export-dialog').close(); notice(`Export job ${job.id} started.`); await refreshJobs(); });
+    $('download-export').onclick = () => busy($('download-export'), async () => { const job = await request(api + 'export', {scope: exportScope, partial: $('download-export').hasAttribute('data-confirm-two')}); $('export-dialog').close(); notice(`Export job ${job.id} started.`); await refreshJobs(); });
     $('purge-selected').onclick = $('reclaim-selected').onclick = () => openCleanup([...state.selected]);
     $('cutoff').max = new Date().toISOString().slice(0, 10);
     $('cutoff').value = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
     $('cutoff').oninput = $('reclaim-mode').onchange = invalidateReview;
     $('preview-purge').onclick = () => busy($('preview-purge'), () => preview('purge'));
     $('preview-reclaim').onclick = () => busy($('preview-reclaim'), () => preview('reclaim'));
-    $('confirm-maintenance').onchange = () => { $('apply-maintenance').disabled = !review || !$('confirm-maintenance').checked; };
     $('apply-maintenance').onclick = () => busy($('apply-maintenance'), async () => {
-      if (!review || !$('confirm-maintenance').checked) return;
+      if (!review) return;
       const job = await request(api + 'execute', {review: review.review, confirmed: true}); invalidateReview();
       $('cleanup-result').textContent = `Maintenance job ${job.id} started. Progress and recovery copies appear in Recent operations. Refresh the snapshot after completion.`;
       await refreshJobs();

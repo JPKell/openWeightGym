@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from 'parts.html' import card, said_box, page_header, section_title, more, swaps, confirm_two, alert %}
+{% from 'parts.html' import form_actions, card, said_box, page_header, section_title, more, swaps, confirm_two, alert %}
 {% from 'navigation_parts.html' import pager %}
 {% from 'schedule_parts.html' import overview, choice, state, form_fields, history_row, inventory_footer, behavior_notes %}
 {% block title %}Schedules · openWeightGym{% endblock %}
@@ -27,7 +27,7 @@
 <form method="post" action="{{ '/schedules/' ~ selected.id ~ '/edit' if selected else '/schedules' }}" id="schedule-form" data-schedule-form data-hold-refresh data-can-edit="{{ 'yes' if can_save else 'no' }}" {{ swaps('page-content') }}>
 <fieldset{{ ' disabled' if not can_save }}>
 {{ form_fields(form_spec, selected.name if selected else '', catalogue, definitions, schedule_nodes, selected.model_name if selected else '', timing.next_runs, timing.enabled, timing.timing_error, live=true) }}
-<div class="sc-editor-actions border-top pt-3 mt-4"><button class="btn btn-primary" type="submit">{{ 'Save schedule' if selected else 'Create schedule' }}</button><button class="btn btn-outline-secondary" type="button" data-discard-schedule hidden>Discard</button></div>
+{% call form_actions(class_="sc-editor-actions") %}<button class="btn btn-primary" type="submit">{{ 'Save schedule' if selected else 'Create schedule' }}</button><button class="btn btn-outline-secondary" type="button" data-discard-schedule hidden>Discard</button>{% endcall %}
 </fieldset>
 {% if not selected or not selected.builtin %}<p class="small text-secondary mt-3 mb-0">Saving authorizes this recurring job after sign-out. The owner must remain enabled and retain manage-settings, plus benchmark and model access for reruns.</p>{% endif %}
 </form>

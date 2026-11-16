@@ -29,3 +29,5 @@ Use the full provider base address, including its API prefix where required. A d
 ## Related
 
 [Roles and routing](/docs/model-guides/roles) · [Settings reference](/docs/operations/settings-reference)
+
+[Shared form controls and confirmations](/docs/getting-started/navigation#forms-and-confirmations)

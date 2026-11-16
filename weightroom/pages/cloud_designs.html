@@ -28,7 +28,7 @@
 <p class="ca-footer small text-secondary">Interactive sample data · edits stay in this tab until reload · no real keys, requests or billing changes.</p>
 </div></main>
 <dialog id="settings-dialog" aria-labelledby="editor-title"><div class="d-flex justify-content-between align-items-center gap-3 mb-3"><span class="ca-eyebrow">ACCOUNT SETTINGS</span><button type="button" class="btn btn-outline-secondary btn-sm" id="close-settings">Close</button></div><div id="dialog-editor"></div></dialog>
-<dialog id="add-dialog" aria-labelledby="add-title">{% call card('Add a cloud account',header_id='add-title',class_='mb-0',hint='Use a unique name for every account. Endpoints can be shared.') %}{{ add_form() }}{% endcall %}</dialog>
+<dialog id="add-dialog" aria-labelledby="add-title">{% call card('Add cloud account',header_id='add-title',class_='mb-0',hint='Use a unique name for every account. Endpoints can be shared.') %}{{ add_form() }}{% endcall %}</dialog>
 <div id="editor-parking" hidden>{{ editor() }}</div>
 {{ templates() }}
 <script id="cloud-data" type="application/json">{{ data|tojson }}</script><script>{{ javascript|safe }}</script>

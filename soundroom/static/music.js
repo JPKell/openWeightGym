@@ -768,7 +768,7 @@
     }))]);
   });
   $('delete').addEventListener('click', safe(async () => {
-    if (!await window.suiteConfirmLoss('Delete this audio permanently?')) return;
+    if (!window.suiteConfirmAction($('delete'), 'Delete this audio permanently?')) return;
     await api('assets/' + encodeURIComponent(selected.id), undefined, 'DELETE');
     older = older.filter(row => row.id !== selected.id);
     $('dialog').close();

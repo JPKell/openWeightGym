@@ -18,7 +18,7 @@ def render() -> str:
     return pages.get_template('database_designs.html').render(
         css='\n'.join((static / name).read_text() for name in
                       ('tabler.min.css', 'style.css', 'themes.css', 'database-designs.css')),
-        javascript=(static / 'database-designs.js').read_text(),
+        javascript=(static / 'console.js').read_text() + '\n' + (static / 'database-designs.js').read_text(),
         theme_javascript=(static / 'themes.js').read_text(),
         todo=MarkdownIt().render(todo),
     )

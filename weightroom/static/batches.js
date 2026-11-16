@@ -58,7 +58,7 @@
       return;
     }
     if (source?.id !== 'batches') return;
-    const held = dialog()?.open || source.querySelector('[data-confirm-two][aria-label^="Are you sure?"]') ||
+    const held = dialog()?.open || source.querySelector('[data-confirm-armed]') ||
       source.querySelector('select:focus');
     if (held) { if (type === 'htmx:beforeSwap') detail.shouldSwap = false; else event.preventDefault(); }
     if (type === 'htmx:beforeSwap') scrollLeft = source.querySelector('.table-responsive')?.scrollLeft || 0;

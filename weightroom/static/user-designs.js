@@ -372,15 +372,12 @@
     $('#action-title').textContent = title;
     $('#action-impact').textContent = impact;
     $('#confirm-action').textContent = button;
-    $('#action-check-row').hidden = !check;
-    $('#action-check').checked = false;
-    $('#action-check-label').textContent = check;
-    $('#confirm-action').disabled = Boolean(check);
+    $('#action-note').textContent = check;
+    document.dispatchEvent(new CustomEvent('suite:actionsChanged'));
     $('#action-dialog').returnValue = '';
     $('#action-dialog').showModal();
     return new Promise(resolve => { answer = resolve; });
   }
-  $('#action-check').addEventListener('change', () => { $('#confirm-action').disabled = !$('#action-check').checked; });
   $('#action-dialog').addEventListener('close', () => { answer?.($('#action-dialog').returnValue === 'confirm'); answer = null; });
 
   function showSecrets(user, rows) {

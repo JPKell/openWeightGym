@@ -24,6 +24,18 @@ Use the category menu to reach the pages your account is allowed to use.
 | **My account** | Open the account menu by selecting your name. |
 | **Chat options** / **Main menu** | Switch the smaller-screen chat drawer between conversation controls and navigation. |
 
+## Forms and confirmations
+
+Add/Create forms place their primary action after the fields, with secondary actions and
+save feedback beside it. Model setup shares **Model name**, destination-node controls and
+an **Add model** action; each runtime keeps its own file and hardware options.
+
+Actions that need confirmation use the same button twice: click once to read the prompt,
+then click it again within ten seconds. Enter or Space works too. Escape, editing the form,
+choosing another action, closing a dialog or replacing its content cancels confirmation.
+Checkboxes select items or settings; they no longer arm an action. Keep reviewing the named
+object and scope before confirming. Server permissions and validation still apply.
+
 ## Related
 
 [Chat](/docs/web-app/chat) · [API keys](/docs/web-app/api-keys)

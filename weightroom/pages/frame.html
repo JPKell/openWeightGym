@@ -1,5 +1,5 @@
 {% from "icons.html" import icon %}
-{% from "parts.html" import danger_confirmation, empty_row, alert, settings_workspace %}
+{% from "parts.html" import confirmation_status, empty_row, alert, settings_workspace %}
 <!doctype html>
 <html lang="en" data-theme-defaults="{{ theme_defaults|default({})|tojson|forceescape }}" data-content-limits="{{ content_limits|default({})|tojson|forceescape }}" data-theme-user="{{ person.me.get('identity', person.name) if person else '' }}"{% if person %} data-personal-preferences="{{ person.me.get('choices', {})|tojson|forceescape }}" data-text-size="{{ person.me.get('choices', {}).get('text_size', 'standard') }}" data-motion="{{ person.me.get('choices', {}).get('motion', 'system') }}"{% endif %}>
 <meta charset="utf-8">
@@ -29,7 +29,7 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 <script src="/static/telemetry.js?v=4" defer></script>
 <script src="/static/sort.js?v=6" defer></script>
 <script src="/static/navigation.js?v=5" defer></script>
-<script src="/static/console.js?v=12" defer></script>
+<script src="/static/console.js?v=13" defer></script>
 {% if person %}<script src="/static/personal-notices.js?v=1" defer></script>{% endif %}
 <script src="/static/user-picker.js?v=1" defer></script>
 {% if person and nav.active in ('/chat', '/chat/tools') %}<script src="/static/chat_sidebar.js?v=3" defer></script>{% endif %}
@@ -125,5 +125,5 @@ catch { document.documentElement.dataset.sidebar = "closed"; }
 </dialog>
 {% endif %}
 <template id="empty-row-template">{{ empty_row(1) }}</template>
-{{ danger_confirmation() }}
+{{ confirmation_status() }}
 </html>

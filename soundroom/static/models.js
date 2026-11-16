@@ -272,7 +272,7 @@
     SuiteHardware.set('am',selected?.gpus ?? (cardsOf(inventory).length ? 1 : 0),cardsOf(inventory));
     filterFamilies(); familyChanged();
     $('name').readOnly=Boolean(selected);
-    $('heading').textContent=selected?.name || 'Add an audio model';
+    $('heading').textContent=selected?.name || 'Add audio model';
     if (selected) {
       const profile=selected.audiocpp;
       $('file').value=String(choices.findIndex(file=>file.path === selected.flags.model && file.machine === activeNode));

@@ -1,4 +1,4 @@
-{% from "parts.html" import section_title , confirm_loss, alert, empty_row %}
+{% from "parts.html" import section_title , confirm_loss, confirm_two, alert, empty_row %}
 {% call card('Named load-outs', true, id='named-loadouts') %}
 <p class="small text-secondary">Save this selection, then preview the complete change. Applying settings starts no inference. Requesting a set applies its reviewed settings and waits for every member to be ready, with a ten-minute renewable hold. Active work and ordinary holds stay protected.</p>
 {% if loadouts.why %}<p class="text-warning">{{ loadouts.why }}</p>{% else %}
@@ -48,9 +48,9 @@
 {% endfor %}
 {% if review.can_apply %}<form method="post" action="/dry-fit?machine={{ machine|urlencode }}" class="d-flex flex-wrap align-items-center gap-3"><input type="hidden" name="machine" value="{{ machine }}">
   <input type="hidden" name="name" value="{{ review.name }}"><input type="hidden" name="token" value="{{ review.token }}"><input type="hidden" name="undo" value="{{ '1' if review.undo else '0' }}">
-  <div class="form-check"><input id="loadout-acknowledge" name="acknowledge" class="form-check-input" type="checkbox" required><label class="form-check-label" for="loadout-acknowledge">I reviewed these changes, warnings and pending qualification.</label></div>
-  <button class="btn btn-outline-primary" name="do" value="apply">{{ 'Restore settings' if review.undo else 'Apply settings' }}</button>
-  {% if review.can_request %}<button class="btn btn-primary" name="do" value="request">Apply, load and hold 10 minutes</button>{% endif %}
+  <p class="form-hint w-100 mb-0">Review the changes and warnings, then click the action twice to confirm.</p>
+  <button class="btn btn-outline-primary" name="do" value="apply" {{ confirm_two(fields={"acknowledge":"yes"}) }}>{{ 'Restore settings' if review.undo else 'Apply settings' }}</button>
+  {% if review.can_request %}<button class="btn btn-primary" name="do" value="request" {{ confirm_two(fields={"acknowledge":"yes"}) }}>Apply, load and hold 10 minutes</button>{% endif %}
 </form>{% endif %}
 <p class="small text-secondary mt-2 mb-0">A rejected joint fit changes no settings. A native load failure leaves the complete applied configuration with guarded Undo, releases this attempt's set holds, and may leave successfully loaded models idle for ordinary use.</p>
 {% endcall %}

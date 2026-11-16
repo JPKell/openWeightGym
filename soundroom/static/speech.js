@@ -143,7 +143,7 @@
           $('sr-dialog').showModal();
         });
         const remove = element('button', 'Delete', 'btn btn-outline-danger btn-sm');
-        remove.addEventListener('click', safe(async () => { if (!await window.suiteConfirmLoss('Delete the saved voice ' + voice.name + '?')) return; await api('voices/' + encodeURIComponent(voice.id), undefined, 'DELETE'); await refresh(); window.soundroomRefresh?.(); }));
+        remove.addEventListener('click', safe(async () => { if (!window.suiteConfirmAction(remove, 'Delete the saved voice ' + voice.name + '?')) return; await api('voices/' + encodeURIComponent(voice.id), undefined, 'DELETE'); await refresh(); window.soundroomRefresh?.(); }));
         top.append(share, remove);
       }
       if (voice.transcript) item.append(element('p', '“' + voice.transcript + '”', 'small mb-0 mt-1'));

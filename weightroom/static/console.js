@@ -5,71 +5,85 @@ window.suiteNodeLabel = name => name === 'front' ? 'Control node' : name;
   const submitters = new WeakMap();
   const working = new Map();
   const formRequests = new WeakMap();
-  const dialog = document.getElementById('danger-confirmation');
-  let pending = null;
-  /** Ask for explicit data-loss acknowledgement without adding fields to the original POST. */
-  window.suiteConfirmLoss = description => new Promise(resolve => {
-    if (!dialog || pending) { resolve(false); return; }
-    pending = resolve;
-    const check = dialog.querySelector('[data-loss-confirm]');
-    check.checked = false;
-    check.labels[0].textContent = 'Yes, ' + description.charAt(0).toLowerCase() + description.slice(1);
-    dialog.returnValue = '';
-    dialog.showModal();
-    dialog.querySelector('[value="cancel"]').focus();
-  });
-  dialog?.addEventListener('close', () => {
-    const resolve = pending;
-    pending = null;
-    resolve?.(dialog.returnValue === 'confirm' && dialog.querySelector('[data-loss-confirm]').checked);
-  });
-  /** Restore a button after cancellation, editing or its confirmation timeout. */
+  const announcement = document.getElementById('action-confirmation-status');
+  /** Restore armed controls after cancellation, editing, navigation or their timeout. */
   function reset(form) {
     for (const [button, saved] of armed) {
       if (form && button.form !== form) continue;
-      button.innerHTML = saved.html;
+      if (button instanceof HTMLInputElement) button.value = saved.value;
+      else button.innerHTML = saved.html;
       if (saved.label === null) button.removeAttribute('aria-label');
       else button.setAttribute('aria-label', saved.label);
+      button.removeAttribute('data-confirm-armed');
       clearTimeout(saved.timer);
       armed.delete(button);
     }
+    if (!armed.size && announcement) announcement.textContent = '';
   }
+  /** One shared two-click contract for forms, dialogs and JavaScript actions. */
+  function confirmAction(button, description = '') {
+    if (!button?.isConnected || button.disabled) return false;
+    if (armed.has(button)) { reset(); return true; }
+    reset();
+    const saved = {html: button.innerHTML, value: button.value, label: button.getAttribute('aria-label')};
+    const label = saved.label || (button instanceof HTMLInputElement ? button.value : button.textContent.trim());
+    const text = description || button.dataset.confirmText || 'Are you sure?';
+    saved.timer = setTimeout(() => reset(), 10000);
+    armed.set(button, saved);
+    button.dataset.confirmArmed = 'true';
+    button.setAttribute('aria-label', text + ' ' + label);
+    if (button instanceof HTMLInputElement) button.value = text;
+    else button.textContent = text;
+    if (announcement) announcement.textContent = text + ' Activate the same button again to confirm, or press Escape to cancel.';
+    return false;
+  }
+  window.suiteConfirmAction = confirmAction;
+  /** Add server acknowledgement fields only for the confirmed submission. */
+  function acknowledge(form, button) {
+    const fields = JSON.parse(button.dataset.confirmFields || form.dataset.confirmFields || '{}');
+    const inputs = Object.entries(fields).map(([name, value]) => {
+      const input = Object.assign(document.createElement('input'), {type: 'hidden', name, value});
+      form.append(input); return input;
+    });
+    // Native and HTMX serialization both finish during the submit event.
+    setTimeout(() => inputs.forEach(input => input.remove()), 0);
+  }
+  document.addEventListener('click', event => {
+    const button = event.target.closest('button, input[type="submit"], input[type="button"]');
+    if (![...armed.keys()].includes(button)) reset();
+    if (!button?.matches('[data-confirm-two]') || (button.type === 'submit' && button.form)) return;
+    if (!confirmAction(button)) { event.preventDefault(); event.stopImmediatePropagation(); }
+  }, true);
   document.addEventListener('submit', event => {
     const form = event.target;
     if (working.has(form)) { event.preventDefault(); event.stopImmediatePropagation(); return; }
-    if (!(form instanceof HTMLFormElement) || form.matches('[data-confirm-dialog]')) return;
+    if (!(form instanceof HTMLFormElement)) return;
     const button = event.submitter;
-    if (!button) return;
-    submitters.set(form, button);
-    if (button.matches('[data-confirm-loss]') && !button.dataset.lossApproved &&
-        !form.querySelector('input[data-loss-confirm][required]:checked')) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const description = button.getAttribute('aria-label') || button.textContent.trim();
-      window.suiteConfirmLoss(description).then(yes => {
-        if (!yes || !form.isConnected || !button.isConnected) return;
-        button.dataset.lossApproved = 'yes';
-        form.requestSubmit(button);
-        delete button.dataset.lossApproved;
-      });
+    if (!button) {
+      // requestSubmit() without a submitter must not bypass a confirmed form.
+      if (form.matches('[data-confirm-two]') || form.querySelector('[data-confirm-two]')) {
+        event.preventDefault(); event.stopImmediatePropagation();
+      }
       return;
     }
-    if (button.matches('[data-confirm-loss]')) return;
+    submitters.set(form, button);
     if (!button.matches('[data-confirm-two]') && !form.matches('[data-confirm-two]')) return;
-    if (armed.has(button)) { reset(form); return; }
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    reset(form);
-    const saved = {html: button.innerHTML, label: button.getAttribute('aria-label')};
-    armed.set(button, saved);
-    saved.timer = setTimeout(() => reset(form), 10000);
-    const text = button.dataset.confirmText || 'Are you sure?';
-    button.setAttribute('aria-label', text + ' ' + (saved.label || button.textContent.trim()));
-    button.textContent = text;
+    if (confirmAction(button)) { acknowledge(form, button); return; }
+    event.preventDefault(); event.stopImmediatePropagation();
   }, true);
   document.addEventListener('input', event => reset(event.target.closest('form')));
-  document.addEventListener('suite:actionsChanged', event => reset(event.detail.form));
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') reset(); });
+  document.addEventListener('change', event => reset(event.target.closest('form')));
+  document.addEventListener('suite:actionsChanged', event => reset(event.detail?.form));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') reset();
+    if (event.repeat && ['Enter', ' '].includes(event.key) && event.target.closest('[data-confirm-two], [data-confirm-armed]')) {
+      event.preventDefault(); event.stopImmediatePropagation();
+    }
+  }, true);
+  document.addEventListener('close', () => reset(), true);
+  document.addEventListener('htmx:beforeCleanupElement', event => {
+    if ([...armed.keys()].some(button => event.detail.elt.contains(button))) reset();
+  });
   addEventListener('pageshow', () => reset());
   /** Mark a submitted action only after its fields have been serialized. */
   function startWorking(form, button) {
@@ -93,7 +107,7 @@ window.suiteNodeLabel = name => name === 'front' ? 'Control node' : name;
   }
   document.addEventListener('submit', event => {
     const form = event.target;
-    if (!(form instanceof HTMLFormElement) || form.matches('[data-confirm-dialog]') || form.method === 'dialog') return;
+    if (!(form instanceof HTMLFormElement) || form.method === 'dialog') return;
     // Native submission serializes the successful submitter before this timer runs.
     // Custom handlers can cancel the event to own their progress feedback.
     setTimeout(() => { if (!event.defaultPrevented) startWorking(form, event.submitter); }, 0);

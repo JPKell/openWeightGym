@@ -353,7 +353,7 @@
       try { saveDraft(); const spec = specFor(current() || {asset: {id: 'preset'}, settings: defaults}); delete spec.asset_id;
         await send('presets', 'POST', {name: $('#preset-name').value, spec}); await loadPresets(); say('Extraction settings saved.'); } catch (error) { failure(error); }
     });
-    $('#delete-preset').addEventListener('click', async () => { if (!$('#preset').value || !await window.suiteConfirmLoss('Delete this extraction preset.')) return; try { await api('presets/' + $('#preset').value, {method: 'DELETE'}); await loadPresets(); } catch (error) { failure(error); } });
+    $('#delete-preset').addEventListener('click', async () => { if (!$('#preset').value || !window.suiteConfirmAction($('#delete-preset'), 'Delete this extraction preset.')) return; try { await api('presets/' + $('#preset').value, {method: 'DELETE'}); await loadPresets(); } catch (error) { failure(error); } });
     $('#preset').addEventListener('change', () => {
       const preset = presets.find(one => one.id === $('#preset').value); if (!preset) return;
       if (current()) current().settings = draftFrom(preset.spec); else defaults = draftFrom(preset.spec);

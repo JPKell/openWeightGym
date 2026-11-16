@@ -29,3 +29,5 @@ The preview uses saved settings; unsaved changes do not alter it. Actual admissi
 ## Related
 
 [Model catalogue](/docs/model-guides/catalogue) · [Cloud APIs](/docs/model-guides/cloud-apis)
+
+[Shared form controls and confirmations](/docs/getting-started/navigation#forms-and-confirmations)

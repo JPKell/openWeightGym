@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps, page_header, section_title, more, alert, empty_row, confirm_check, confirm_loss, confirm_two %}
+{% from "parts.html" import form_actions, card, said_box, swaps, page_header, section_title, more, alert, empty_row, confirm_loss, confirm_two %}
 {% from "navigation_parts.html" import pills %}
 {% from "deferred.html" import loading %}
 {% from "user_parts.html" import account_choice, account_avatar, account_status, ability_categories, phone_numbers_section %}
@@ -27,7 +27,7 @@
 {{ said_box(said, failed) }}
 
 {% set add_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" data-close-add>Close</button>{% endset %}
-{% call card('Add an account', id='add-account', actions=add_actions, attrs={'data-add-panel': ''} if adding else {'data-add-panel': '', 'hidden': ''}, class_='users-add', hint='For a person, or for a program that is to have a key of its own. What it may do comes from its group, and can be changed on its page afterwards.') %}
+{% call card('Add account', id='add-account', actions=add_actions, attrs={'data-add-panel': ''} if adding else {'data-add-panel': '', 'hidden': ''}, class_='users-add', hint='For a person, or for a program that is to have a key of its own. What it may do comes from its group, and can be changed on its page afterwards.') %}
   <form method="post" action="/users" class="users-add-layout">
     <fieldset class="users-add-kind">
       <legend class="visually-hidden">Kind of account</legend>
@@ -53,7 +53,7 @@
         <div class="form-check"><input id="add-key" name="key" type="checkbox" class="form-check-input" {{ "checked" if form.key is defined }}><label for="add-key" class="form-check-label">An API key <small class="text-secondary">for a program</small></label></div>
         <input name="label" class="form-control form-control-sm mt-2" maxlength="60" value="{{ form.label or '' }}" placeholder="a label for the key: what it is for" aria-label="A label for the key">
       </div>
-      <div class="col-12 d-flex flex-wrap align-items-center gap-2"><button class="btn btn-primary">Add account</button><span class="small text-secondary">Each secret is shown once, straight afterwards.</span></div>
+      {% call form_actions() %}<button class="btn btn-primary">Add account</button><span class="small text-secondary">Each secret is shown once, straight afterwards.</span>{% endcall %}
     </div>
   </form>
 {% endcall %}
@@ -157,7 +157,6 @@
         <legend class="small fw-semibold">Remove the account</legend>
         <p class="form-hint">Its keys stop working at once. Its history stays in the log under its name.</p>
         <form method="post" action="{{ here }}" class="d-flex flex-wrap align-items-center gap-2">
-          {% set confirmation_label %}Yes, remove {{ user.name }}{% endset %}{{ confirm_check(confirmation_label, "sure") }}
           <button class="btn btn-outline-danger btn-sm" name="do" value="remove" {{ confirm_loss() }}>Remove</button>
         </form>
       </fieldset>

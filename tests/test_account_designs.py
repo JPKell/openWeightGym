@@ -113,11 +113,10 @@ def test_key_secret_scoping_escaping_and_confirmed_removal(preview):
     section(page, 'keys')
     for _ in range(3):
         page.locator('[data-remove-key]').first.click()
-        expect(page.locator('#danger-confirmation [value=confirm]')).to_be_disabled()
+        expect(page.locator('[data-remove-key]').first).to_have_attribute('data-confirm-armed', 'true')
         page.keyboard.press('Escape')
         page.locator('[data-remove-key]').first.click()
-        page.locator('#danger-confirmation-check').check()
-        page.locator('#danger-confirmation [value=confirm]').click()
+        page.locator('[data-remove-key]').first.click()
     expect(page.locator('#keys-empty')).to_be_visible()
 
 
@@ -135,8 +134,7 @@ def test_password_validation_session_confirmation_and_sensitive_drafts(preview):
     page.keyboard.press('Escape')
     expect(page.locator('#other-session')).to_be_visible()
     page.locator('[data-revoke-session]').click()
-    page.locator('#danger-confirmation-check').check()
-    page.locator('#danger-confirmation [value=confirm]').click()
+    page.locator('[data-revoke-session]').click()
     expect(page.locator('#session-empty')).to_be_visible()
     expect(page.locator('[data-session-count]')).to_have_text('1')
 

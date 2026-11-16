@@ -1,18 +1,21 @@
+{% from 'parts.html' import form_section, form_actions %}
+{% from 'models_parts.html' import model_name %}
 {# Add a model: the nodes it goes to, then its file, engine and name, then the engine's own fields.
    static/model-files.js checks the choices as they change; turnstile checks them all again. #}
 <div id="model-editor">
-  <div class="row g-3 align-items-end">
+  {% call form_section("Model and files", "Selected nodes") %}
     <input type="hidden" name="prepare_files" value="yes">
     <input type="hidden" name="shown_node" value="{{ shown_node }}">
     <div class="col-md-8"><label for="file" class="form-label">File</label>{% include 'model_file_picker.html' %}</div>
     <div class="col-md-4"><label for="model-engine" class="form-label">Engine</label><select id="model-engine" name="engine" class="form-select" data-engine-picker>{% for engine in engine_choices if engine.enabled %}<option value="{{ engine.id }}" data-nodes="{{ engine.nodes|join(' ') }}"{{ ' selected' if engine.id == selected_engine }}>{{ engine.label }}</option>{% endfor %}</select></div>
-    <div class="col-md-6 col-lg-3"><label for="name" class="form-label">Name</label><input id="name" name="name" class="form-control" value="{{ form.name or '' }}" autocapitalize="none" spellcheck="false" required></div>
+    <div class="col-md-6 col-lg-3">{{ model_name(value=form.name or '') }}</div>
     {% if engine_schema %}{% include engine_schema.create_template %}{% else %}<p class="text-danger">No enabled engine is available on these nodes.</p>{% endif %}
     {# What the chosen file says of its context, and why Add cannot be used yet. Kept under the fields, so that it moves none of them. #}
     <div class="col-12">
       <div class="form-text" data-trained-note>{% if form.trained %}Trained context: {{ "{:,}".format(form.trained|int) }} tokens.{% endif %}</div>
       <div id="model-add-reason" data-file-warning class="form-text text-warning" role="status" hidden></div>
     </div>
-  </div>
+  {% endcall %}
+  {% call form_actions() %}<button class="btn btn-primary" aria-describedby="model-add-reason" data-file-submit{{ ' disabled' if not file_choices or not engine_schema }}>Add model</button>{% endcall %}
 <script type="application/json" id="model-file-inventory">{{ file_nodes|tojson }}</script>
 </div>

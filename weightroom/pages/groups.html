@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, swaps, page_header, section_title, more, alert, confirm_check, confirm_loss %}
+{% from "parts.html" import form_actions, card, said_box, swaps, page_header, section_title, more, alert, confirm_loss %}
 {% from "navigation_parts.html" import pills %}
 {% from "deferred.html" import loading %}
 {% from "user_parts.html" import group_choice, account_avatar, account_status, ability_categories %}
@@ -27,14 +27,14 @@
 
 {% if "manage-groups" in person.can %}
 {% set add_actions %}<button type="button" class="btn btn-outline-secondary btn-sm" data-close-add>Close</button>{% endset %}
-{% call card('Add a group', id='add-group', actions=add_actions, attrs={'data-add-panel': ''} if adding else {'data-add-panel': '', 'hidden': ''}, class_='users-add', hint='A new group allows nothing. Tick what its members may do on its page, which comes next, and save.') %}
+{% call card('Add group', id='add-group', actions=add_actions, attrs={'data-add-panel': ''} if adding else {'data-add-panel': '', 'hidden': ''}, class_='users-add', hint='A new group allows nothing. Tick what its members may do on its page, which comes next, and save.') %}
   <form method="post" action="/groups" class="row g-3 align-items-end">
     <div class="col-sm-8 col-lg-6">
       <label for="add-group-name" class="form-label">Name</label>
       <input id="add-group-name" name="name" class="form-control" value="{{ form.name or '' }}" maxlength="64" autocapitalize="none" spellcheck="false" autocomplete="off" required aria-describedby="add-group-name-hint">
       <small class="form-hint" id="add-group-name-hint">Lowercase letters, digits, dot, dash or underscore.</small>
     </div>
-    <div class="col-sm-4 col-lg-6 pb-sm-4"><button class="btn btn-primary">Add group</button></div>
+    {% call form_actions() %}<button class="btn btn-primary">Add group</button>{% endcall %}
   </form>
 {% endcall %}
 {% endif %}
@@ -107,7 +107,6 @@
         <p class="form-hint">Nobody is in it, so nothing else changes.</p>
         {% endif %}
         <form method="post" action="{{ here }}" class="d-flex flex-wrap align-items-center gap-2">
-          {% set confirmation_label %}Yes, remove {{ group.name }}{% endset %}{{ confirm_check(confirmation_label, "sure") }}
           <button class="btn btn-outline-danger btn-sm" name="do" value="remove" {{ confirm_loss() }}>Remove</button>
         </form>
       </fieldset>
@@ -212,7 +211,7 @@
     </form>
   </div>
 {% else %}
-  {% call card('No groups yet') %}<p class="text-secondary mb-0">Add a group to give accounts permissions and limits together.</p>{% endcall %}
+  {% call card('No groups yet') %}<p class="text-secondary mb-0">Add group to give accounts permissions and limits together.</p>{% endcall %}
 {% endif %}
 </section>
 </div>

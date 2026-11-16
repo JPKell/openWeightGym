@@ -1,5 +1,5 @@
 {# Standalone proposals; no requests to live databases or production mutation controls. #}
-{% from 'parts.html' import page_header, card, empty_row, alert, confirm_check %}
+{% from 'parts.html' import confirmation_status, page_header, card, empty_row, alert, confirm_two %}
 {% from 'database_parts.html' import table_head, dom_templates %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 <!doctype html>
@@ -81,15 +81,14 @@
 <div id="purge-preview" hidden>
 <div class="table-responsive mb-3"><table class="table table-sm" aria-label="Purge preview"><thead><tr><th>Database / table</th><th class="text-end">Records to delete</th><th>Reason / policy</th></tr></thead><tbody id="purge-rows"></tbody></table></div>
 <p class="small text-secondary" id="purge-impact"></p>
-{{ confirm_check('I reviewed the cutoff and eligible records. Delete them permanently.', 'confirm-purge') }}
-<button type="button" class="btn btn-danger mb-3" id="apply-purge" disabled>Simulate purge</button>
+<button type="button" class="btn btn-danger mb-3" id="apply-purge" {{ confirm_two() }} disabled>Simulate purge</button>
 </div>
 <div class="border-top pt-3 mt-2"><strong class="d-block mb-2">Reclaim disk space</strong><p class="small text-secondary" id="reclaim-impact"></p>
-{{ confirm_check('Allow maintenance locks and the required temporary disk space.', 'confirm-reclaim') }}
-<button type="button" class="btn btn-outline-secondary" id="apply-reclaim" disabled>Simulate disk reclaim</button></div>
+<button type="button" class="btn btn-outline-secondary" id="apply-reclaim" {{ confirm_two() }} disabled>Simulate disk reclaim</button></div>
 </form>
 <div id="cleanup-result" role="status" aria-live="polite" class="small my-3"></div>
 <button class="btn btn-outline-secondary" data-close>Close</button>
 {% endcall %}</dialog>
+{{ confirmation_status() }}
 <script>{{ javascript|safe }}</script>
 </body></html>

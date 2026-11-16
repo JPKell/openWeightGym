@@ -25,3 +25,5 @@ Use [plugin-management access](/docs/system/abilities#ability-front-manage-plugi
 ## Related
 
 [Plugin logs](/docs/monitoring/plugin-logs) · [Chat](/docs/web-app/chat)
+
+[Shared form controls and confirmations](/docs/getting-started/navigation#forms-and-confirmations)

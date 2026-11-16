@@ -1,5 +1,5 @@
 {# Shared preview-only controls; all designs use the same forms and sample rows. #}
-{% from 'parts.html' import card, section_title, alert, empty_row %}
+{% from 'parts.html' import form_actions, card, section_title, alert, empty_row %}
 {% from 'navigation_parts.html' import pill_button %}
 
 {% from 'account_parts.html' import proposed, select_field, toggle, save_actions, api_key_row %}
@@ -36,7 +36,7 @@
 {{ key_row('Research notebook', '02 Nov 2026', 'demo-19b0c4') }}{{ key_row('Local CLI', '21 Oct 2026', 'demo-72a83e') }}
 {% call empty_row(4, attrs={'id':'keys-empty', 'hidden':''}) %}No keys. Create one to connect an application.{% endcall %}
 </tbody></table></div>
-<form id="key-form" class="row g-2 align-items-end mt-2"><div class="col-sm-8"><label for="label" class="form-label">Label for a new key</label><input id="label" name="label" class="form-control" maxlength="60" placeholder="e.g. Research notebook" required></div><div class="col-sm-4"><button class="btn btn-primary" type="submit">Make a key</button></div></form>
+<form id="key-form" class="row g-3 align-items-end mt-2"><div class="col-sm-8"><label for="label" class="form-label">Label for a new key</label><input id="label" name="label" class="form-control" maxlength="60" placeholder="e.g. Research notebook" required></div>{% call form_actions() %}<button class="btn btn-primary" type="submit">Make a key</button>{% endcall %}</form>
 <p class="form-hint mt-3 mb-0">Remove unused keys individually. Rotation means making a replacement before removing the old key.</p>
 {% endmacro %}
 

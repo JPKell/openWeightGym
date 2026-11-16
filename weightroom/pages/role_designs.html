@@ -1,5 +1,5 @@
 {# Standalone proposals. The production Roles page remains roles.html. #}
-{% from 'parts.html' import page_header, card, section_title, alert, more %}
+{% from 'parts.html' import form_actions, page_header, card, section_title, alert, more %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% from 'role_design_parts.html' import role_choice, model_choice, evidence_row %}
 {% from 'role_parts.html' import request_path %}
@@ -136,7 +136,7 @@
       <label for="new-name" class="form-label">Role name</label><input id="new-name" class="form-control" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}" placeholder="e.g. research" spellcheck="false" autocapitalize="none" autocomplete="off">
       <p class="form-hint">Letters, digits, dots, underscores, and dashes. Start with a letter or digit.</p>
       <p id="create-error" class="text-danger small" role="alert"></p>
-      <div class="d-flex gap-2 mt-3"><button class="btn btn-primary">Create role</button><button type="button" id="cancel-create" class="btn btn-outline-secondary">Cancel</button></div>
+      {% call form_actions() %}<button class="btn btn-primary">Create role</button><button type="button" id="cancel-create" class="btn btn-outline-secondary">Cancel</button>{% endcall %}
     </form>
   {% endcall %}
 </dialog>

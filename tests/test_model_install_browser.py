@@ -100,15 +100,16 @@ def test_image_and_audio_add_use_remote_storage_choices(desk,width):
         playwright.expect(page.locator('#mw-diffusion option')).to_have_count(2)
         for slot in ('diffusion','text_encoder','vae','clip_l','clip_g','upscaler'):
             option=page.locator('#mw-'+slot+' option').nth(1)
-            playwright.expect(option).to_have_text('control node · image · model.safetensors')
+            playwright.expect(option).to_contain_text('model.safetensors')
+            playwright.expect(option).to_have_attribute('data-machine', 'front')
             playwright.expect(option).to_have_attribute('value','/store/image/model.safetensors')
             playwright.expect(option).to_have_attribute('title','/store/image/model.safetensors')
-        page.locator('#mw-diffusion').select_option(label='control node · image · model.safetensors')
+        page.locator('#mw-diffusion').select_option('/store/image/model.safetensors')
         page.locator('#mw-name').fill('picture')
         targets=page.locator('#mw-install-targets')
         playwright.expect(targets.locator('input[value=retired]')).to_be_disabled()
         targets.locator('.form-selectgroup-item').filter(has_text='compute').click()
-        page.get_by_role('button',name='Save model',exact=True).click()
+        page.get_by_role('button',name='Add model',exact=True).click()
         playwright.expect(page.locator('#mw-message')).to_contain_text('Choose at least one destination node')
         assert not sent
         targets.locator('.form-selectgroup-item').filter(has_text='compute').click()
@@ -116,7 +117,7 @@ def test_image_and_audio_add_use_remote_storage_choices(desk,width):
         page.locator('#mw-name').fill('bad name')
         dialog=page.locator('#model-dialog')
         dialog.evaluate('el => {el.scrollTop=el.scrollHeight;}')
-        page.get_by_role('button',name='Save model',exact=True).click()
+        page.get_by_role('button',name='Add model',exact=True).click()
         notice=page.locator('#mw-message')
         playwright.expect(notice).to_contain_text('Use 1–128 letters')
         assert notice.evaluate("el => getComputedStyle(el).backgroundColor") == dialog.evaluate("el => getComputedStyle(el).backgroundColor")
@@ -132,7 +133,7 @@ def test_image_and_audio_add_use_remote_storage_choices(desk,width):
         playwright.expect(page.locator('#mw-name')).to_have_value('bad name')
         page.locator('#mw-name').fill('picture')
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
-        page.get_by_role('button',name='Save model',exact=True).click()
+        page.get_by_role('button',name='Add model',exact=True).click()
         page.wait_for_url('**/models?kind=image&install=primary&install=rig')
         assert sent[-1]['source_machine']=='front' and sent[-1]['settings']['flags']['model']=='/store/image/model.safetensors'
         assert sent[-1]['machines']==['compute','rig']

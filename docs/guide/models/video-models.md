@@ -76,3 +76,5 @@ the established `owg update; owg restart` route. See [Installation](/docs/operat
 
 [Video generation](/docs/web-app/video-generation) · [Files](/docs/model-guides/files) ·
 [Video settings](/docs/administration/video-settings)
+
+[Shared form controls and confirmations](/docs/getting-started/navigation#forms-and-confirmations)

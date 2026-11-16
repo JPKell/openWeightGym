@@ -91,7 +91,14 @@ Owner decisions D1–D7, recorded 2026-10-15/16, apply to the approved disposabl
   [parts.html](../weightroom/pages/parts.html), including inert templates for client-created cards.
   User-facing text uses plain words: say what the person can do, give a next step in empty states,
   and avoid metaphors or service names outside administrator diagnostics and source Docs.
-  Use shared confirmation pieces for destructive actions, `timestamp` for recorded instants
+  Use `form_actions` for Add/Create and editor footers; put the primary submitter first,
+  then secondary actions and status. Model names reuse `models_parts.model_name`; keep runtime
+  constraints in its attributes. Use `confirm_two` for confirmed form and JavaScript buttons
+  (`confirm_loss` is an alias). JavaScript handlers that own confirmation call
+  `window.suiteConfirmAction(button, prompt)` instead of also adding `data-confirm-two`.
+  For server acknowledgement fields, pass `fields` to `confirm_two`; those fields are sent only
+  on the second submission. Dispatch `suite:actionsChanged` when code changes an action's scope.
+  Use `timestamp` for recorded instants
   and `count` for whole totals. Preserve browser-local display and UTC recovery values.
   Shared size/spacing tokens live at the top of [style.css](../weightroom/static/style.css):
   forms use 40px controls, toolbars/filters 32px. Run [UI consistency checks](../tests/test_ui_consistency.py)

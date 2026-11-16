@@ -62,8 +62,7 @@ def test_preset_workflow_in_browser(setup_desk, tmp_path, width):
         assert library.stored('second-quant') == other
         page.get_by_role("button", name="Presets", exact=True).click()
         preset.get_by_role("button", name="Delete preset", exact=True).click()
-        page.locator("#danger-confirmation-check").check()
-        page.get_by_role("button", name="Continue", exact=True).click()
+        preset.get_by_role("button", name="Are you sure? Delete preset", exact=True).click()
         playwright.expect(page.get_by_text("Preset deleted.", exact=True)).to_be_visible()
         assert library.presets("example") == []
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")

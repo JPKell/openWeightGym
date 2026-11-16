@@ -1,4 +1,4 @@
-{% from 'parts.html' import card, form_section, credential_input, credential_state, confirm_two %}
+{% from 'parts.html' import form_actions, card, form_section, credential_input, credential_state, confirm_two %}
 {% macro editor(row={}, fields=(), credential=none) %}
 {% set name = row.name|default('') %}
 {% set prefix = 'remote-' ~ (name or 'new') %}
@@ -16,7 +16,7 @@
 {% endif %}</div>
 {% endfor %}
 <div class="col-md-6">{{ credential_input(prefix ~ '-key', 'credential', credential.label, row.credential|default({})) }}<p class="small text-secondary mb-0">Blank keeps the saved key; public servers send no key.</p></div>
-<div class="col-12 d-flex flex-wrap gap-2"><button class="btn btn-primary" name="operation" value="save">{{ 'Save server' if name else 'Add server' }}</button>{% if name %}<button class="btn btn-outline-danger" name="operation" value="remove" {{ confirm_two('Remove this site-managed server? Its saved key is retained.') }}>Remove server</button>{% endif %}</div>
+{% call form_actions() %}<button class="btn btn-primary" name="operation" value="save">{{ 'Save server' if name else 'Add server' }}</button>{% if name %}<button class="btn btn-outline-danger" name="operation" value="remove" {{ confirm_two('Remove this site-managed server? Its saved key is retained.') }}>Remove server</button>{% endif %}{% endcall %}
 </div>
 {% endcall %}
 </form>

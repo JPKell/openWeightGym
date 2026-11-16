@@ -29,3 +29,5 @@ An offline node has unknown capacity. An estimated fit is not a successful load.
 ## Related
 
 [Model configuration](/docs/model-guides/configuration)
+
+[Shared form controls and confirmations](/docs/getting-started/navigation#forms-and-confirmations)

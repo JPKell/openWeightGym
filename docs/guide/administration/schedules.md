@@ -21,3 +21,5 @@ A scheduled occurrence rechecks its owner's current permissions. The built-in co
 ## Related
 
 [Backups and restore](/docs/data/backups) · [Benchmarks](/docs/benchmarks)
+
+[Shared form controls and confirmations](/docs/getting-started/navigation#forms-and-confirmations)

@@ -1,4 +1,4 @@
-{% from 'parts.html' import card, section_title, empty_row, confirm_two, confirm_loss %}
+{% from 'parts.html' import form_actions, card, section_title, empty_row, confirm_two, confirm_loss %}
 {% from 'evaluation_parts.html' import state_badge, request_links %}
 
 {% macro collection_choice(item) %}
@@ -19,7 +19,7 @@
 {% macro collection_create(embedders, levels, form, open=false) %}
 {% call card('New collection', id='new-collection', open=open) %}<form method="post" action="/collections" data-evaluation-draft="new-collection"><input type="hidden" name="do" value="create">
 <div class="row g-3"><div class="col-md-5"><label class="form-label" for="collection-title">Name</label><input class="form-control" id="collection-title" name="title" required maxlength="120" value="{{ form.get('title','') }}"></div><div class="col-md-4"><label class="form-label" for="collection-embedder">Local embedder</label><select class="form-select" id="collection-embedder" name="model" required><option value="">Choose an embedder</option>{% for model in embedders %}<option value="{{ model.id }}"{{ ' selected' if form.get('model')==model.id }}>{{ model.id }}</option>{% endfor %}</select></div><div class="col-md-3"><label class="form-label" for="collection-level">Sensitivity</label><select class="form-select" id="collection-level" name="level">{% for level in levels %}<option{{ ' selected' if form.get('level','normal')==level }}>{{ level }}</option>{% endfor %}</select></div></div>
-<p class="small text-secondary mt-3">Up to five owner-private collections. Sensitivity is fixed. The embedding model identity, settings fingerprint and server build are pinned.</p><button class="btn btn-primary" type="submit">Create collection</button></form>{% endcall %}
+<p class="small text-secondary mt-3">Up to five owner-private collections. Sensitivity is fixed. The embedding model identity, settings fingerprint and server build are pinned.</p>{% call form_actions() %}<button class="btn btn-primary" type="submit">Create collection</button>{% endcall %}</form>{% endcall %}
 {% endmacro %}
 
 {% macro documents_panel(collection, content_limits) %}

@@ -44,7 +44,7 @@ def install_llm(page, origin, name, nodes, filename, context):
     page.locator('#min-context').fill('512')
     page.locator('#ctx').fill(str(context))
     select_nodes(page.locator('input[name=node]'), nodes)
-    page.get_by_role('button', name='Add', exact=True).click()
+    page.get_by_role('button', name='Add model', exact=True).click()
     page.wait_for_url('**/models*', timeout=60000)
     page.goto(origin + '/models')
     for node in nodes:

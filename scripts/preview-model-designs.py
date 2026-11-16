@@ -15,7 +15,7 @@ def render() -> str:
     return pages.get_template('model_designs.html').render(
         css='\n'.join((static / name).read_text() for name in
                       ('tabler.min.css', 'style.css', 'themes.css', 'model-designs.css')),
-        javascript=(static / 'model-designs.js').read_text(),
+        javascript=(static / 'console.js').read_text() + '\n' + (static / 'model-designs.js').read_text(),
         theme_javascript=(static / 'themes.js').read_text(),
     )
 

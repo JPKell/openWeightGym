@@ -29,3 +29,5 @@ Families advertise different music, speech, transcription, translation and diari
 ## Related
 
 [Voice generation](/docs/web-app/speech) · [Transcribe](/docs/web-app/transcribe) · [Music and sounds](/docs/web-app/music-sounds)
+
+[Shared form controls and confirmations](/docs/getting-started/navigation#forms-and-confirmations)

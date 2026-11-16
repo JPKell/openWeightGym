@@ -17,3 +17,15 @@ SQLite is the default, and existing SQLite files are upgraded in place by the sa
 The installer will not switch a populated store to another engine. Moving one is a separate, offline maintenance step: an operator writes an owner-only migration profile under `settings/migrations/`, prepares the empty target and its acceptance checks, and installs the same openWeightGym code on every host. System → DB then previews the profile's target and bindings, and starts it only after that preview.
 
 A migration copies one named store while its services are stopped, checks the copy, and changes only that store's bindings. If the acceptance checks fail, it rolls back to the original store.
+
+## Export and maintenance
+
+**Dump all** reviews every active database, regardless of filters. If a node is unavailable,
+**Start partial export** requires two clicks and records omissions in the manifest. Exports
+contain separate per-database snapshots, not a simultaneous cluster recovery set.
+
+For purge or disk reclaim, choose stores and preview the operation first. Review the counts,
+cutoff, locks and space requirements, then click **Apply reviewed operation** twice.
+Changing the cutoff or reclaim method invalidates the preview. The server rechecks the review
+and creates a verified recovery copy before changing each store; completed work cannot be
+cancelled or rolled back automatically. SQL exports may contain secrets; keep them private.

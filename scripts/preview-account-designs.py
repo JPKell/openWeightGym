@@ -27,7 +27,7 @@ def render():
         css='\n'.join((static / name).read_text() for name in
                       ('tabler.min.css', 'style.css', 'themes.css', 'users.css', 'account-designs.css')),
         theme_javascript=(static / 'themes.js').read_text(),
-        javascript=(static / 'account-designs.js').read_text(),
+        javascript=(static / 'console.js').read_text() + '\n' + (static / 'account-designs.js').read_text(),
     )
 
 

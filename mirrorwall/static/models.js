@@ -136,7 +136,8 @@
     $('runtime').textContent=runtime?.why || 'Optional runtime: install with scripts/install-sdcpp.sh on this compute node. Manual directions are in Docs → Deployment and operations → Installation.';
     $('install-targets').hidden=Boolean(model); $('target-note').hidden=Boolean(model);
     $('model-form').querySelector('section[aria-label="Hardware"] .scope-badge').textContent=model?'This node':'Selected nodes';
-    $('heading').textContent = model ? model.name : 'Add image model';
+    $('heading').textContent = model ? model.name : 'Add ' + (video ? 'video' : 'image') + ' model';
+    $('model-form').querySelector('[type=submit]').textContent = model ? 'Save model' : 'Add model';
     const choose = (name, value) => {
       if (!value) { $(name).value=''; return; }
       let option=[...$(name).options].find(option=>option.value===value && option.dataset.machine===activeNode());

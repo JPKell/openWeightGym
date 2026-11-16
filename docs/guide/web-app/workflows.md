@@ -13,3 +13,5 @@ covers = ["/workflows"]
 ## Retries and changes {#workflows-retry}
 
 Accepted research remains available after a failed draft. Resume / retry creates another attempt. Existing runs keep their selected models and prompt versions; create a new workflow to change its configuration. Deleting a workflow also removes its saved outputs.
+
+[Shared form controls and confirmations](/docs/getting-started/navigation#forms-and-confirmations)

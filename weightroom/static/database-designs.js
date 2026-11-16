@@ -252,13 +252,13 @@
   };
 
   function invalidatePurge() {
-    purgePlan = []; $('purge-preview').hidden = true; $('confirm-purge').checked = false; $('apply-purge').disabled = true;
+    purgePlan = []; $('purge-preview').hidden = true; document.dispatchEvent(new CustomEvent('suite:actionsChanged')); $('apply-purge').disabled = true;
   }
   function openCleanup(scope) {
     if (!scope.length || scope.some(db => !available(db))) return;
     cleanupScope = scope; invalidatePurge();
     $('cleanup-scope').textContent = scope.map(db => `${nodeName(db.node)} / ${db.name}`).join(' · ');
-    $('confirm-reclaim').checked = false; $('apply-reclaim').disabled = true; $('cleanup-result').textContent = '';
+    $('apply-reclaim').disabled = false; $('cleanup-result').textContent = '';
     const engines = new Set(scope.map(db => db.engine));
     $('reclaim-impact').textContent = [
       engines.has('PostgreSQL') ? 'PostgreSQL: routine VACUUM primarily makes space reusable. Returning disk to the OS can require VACUUM FULL, an exclusive lock and rewrite headroom.' : '',
@@ -280,9 +280,8 @@
       return tr;
     }));
     $('purge-impact').textContent = `${number(purgePlan.reduce((sum, item) => sum + item.count, 0))} sample records strictly before ${date} 00:00 UTC. No disk savings are promised by deletion. Only telemetry readings are eligible in this sample; event chains, active work and private content need their own policies.`;
-    $('purge-preview').hidden = false; $('confirm-purge').checked = false; $('apply-purge').disabled = true;
+    $('purge-preview').hidden = false; document.dispatchEvent(new CustomEvent('suite:actionsChanged')); $('apply-purge').disabled = !purgePlan.some(item => item.count > 0);
   };
-  $('confirm-purge').onchange = () => { $('apply-purge').disabled = !$('confirm-purge').checked || !purgePlan.some(item => item.count > 0); };
   $('cutoff').oninput = invalidatePurge;
   $('apply-purge').onclick = () => {
     if ($('apply-purge').disabled) return;
@@ -296,7 +295,6 @@
     $('cleanup-result').textContent = `${number(count)} sample records deleted. Allocated database size is unchanged until disk reclamation.`;
     job(`${number(count)} sample records purged before ${$('cutoff').value}.`);
   };
-  $('confirm-reclaim').onchange = () => { $('apply-reclaim').disabled = !$('confirm-reclaim').checked; };
   $('apply-reclaim').onclick = () => {
     if ($('apply-reclaim').disabled) return;
     let reclaimed = 0;
@@ -307,7 +305,7 @@
       db.mb -= freed; reclaimed += freed; db.maintenanceDone = true;
       if (db.reusable !== null) db.reusable = 0;
     });
-    $('confirm-reclaim').checked = false; $('apply-reclaim').disabled = true; invalidatePurge(); render();
+    $('apply-reclaim').disabled = true; invalidatePurge(); render();
     $('cleanup-result').textContent = `Simulated completed maintenance: ${size(reclaimed)} returned to disk (illustrative measurement).`;
     job(`${size(reclaimed)} disk space reclaimed across ${cleanupScope.length} sample databases.`);
   };

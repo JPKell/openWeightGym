@@ -16,7 +16,7 @@
 {% endcall %}
 {{ said_box(said, failed) }}
 {% set add_attrs = {'data-add-panel':''} %}{% if not adding %}{% set add_attrs = {'data-add-panel':'','hidden':''} %}{% endif %}
-{% call card('Add a cloud account',id='add-account',hint='Use a unique name for every account. Endpoints can be shared.',attrs=add_attrs) %}{{ add_form(preview=false,form=add_values) }}{% endcall %}
+{% call card('Add cloud account',id='add-account',hint='Use a unique name for every account. Endpoints can be shared.',attrs=add_attrs) %}{{ add_form(preview=false,form=add_values) }}{% endcall %}
 {% if accounts %}
 <div class="ca-toolbar"><div class="ca-search"><label for="search" class="visually-hidden">Find an account or endpoint</label><input type="search" id="search" class="form-control" placeholder="Find an account or endpoint…" autocomplete="off"></div><label class="visually-hidden" for="status-filter">Account state</label><select id="status-filter" class="form-select"><option value="all">All accounts</option><option value="ready">Key installed · within limit</option><option value="key">Needs API key</option><option value="limit">Limit reached</option></select><span class="small text-secondary ms-auto" id="result-count" role="status" aria-live="polite">{{ accounts|length }} accounts</span></div>
 <div class="ca-desk" id="desk-view">

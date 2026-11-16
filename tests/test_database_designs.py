@@ -112,7 +112,6 @@ def test_purge_cutoff_invalidation_protected_tables_and_separate_disk_reclaim(pr
     page = preview
     page.locator('[data-database="front/accounts"] [data-maintain]').click()
     page.locator('#preview-purge').click()
-    page.locator('#confirm-purge').check()
     playwright.expect(page.locator('#apply-purge')).to_be_disabled()
     page.keyboard.press('Escape')
     row = page.locator('[data-database="front-cpu/spotter"]')
@@ -120,17 +119,17 @@ def test_purge_cutoff_invalidation_protected_tables_and_separate_disk_reclaim(pr
     row.locator('[data-maintain]').click()
     page.locator('#preview-purge').click()
     playwright.expect(page.locator('#purge-impact')).to_contain_text('90,000 sample records')
-    page.locator('#confirm-purge').check()
+    page.locator('#apply-purge').click()
     page.locator('#cutoff').fill('2026-11-01')
     playwright.expect(page.locator('#apply-purge')).to_be_disabled()
     playwright.expect(page.locator('#purge-preview')).to_be_hidden()
     page.locator('#preview-purge').click()
     playwright.expect(page.locator('#purge-impact')).to_contain_text('135,000 sample records')
-    page.locator('#confirm-purge').check()
+    page.locator('#apply-purge').click()
     page.locator('#apply-purge').click()
     assert row.locator('[data-size]').inner_text() == initial_size
     playwright.expect(page.locator('#cleanup-result')).to_contain_text('unchanged until disk reclamation')
-    page.locator('#confirm-reclaim').check()
+    page.locator('#apply-reclaim').click()
     page.locator('#apply-reclaim').click()
     assert row.locator('[data-size]').inner_text() != initial_size
     playwright.expect(page.locator('#cleanup-result')).to_contain_text('illustrative measurement')

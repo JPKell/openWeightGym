@@ -714,8 +714,7 @@ def test_destructive_submitters_have_shared_confirmation(ui_console):
               if (b.type !== 'submit' || b.closest('dialog')) return false;
               const label = b.getAttribute('aria-label') || b.textContent;
               return /\b(delete|remove|forget|revoke|reset embedding|rotate|stop|unload|cancel|disable|clear queue|clear cache|cleanup nodes|restart|reboot|power off)\b/i.test(label) &&
-                !b.matches('[data-confirm-two], [data-confirm-loss]') && !b.form?.matches('[data-confirm-two]') &&
-                !b.form?.querySelector('input[type=checkbox][required]');
+                !b.matches('[data-confirm-two]') && !b.form?.matches('[data-confirm-two]');
             }).map(b => b.outerHTML.slice(0, 220))""")
             if unsafe: failures.append((path, unsafe))
         browser.close()
@@ -727,13 +726,13 @@ def test_shared_confirmation_blocks_native_and_htmx_until_approved(tmp_path):
     from test_console_browser import playwright
     environment = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=True)
     fragment = environment.from_string("""
-      {% from 'parts.html' import confirm_two, confirm_loss, danger_confirmation %}
+      {% from 'parts.html' import confirm_two, confirm_loss, confirmation_status %}
       <form method="post" action="/action" target="result"><input name="kept" value="original">
       <button name="action" value="stop" {{ confirm_two() }}>Stop</button>
       <button name="action" value="delete" {{ confirm_loss() }}>Delete saved output</button></form>
       <form hx-post="/action" hx-target="#response"><button name="action" value="clear" {{ confirm_two() }}>Clear queue</button></form>
       <div id="response"></div><iframe name="result" title="Result" hidden></iframe>
-      {{ danger_confirmation() }}
+      {{ confirmation_status() }}
     """).render()
     markup = '<html><meta charset="utf-8"><body>' + fragment + '<script>' + (ROOT / 'weightroom/static/htmx.min.js').read_text() + '</script><script>' + (ROOT / 'weightroom/static/console.js').read_text() + '</script></body></html>'
     requests = []
@@ -755,15 +754,11 @@ def test_shared_confirmation_blocks_native_and_htmx_until_approved(tmp_path):
         playwright.expect(page.get_by_role('button', name='Stop', exact=True)).to_be_enabled()
         assert requests == ['kept=original&action=stop']
         page.get_by_role('button', name='Delete saved output', exact=True).click()
-        assert not page.locator('#danger-confirmation [data-confirm-description]').count()
-        playwright.expect(page.get_by_role('dialog')).to_be_visible()
-        page.get_by_role('button', name='Continue', exact=True).click()
         assert len(requests) == 1
         page.keyboard.press('Escape')
-        playwright.expect(page.get_by_role('dialog')).not_to_be_visible()
+        playwright.expect(page.get_by_role('button', name='Delete saved output', exact=True)).to_be_visible()
         page.get_by_role('button', name='Delete saved output', exact=True).click()
-        page.get_by_label('Yes, delete saved output').check()
-        page.get_by_role('button', name='Continue', exact=True).click()
+        page.get_by_role('button', name='Are you sure? Delete saved output', exact=True).click()
         page.wait_for_timeout(50)
         assert requests[-1] == 'kept=original&action=delete'
         page.get_by_role('button', name='Clear queue', exact=True).click()
@@ -771,6 +766,96 @@ def test_shared_confirmation_blocks_native_and_htmx_until_approved(tmp_path):
         page.get_by_role('button', name='Are you sure? Clear queue', exact=True).click()
         playwright.expect(page.locator('#response')).to_have_text('Completed')
         assert requests[-1] == 'action=clear' and len(requests) == 3
+        browser.close()
+
+
+def test_confirmation_cancellation_keyboard_and_acknowledgement():
+    """No action or acknowledgement survives edits, timeout, replacement or cancellation."""
+    from jinja2 import FileSystemLoader
+    from test_console_browser import playwright
+    environment = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=True)
+    fragment = environment.from_string("""
+      {% from 'parts.html' import confirm_two, confirmation_status %}
+      <form id="native" method="post" action="/native" target="result">
+        <input name="name" required value="reviewed">
+        <button id="apply" name="do" value="apply" {{ confirm_two(fields={'acknowledge':'yes'}) }}>Apply</button>
+        <button id="other" type="button">Other</button>
+      </form>
+      <form hx-post="/htmx" hx-target="#response">
+        <button id="rebuild" name="do" value="rebuild" {{ confirm_two(fields={'confirmed':'yes'}) }}>Rebuild</button>
+      </form>
+      <button id="direct" type="button">Delete audio</button>
+      <button id="delegated" type="button" {{ confirm_two() }}>Purge</button>
+      <dialog><form method="dialog"><button id="close" value="confirm" {{ confirm_two() }}>Confirm</button></form></dialog>
+      <div id="response"></div><iframe name="result" title="Result" hidden></iframe>
+      {{ confirmation_status() }}
+    """).render()
+    markup = '<html><body>' + fragment
+    for asset in ('htmx.min.js', 'console.js'):
+        markup += '<script>' + (ROOT / 'weightroom/static' / asset).read_text() + '</script>'
+    markup += """<script>
+      window.actions = [];
+      document.querySelector('#direct').onclick = event => {
+        if (suiteConfirmAction(event.currentTarget, 'Delete this audio permanently?')) actions.push('audio');
+      };
+      document.querySelector('#delegated').onclick = () => actions.push('purge');
+    </script></body></html>"""
+    requests = []
+    with playwright.sync_playwright() as engine:
+        browser = engine.chromium.launch(headless=True, args=['--disable-gpu'])
+        page = browser.new_page()
+        page.clock.install()
+        def serve(route):
+            if route.request.method == 'POST':
+                requests.append(route.request.post_data)
+                route.fulfill(content_type='text/html', body='Completed')
+            else:
+                route.fulfill(content_type='text/html', body=markup)
+        page.route('http://confirmation.test/**', serve)
+        page.goto('http://confirmation.test/')
+        apply = page.locator('#apply')
+        field = page.locator('[name=name]')
+        for cancel in ('escape', 'edit', 'other', 'timeout', 'refresh'):
+            apply.click()
+            playwright.expect(apply).to_have_attribute('data-confirm-armed', 'true')
+            assert page.locator('[name=acknowledge]').count() == 0
+            if cancel == 'escape': page.keyboard.press('Escape')
+            elif cancel == 'edit': field.fill('changed')
+            elif cancel == 'other': page.locator('#other').click()
+            elif cancel == 'timeout': page.clock.fast_forward(10001)
+            else: page.evaluate("document.dispatchEvent(new CustomEvent('htmx:beforeCleanupElement', {detail:{elt:document.querySelector('#native')}}))")
+            playwright.expect(apply).not_to_have_attribute('data-confirm-armed', 'true')
+            assert not requests
+        # Invalid native forms cannot be armed; programmatic implicit submits cannot skip confirmation.
+        field.fill('')
+        apply.click()
+        playwright.expect(apply).not_to_have_attribute('data-confirm-armed', 'true')
+        field.fill('reviewed')
+        page.locator('#native').evaluate('(form) => form.requestSubmit()')
+        assert not requests
+        apply.press('Enter')
+        apply.dispatch_event('keydown', {'key':'Enter', 'repeat':True})
+        assert not requests
+        with page.expect_response('**/native'):
+            apply.press('Enter')
+        assert requests == ['name=reviewed&do=apply&acknowledge=yes']
+        page.locator('#rebuild').click()
+        assert len(requests) == 1
+        page.locator('#rebuild').click()
+        playwright.expect(page.locator('#response')).to_have_text('Completed')
+        from urllib.parse import parse_qs
+        assert parse_qs(requests[-1]) == {'do':['rebuild'], 'confirmed':['yes']}
+        for selector, action in (('#direct', 'audio'), ('#delegated', 'purge')):
+            button = page.locator(selector)
+            button.click()
+            assert action not in page.evaluate('actions')
+            button.click()
+            assert page.evaluate('actions').count(action) == 1
+        page.locator('dialog').evaluate('(dialog) => dialog.showModal()')
+        page.locator('#close').click()
+        playwright.expect(page.locator('dialog')).to_be_visible()
+        page.locator('#close').click()
+        playwright.expect(page.locator('dialog')).not_to_be_visible()
         browser.close()
 
 
@@ -981,7 +1066,7 @@ def test_empty_editor_tables_have_next_steps_and_clear_placeholder_on_add(ui_con
     sign_in(server,'jordan')
     with playwright.sync_playwright() as engine:
         browser,page=browser_context(engine,server)
-        for path,selector,text in [('/models/images','#mw-lora-rows','No image adapters'),('/models/sample','[data-adapter-rows]','No adapters')]:
+        for path,selector,text in [('/models/images','#mw-lora-rows','No adapters'),('/models/sample','[data-adapter-rows]','No adapters')]:
             page.goto('http://console.test'+path)
             body=page.locator(selector)
             # Adapter sections are allowed to remain inside their native disclosure.
@@ -1001,7 +1086,7 @@ def test_models_list_leads_and_add_explains_disabled_state(ui_console):
         assert page.locator('#models-table').bounding_box()['y'] < page.locator('#add-model').bounding_box()['y']
         assert not page.get_by_text('Storage originals are retained', exact=False).count()
         assert not page.get_by_role('link', name='View model fingerprints').count()
-        page.get_by_role('link',name='Add a model',exact=True).click()
+        page.get_by_role('link',name='Add model',exact=True).click()
         button=page.locator('[data-file-submit]')
         playwright.expect(button).to_be_disabled()
         assert button.get_attribute('title') == page.locator('#model-add-reason').inner_text()

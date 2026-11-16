@@ -1,7 +1,7 @@
 {% from 'navigation_parts.html' import image_family_choices %}
-{% from "parts.html" import form_section, more, hardware, card, empty_row %}
+{% from "parts.html" import form_actions, form_section, more, hardware, card, empty_row %}
 {% from "model_form.html" import number, choice %}
-{% from 'models_parts.html' import node_targets, node_target %}
+{% from 'models_parts.html' import node_targets, node_target, model_name %}
 {% set video = media_kind|default('image') == 'video' %}
 {% set media_label = 'video' if video else 'image' %}
 <template id="mw-lora-row"><tr>{% for key,label,type in [('name','Name','text'),('file','File','text'),('scale','Strength','number')] %}<td><input type="{{ type }}" class="form-control" data-lora-field="{{ key }}" aria-label="LoRA {{ label }}"{% if type=='number' %} step="any" min="-4" max="4"{% endif %}></td>{% endfor %}{% if video %}<td><label class="form-check"><input type="checkbox" class="form-check-input" data-lora-field="is_high_noise"><span class="form-check-label">High noise</span></label></td>{% endif %}<td><button type="button" data-remove-lora class="btn btn-outline-danger btn-sm">Remove</button></td></tr></template>
@@ -11,7 +11,7 @@
 <div class="row g-3">
 <p class="col-12 small text-secondary mb-0" id="mw-target-note">Select the nodes that should receive this model. Its complete bundle is copied and verified before the model is created on each node. Hardware settings must be valid on every selected node.</p>
 {% call form_section("Model and files", "All nodes") %}
-<div class="col-md-6"><label for="mw-name" class="form-label">Model name</label><input id="mw-name" name="name" class="form-control" required maxlength="128"></div>
+<div class="col-md-6">{{ model_name("mw-name", attrs={"maxlength":128}) }}</div>
 <div class="col-md-6"><label for="mw-family" class="form-label">Family</label><select id="mw-family" name="family" class="form-select">{% if video %}{% for family in ['wan2.1','wan2.2','ltx2','hunyuan-video-1.5','minimax-h3'] %}<option value="{{ family }}">{{ family }}</option>{% endfor %}{% else %}{{ image_family_choices() }}{% endif %}</select></div>
 <div id="mw-family-help" class="col-12" hidden></div>
 {% set slots = [('diffusion','Diffusion weights'),('text_encoder','Text encoder'),('vae','VAE')] + ([('high_noise_diffusion_model','High-noise diffusion weights'),('audio_vae','Audio VAE'),('embeddings_connectors','Embeddings connector'),('byt5','ByT5 GlyphXL'),('clip_vision','CLIP Vision'),('latent_upscaler','Latent upscaler'),('tae','Preview decoder')] if video else [('clip_l','CLIP L'),('clip_g','CLIP G'),('upscaler','Image upscaler'),('tokenizer','Tokenizer JSON')]) %}
@@ -46,7 +46,7 @@
 <div class="col-md-6"><label for="mw-limits" class="form-label">Additional workflow limits</label><textarea id="mw-limits" class="form-control font-monospace" rows="3">{}</textarea></div>
 <div class="col-12"><label for="mw-loras" class="form-label">LoRAs (JSON)</label><textarea id="mw-loras" class="form-control font-monospace" rows="3">{}</textarea><div class="form-hint">Changing JSON refreshes the adapter rows.</div></div>
 </div>{% endcall %}</div>
-<div class="col-12 sticky-actions"><button class="btn btn-primary" type="submit">Save model</button><span id="mw-saved" class="text-success ms-3" role="status"></span></div>
+{% call form_actions(class_="sticky-actions") %}<button class="btn btn-primary" type="submit">Add model</button><span id="mw-saved" class="text-success" role="status"></span>{% endcall %}
 </div>{% call more() %}<p class="mw-model-note mb-3">Start with the diffusion weights. The checklist uses file headers from the model library to suggest matching text encoders, VAE and other parts. {% if platform is not defined or platform().downloads %}New files come down on <a href="/hub">Hugging Face</a> or <a href="/civitai">Civitai</a> and appear in the file lists below. {% endif %}Saving a new model checks every selected destination, promotes storage files and copies its complete bundle to those nodes. Each model is created after its files pass verification. <a href="{{ "/docs/model-guides/video-models" if video else "/docs/mirrorwall#models" }}">Which parts each model needs</a></p>
 <p class="mw-model-note mt-3 mb-0">{% if video %}Video models always reserve their assigned cards exclusively. Run a qualification clip to record runtime modes and observed memory peaks. Missing components or unmeasured capabilities keep generation unavailable.{% else %}Unqualified models reserve their assigned cards. Shared residency requires reproducible placement and full workflow memory measurements, plus 256 MiB sampling headroom and the node's configured card margin. Shared workflows pin sampler, scheduler and CFG; use an exclusive entry to change those per request. Existing work finishes before settings take effect.{% endif %}</p>{% endcall %}<p id="mw-measurement" class="mw-model-note mt-2 mb-0"></p>
 {% endcall %}

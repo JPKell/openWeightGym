@@ -1,7 +1,7 @@
 {# Shared live Audio studio and preview editor, model choices and controls. #}
-{% from 'parts.html' import card, alert, hardware %}
+{% from 'parts.html' import form_actions, card, alert, hardware %}
 {% from 'model_form.html' import number %}
-{% from 'models_parts.html' import subject, node_targets %}
+{% from 'models_parts.html' import subject, node_targets, model_name %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% macro field(id, label, value='', type='text', min=none, max=none, required=true, wide=false, pattern='', maxlength=128) %}
 <div class="{{ 'col-12' if wide else 'col-sm-6' }}"><label for="am-{{ id }}" class="form-label">{{ label }}</label><input{% if pattern %} pattern="{{ pattern }}"{% endif %} id="am-{{ id }}" name="{{ id }}" type="{{ type }}" value="{{ value }}" class="form-control"{% if required %} required{% endif %}{% if min is not none %} min="{{ min }}"{% endif %}{% if max is not none %} max="{{ max }}"{% endif %}{% if type == 'text' and maxlength is not none %} maxlength="{{ maxlength }}"{% endif %}></div>
@@ -26,7 +26,7 @@
 <div class="row g-3">
 {{ select('kind','Audio task') }}{{ select('file','Model file in cache or storage',required=true) }}
 <div class="col-12 small text-secondary" id="{{ 'am-file-note' if live else 'file-note' }}">Choose a managed file. Family and task follow its runtime contract.</div>
-{{ field('name','Model name',pattern='[A-Za-z0-9][A-Za-z0-9._:\\/\\-]{0,127}' if live else '') }}{{ select('family','Model family',required=true) }}
+<div class="col-sm-6">{{ model_name('am-name', attrs={'maxlength':128, 'pattern':'[A-Za-z0-9][A-Za-z0-9._:\\/\\-]{0,127}' if live else none}) }}</div>{{ select('family','Model family',required=true) }}
 {% if live %}<div class="col-12 form-text" id="am-family-note"></div>{% endif %}
 {{ field('root','Package folder',wide=true,maxlength=none) }}
 <div class="col-12"><label for="am-companions" class="form-label">Companion files <span class="text-secondary">(optional)</span></label>{% if live %}<select id="am-companions" name="companions" class="form-select font-monospace" multiple size="4"></select>{% else %}<textarea id="am-companions" name="companions" class="form-control font-monospace" rows="2" placeholder="One relative path per line"></textarea>{% endif %}<p class="form-text">Paths are relative to the package folder; standalone GGUF files usually need none.</p></div>
@@ -49,7 +49,7 @@
 <section id="panel-advanced" data-panel="advanced" hidden>{% if live %}<div class="mb-3"><label for="am-defaults" class="form-label">Additional generation defaults (JSON)</label><textarea id="am-defaults" class="form-control font-monospace" rows="4">{}</textarea><p class="form-text">Use the labelled output fields for declared options. Other saved keys are preserved here.</p></div>{% endif %}<label for="am-session" class="form-label">Session options (JSON)</label><textarea id="am-session" name="session" class="form-control font-monospace" rows="6">{}</textarea><p class="form-text" id="{{ 'am-session-note' if live else 'family-note' }}"></p></section>
 <div class="audio-save-summary mt-4"><span class="audio-save-icon" aria-hidden="true">↳</span><div><strong id="{{ 'am-save-summary' if live else 'save-summary' }}"></strong><small id="{{ 'am-save-detail' if live else 'save-detail' }}" class="d-block text-secondary"></small></div></div>
 {% if live %}{{ alert('danger',attrs={'id':'am-message','hidden':''},class_='mt-3 mb-0') }}{% else %}<div id="form-error" hidden>{{ alert('danger', attrs={'id':'form-error-text'}, class_='mt-3 mb-0') }}</div>{% endif %}
-<div class="audio-editor-actions d-flex flex-wrap gap-2 mt-3"><button type="submit" class="btn btn-primary" id="{{ 'am-submit' if live else 'save-model' }}">{{ 'Add model' if live else 'Save configuration' }}</button><button type="button" class="btn btn-outline-secondary" id="{{ 'am-reset' if live else 'reset-model' }}">Discard changes</button><span id="{{ 'am-draft-status' if live else 'draft-status' }}" class="small text-secondary ms-auto align-self-center" role="status"></span></div>
+{% call form_actions(class_="audio-editor-actions") %}<button type="submit" class="btn btn-primary" id="{{ 'am-submit' if live else 'save-model' }}">{{ 'Add model' if live else 'Save configuration' }}</button><button type="button" class="btn btn-outline-secondary" id="{{ 'am-reset' if live else 'reset-model' }}">Discard changes</button><span id="{{ 'am-draft-status' if live else 'draft-status' }}" class="small text-secondary ms-auto align-self-center" role="status"></span>{% endcall %}
 {% if live %}<span id="am-saved" class="small text-success d-block mt-2" role="status"></span>{% endif %}
 </form>
 {% endcall %}

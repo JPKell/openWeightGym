@@ -1,4 +1,4 @@
-{% from 'parts.html' import page_header, card, section_title, alert, danger_confirmation %}
+{% from 'parts.html' import page_header, card, section_title, alert, confirmation_status %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% from 'user_parts.html' import account_avatar %}
 {% import 'account_design_parts.html' as account %}
@@ -74,7 +74,7 @@
 <p class="small text-secondary">Keep existing password, API key, theme, telemetry, audio and usage behavior. Themes remain account-scoped within each browser; preserve all 17 palettes. Authenticator enrollment/recovery, email, passkeys, account deletion and retention changes need product and backend decisions before adding actionable controls. Model/service availability must filter audio and workspace options.</p>
 <p class="small mb-0">Accessibility references: <a href="https://www.w3.org/WAI/tutorials/forms/labels/">W3C form labels</a> and <a href="https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html">supporting motion preferences</a>. Existing behavior was checked against the Account, Appearance, Audio and Logs templates and their handlers.</p>
 </div></details>
-{{ danger_confirmation() }}
+{{ confirmation_status() }}
 <template id="key-template">{{ account.key_row() }}</template>
 <script>{{ javascript|safe }}</script>
 </body></html>

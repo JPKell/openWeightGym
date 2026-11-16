@@ -922,7 +922,7 @@
     $('[data-fact="runtime-label"]').textContent = S.engine === 'strata' ? 'Strata' : 'llama-server';
     $('[data-fact="runtime"]').textContent = S.engine === 'strata' ? '0.4.2 · qualified for 512 tokens' : 'b6123 · CUDA 12.8';
     $('#forget').hidden = !S.measured;
-    $$('#remove-sure + label').forEach(label => { label.textContent = `Yes, remove ${S.shared.name} from every node`; });
+    $('#remove').setAttribute('aria-label', `Remove ${S.shared.name} from every node`);
   }
 
   // ---------- Changes, review and saving ----------
@@ -1206,9 +1206,6 @@
   $('#matrix-group').addEventListener('change', () => { S.matrixGroup = $('#matrix-group').value; render(); });
   $('#forget').addEventListener('click', () => { S.measured = false; renderFacts(); say('Forgot the measurements. The next load measures again.'); });
   $('#remove').addEventListener('click', () => {
-    const sure = $('#remove-sure');
-    if (!sure.checked) { sure.reportValidity(); return; }
-    sure.checked = false;
     say(`Removed ${S.shared.name} (simulated). It stopped being offered; requests in flight finish first.`);
   });
   $('#sample').addEventListener('change', reset);

@@ -21,3 +21,5 @@ A superuser can manage remote MCP servers through the shared remote-server edito
 ## Limits and troubleshooting
 
 A tool set only narrows what an account can already see. Sensitivity, tool patterns and model tool permission remain separate checks. Arguments and results can contain private data; inspect the target tool before calling it. An unavailable server is distinct from an empty permitted catalogue.
+
+[Shared form controls and confirmations](/docs/getting-started/navigation#forms-and-confirmations)

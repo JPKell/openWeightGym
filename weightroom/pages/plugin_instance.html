@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from "parts.html" import said_box, page_header, card, section_title , confirm_two, alert %}
+{% from "parts.html" import form_actions, said_box, page_header, card, section_title , confirm_two, alert %}
 {% block title %}{{ manifest.name }} · {{ instance or "New instance" }}{% endblock %}
 {% block main %}
 <p><a href="/plugins">Plugins</a> / <a href="/plugins/{{ manifest.id }}">{{ manifest.name }}</a> / {{ instance or "New instance" }}</p>
@@ -36,7 +36,7 @@
 <label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="health-{{ key }}"{% if config.health[key]|default(false) %} checked{% endif %}> {{ label }}</label>
 {% endif %}{% endfor %}
 <p class="small text-secondary">Health controls operate the external service. The adapter's installed OS service handles its own process recovery.</p>
-<button class="btn btn-primary">Save settings</button>
+{% call form_actions() %}<button class="btn btn-primary">{{ "Save settings" if instance else "Add instance" }}</button>{% endcall %}
 {% endcall %}
 {% if instance %}
 {% call card("") %}{{ section_title("Operations") }}<form method="post" class="d-flex flex-wrap gap-2">

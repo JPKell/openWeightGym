@@ -1,8 +1,8 @@
 {% extends "frame.html" %}
-{% from "parts.html" import page_header, card, said_box, alert, confirm_check, empty_row %}
+{% from "parts.html" import page_header, card, said_box, alert, confirm_two, empty_row %}
 {% from "database_parts.html" import table_head, dom_templates %}
 {% block title %}Databases · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/databases.css?v=1"><script src="/static/databases.js?v=2" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/databases.css?v=1"><script src="/static/databases.js?v=3" defer></script>{% endblock %}
 {% block main %}
 <div class="database-console" data-database-console>
 {% call page_header('Databases', pretitle='SYSTEM / STORAGE', help='/docs/data/engines') %}
@@ -55,7 +55,7 @@
 <dialog id="export-dialog" class="database-dialog" aria-labelledby="export-title">
 {% call card('Review SQL export', class_='mb-0', header_id='export-title') %}
 <p id="export-summary"></p><ul id="export-list" class="small"></ul>
-<div class="form-check mb-3" id="partial-option" hidden><input type="checkbox" class="form-check-input" id="allow-partial"><label class="form-check-label" for="allow-partial">Export only reachable databases; record omitted nodes and stores in the manifest.</label></div>
+<p class="text-warning mb-3" id="partial-option" hidden>Some databases are unavailable. Click twice to export only reachable databases and record omissions in the manifest.</p>
 <p class="small text-secondary">Separate per-database snapshots; no cluster-wide consistency guarantee. Dump all includes every active database regardless of filters. Unbound files require explicit selection.</p>
 <div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-primary" id="download-export">Start export job</button><button type="button" class="btn btn-outline-secondary" data-close>Cancel</button></div>
 {% endcall %}</dialog>
@@ -68,8 +68,7 @@
 <div id="maintenance-preview" hidden>
 <div class="table-responsive mb-3"><table class="table table-sm" aria-label="Maintenance preview"><thead><tr><th>Node / database</th><th>Records / method</th><th>Policy / headroom</th></tr></thead><tbody id="maintenance-rows"></tbody></table></div>
 <p class="small text-secondary" id="maintenance-notice"></p>
-{{ confirm_check('I reviewed these records or maintenance locks and authorize this operation.', 'confirm-maintenance') }}
-<button type="button" class="btn btn-danger" id="apply-maintenance" disabled>Apply reviewed operation</button>
+<button type="button" class="btn btn-danger" id="apply-maintenance" {{ confirm_two() }} disabled>Apply reviewed operation</button>
 </div></form>
 <div id="cleanup-result" role="status" aria-live="polite" class="small my-3"></div><button type="button" class="btn btn-outline-secondary" data-close>Close</button>
 {% endcall %}</dialog>

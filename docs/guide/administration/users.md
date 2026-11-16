@@ -25,3 +25,5 @@ Use [account-management access](/docs/system/abilities#ability-manage-users); ad
 ## Related
 
 [Groups](/docs/administration/groups) · [My account](/docs/web-app/my-account)
+
+[Shared form controls and confirmations](/docs/getting-started/navigation#forms-and-confirmations)

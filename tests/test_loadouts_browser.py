@@ -61,8 +61,9 @@ def test_dry_fit_saves_cpu_selection_reviews_loads_holds_and_undoes(loadout_desk
         playwright.expect(page.locator('#loadout-review')).to_contain_text('2048')
         page.screenshot(path=str(tmp_path / f'loadout-review-{width}.png'), full_page=True)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-        page.locator('#loadout-acknowledge').check()
         page.get_by_role('button', name='Apply, load and hold 10 minutes', exact=True).click()
+        playwright.expect(page.get_by_role('table', name='Your load-out holds')).to_have_count(0)
+        page.get_by_role('button', name='Are you sure? Apply, load and hold 10 minutes', exact=True).click()
         playwright.expect(page.get_by_role('table', name='Your load-out holds')).to_contain_text('ready')
         assert library.get('cpu')['gpus'] == 0 and library.get('cpu')['flags']['ctx-size'] == 2048
         page.get_by_role('button', name='Renew 10 minutes', exact=True).click()
@@ -71,12 +72,12 @@ def test_dry_fit_saves_cpu_selection_reviews_loads_holds_and_undoes(loadout_desk
         playwright.expect(page.get_by_role('table', name='Your load-out holds')).to_have_count(0)
         playwright.expect(page.get_by_label('Select cpu', exact=True)).to_be_checked()  # CPU readiness uses loaded state, not GPU cards
         page.get_by_role('button', name='Preview undo', exact=True).click()
-        page.locator('#loadout-acknowledge').check()
         page.get_by_role('button', name='Restore settings', exact=True).click()
+        assert library.get('cpu')['flags']['ctx-size'] == 2048
+        page.get_by_role('button', name='Are you sure? Restore settings', exact=True).click()
         assert library.stored('cpu') == settings
         page.get_by_role('button', name='Delete saved set', exact=True).click()
-        page.get_by_label('Yes, delete saved set').check()  # a deletion is confirmed first
-        page.get_by_role('button', name='Continue', exact=True).click()
+        page.get_by_role('button', name='Are you sure? Delete saved set', exact=True).click()
         playwright.expect(page.locator('#fit-saved')).to_contain_text('No saved load-outs.')
         assert not errors
         browser.close()

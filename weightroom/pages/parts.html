@@ -75,6 +75,11 @@
 </section>
 {% endmacro %}
 
+{# Shared footer for creation/edit forms; callers retain submitters, status hooks and secondary actions. #}
+{% macro form_actions(class_='', attrs={}) %}
+<div class="form-actions col-12 d-flex flex-wrap align-items-center gap-2 border-top pt-3 mt-3{{ ' ' ~ class_ if class_ }}"{{ attrs|xmlattr }}>{{ caller() }}</div>
+{% endmacro %}
+
 {% macro more(title='Why?', open=false, attrs={}) %}<details class="more"{{ attrs|xmlattr }}{% if open %} open{% endif %}><summary>{{ title }}</summary><div class="small text-secondary mt-2">{{ caller() }}</div></details>{% endmacro %}
 
 {# One placement vocabulary; legacy fields retain the existing POST/API contracts. #}
@@ -113,9 +118,9 @@
 {% endmacro %}
 
 
-{# Actions ask twice; data or credential loss normally uses the shared checkbox dialog. #}
-{% macro confirm_two(text='') %}data-confirm-two{% if text %} data-confirm-text="{{ text }}"{% endif %}{% endmacro %}
-{% macro confirm_loss() %}data-confirm-loss{% endmacro %}
+{# One two-click contract for form submitters and JavaScript actions. #}
+{% macro confirm_two(text='', fields={}) %}data-confirm-two{% if text %} data-confirm-text="{{ text }}"{% endif %}{% if fields %} data-confirm-fields="{{ fields|tojson|forceescape }}"{% endif %}{% endmacro %}
+{% macro confirm_loss(text='') %}{{ confirm_two(text) }}{% endmacro %}
 {% macro service_restart(program, node='', return_to='/system/components', control=false) %}
 <form method="post" action="/machine/services/{{ program|urlencode }}/restart" class="d-inline">
   <input type="hidden" name="return_to" value="{{ return_to }}">
@@ -123,21 +128,8 @@
   <button class="btn btn-outline-warning btn-sm" {{ confirm_two('Restart ' ~ program ~ '? Active work may be interrupted.') }}>Restart {{ program }}</button>
 </form>
 {% endmacro %}
-{% macro confirm_check(label, id, name='', value='yes', framed=true) %}
-{% set field %}
-<div class="form-check mb-0"><input id="{{ id }}" type="checkbox" class="form-check-input" required data-loss-confirm{% if name %} name="{{ name }}" value="{{ value }}"{% endif %}><label for="{{ id }}" class="form-check-label">{{ label }}</label></div>
-{% endset %}
-{% if framed %}{% call card('', class_='border-danger', body_class='py-2') %}{{ field }}{% endcall %}{% else %}{{ field }}{% endif %}
-{% endmacro %}
-{% macro danger_confirmation() %}
-<dialog id="danger-confirmation" aria-labelledby="danger-confirmation-title">
-{% call card('Confirm action', class_='border-danger mb-0', header_id='danger-confirmation-title') %}
-<form method="dialog" data-confirm-dialog>
-{{ confirm_check('Yes, continue with this action.', 'danger-confirmation-check') }}
-<div class="d-flex flex-wrap gap-2"><button class="btn btn-danger" value="confirm">Continue</button><button class="btn btn-outline-secondary" value="cancel" formnovalidate>Cancel</button></div>
-</form>
-{% endcall %}
-</dialog>
+{% macro confirmation_status() %}
+<div id="action-confirmation-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 {% endmacro %}
 
 

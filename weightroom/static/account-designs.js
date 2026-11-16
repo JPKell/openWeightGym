@@ -143,19 +143,10 @@
     say('Sample password change complete; the other sample sign-in has ended.');
   });
   $('#new_again').addEventListener('input', () => { $('#password-error').textContent = ''; });
-  function confirmAction(title, action) {
-    const dialog = $('#danger-confirmation');
-    $('#danger-confirmation-title').textContent = title;
-    const check = $('#danger-confirmation-check');
-    check.checked = false;
-    const confirm = dialog.querySelector('[value=confirm]');
-    confirm.disabled = true;
-    check.onchange = () => { confirm.disabled = !check.checked; };
-    dialog.returnValue = '';
-    dialog.addEventListener('close', () => { if (dialog.returnValue === 'confirm' && check.checked) action(); }, {once: true});
-    dialog.showModal();
+  function confirmAction(button, title, action) {
+    if (window.suiteConfirmAction(button, title)) action();
   }
-  $('[data-revoke-session]').addEventListener('click', () => confirmAction('Sign out the other sample device?', () => {
+  $('[data-revoke-session]').addEventListener('click', () => confirmAction($('[data-revoke-session]'), 'Sign out the other sample device?', () => {
     $('#other-session').hidden = true; $('[data-session-count]').textContent = '1'; $('#session-empty').hidden = false; updateOverview(); say('Other sample sign-in ended.');
   }));
   function keyCount() {
@@ -167,7 +158,7 @@
   $('#key-rows').addEventListener('click', event => {
     const button = event.target.closest('[data-remove-key]'); if (!button) return;
     const row = button.closest('[data-key-row]');
-    confirmAction('Remove this sample API key?', () => { row.remove(); keyCount(); dismissSecret(); say('Sample key removed.'); });
+    confirmAction(button, 'Remove this sample API key?', () => { row.remove(); keyCount(); dismissSecret(); say('Sample key removed.'); });
   });
   $('#key-form').addEventListener('submit', event => {
     event.preventDefault();

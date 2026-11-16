@@ -15,7 +15,7 @@ Use an account with [model management](/docs/system/abilities#ability-manage-mod
 ## Do it
 
 1. Open **Models → Images** and choose **Add image model**. Select destination nodes and the diffusion file.
-2. Complete the detected family's component checklist. Supply the required compatible encoders/VAE and optional upscaler, then select **Save model**.
+2. Complete the detected family's component checklist. Supply the required compatible encoders/VAE and optional upscaler, then select **Add model** below the fields. Existing installations use **Save model**.
 3. Select the model under **Workflows**, edit **Workflow settings**, name it and choose **Save workflow**.
 
 ## Options
