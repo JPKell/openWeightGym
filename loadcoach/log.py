@@ -325,10 +325,15 @@ class Log:
         marks = ','.join('?' for _ in ENDINGS)
         # Look up each ending through events_request_parent. Materializing every
         # retained ending makes even a small recent-request page scan the history.
-        parent = self.json_value("f.detail", "of", "integer")
+        parent = self.json_value("f.detail", "of")
+        # PostgreSQL indexes the JSON text scalar. Cast the outer ID, not the
+        # indexed expression, so each ending lookup can use that index.
+        parent_id = "COALESCE(a.source, a.id)"
+        if self.db.engine == 'postgresql':
+            parent_id = f"CAST({parent_id} AS TEXT)"
         join = f"""FROM events a LEFT JOIN events e ON e.id = (
             SELECT MAX(f.id) FROM events f
-            WHERE {parent} = COALESCE(a.source, a.id)
+            WHERE {parent} = {parent_id}
                 AND f.kind = 'request' AND f.what IN ({marks})
                 AND (f.machine = a.machine OR f.machine IS NULL AND a.machine IS NULL)
             )"""

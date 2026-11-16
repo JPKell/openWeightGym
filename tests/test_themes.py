@@ -280,3 +280,31 @@ def test_theme_picker_contrast_persistence_account_isolation_and_mobile(desk, tm
         assert "could not save" in page.locator("#theme-status").inner_text()
         assert errors == []
         browser.close()
+
+
+def test_shared_link_and_danger_buttons_have_readable_text(desk):
+    from test_console_browser import browser_context
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.goto('http://console.test/account/appearance')
+        palettes = page.locator('[name=palette]').evaluate_all('fields => fields.map(field => field.value)')
+        page.evaluate('''() => {
+            const card = document.createElement('div'); card.className = 'card'; card.id = 'contrast-samples';
+            for (const kind of ['link', 'outline-danger']) {
+                const button = document.createElement('button'); button.className = 'btn btn-' + kind;
+                button.textContent = kind; card.append(button);
+            }
+            document.querySelector('main').append(card);
+        }''')
+        for mode in ('light', 'dark'):
+            for palette in palettes:
+                change_theme(page, palette, mode)
+                page.wait_for_timeout(220)  # Allow the shared button color transition to settle.
+                samples = page.locator('#contrast-samples button').evaluate_all('''nodes => nodes.map(node => ({
+                    color: getComputedStyle(node).color, background: getComputedStyle(node.parentElement).backgroundColor
+                }))''')
+                for sample in samples:
+                    assert contrast(sample['color'], sample['background']) >= 4.5, (palette, mode, sample)
+        browser.close()

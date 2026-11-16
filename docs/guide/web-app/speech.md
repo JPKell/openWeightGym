@@ -32,6 +32,8 @@ Open **Voices**. For cloning, provide **Name**, **Recording**, and **What the re
 
 Voice, cloning and design capabilities differ between models. A removed or no-longer-shared voice can block a script; reassign its cast entry. Files and generated takes remain subject to current ownership and sharing permissions. Temporary source audio requires a temporary job. Temporary generation is offered only when your account and current compute policy permit it. Upload policy is shown by the workspace; administrators can inspect [shipped defaults](/docs/operations/settings-reference).
 
+Kokoro requires the eSpeak-ng shared library on its compute node. If generation reports that it cannot load eSpeak-ng, an administrator must install the distribution package (`espeak-ng` on Arch, `libespeak-ng1` on Debian/Ubuntu, or `espeak-ng-libs` on Fedora). The audio.cpp build helper checks this dependency; a failed take can be retried after it is installed.
+
 ## Related
 
 [Transcribe](/docs/web-app/transcribe) · [Voice chat](/docs/web-app/voice-chat)

@@ -738,3 +738,29 @@ def test_postgresql_audio_without_group_and_empty_event_group(postgres, tmp_path
     log.add('qa', 'created', 'owner')
     assert log.read(members=[]) == []
     log.db.close(); batches.db.close()
+
+
+def test_postgresql_request_endings_use_existing_parent_index(postgres, monkeypatch):
+    log = Log(postgres, chained=False)
+    for index in range(300):
+        number = log.add('request', 'asked', 'owner', model='sample')
+        log.add('request', 'done', 'owner', model='sample', of=number, answer_tokens=index)
+    log.db.execute('ANALYZE events')
+    execute, captured = type(log.db).execute, []
+    def observed(connection, sql, values=()):
+        if sql.startswith('SELECT COALESCE(a.source, a.id)'):
+            captured.append((sql, values))
+        return execute(connection, sql, values)
+    monkeypatch.setattr(type(log.db), 'execute', observed)
+    result = log.requests('owner', 5)
+    assert len(result['requests']) == 5 and result['total'] == 300
+    assert all(row['outcome'] == 'done' for row in result['requests'])
+    execute(log.db, 'SET enable_seqscan = off')
+    sql, values = captured[0]
+    plan = execute(log.db, 'EXPLAIN (FORMAT JSON) ' + sql, values).fetchone()[0]
+    if isinstance(plan, str):
+        plan = json.loads(plan)
+    def indexed(node):
+        return (node.get('Index Name') == 'events_request_parent' and "'of'" in node.get('Index Cond', '')) or any(indexed(child) for child in node.get('Plans', []))
+    assert indexed(plan[0]['Plan']), json.dumps(plan, indent=2)
+    log.db.close()

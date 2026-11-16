@@ -19,3 +19,5 @@ Find a request and inspect its timing, content and related activity.
 Captured text needs current owner/sensitivity permission and may have expired. Metadata export excludes retained prompts, replies and tool arguments. **Stop this request** appears only for authorized active work and needs confirmation. No-log work has no retained request record; a missing ending is distinct from a recorded failure.
 
 **Export page CSV** downloads the current filtered page through the console’s own address, including behind an HTTPS proxy.
+
+History uses the retained request-parent index on SQLite and PostgreSQL. Reports still have a bounded deadline; narrow the date range if a large filtered query times out.

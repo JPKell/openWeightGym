@@ -142,6 +142,9 @@ html[data-site-theme] .btn-outline-primary { --tblr-btn-color: var(--theme-accen
 html[data-site-theme] .btn-outline-secondary { --tblr-btn-color: var(--theme-muted); --tblr-btn-border-color: var(--theme-border); --tblr-btn-hover-color: var(--theme-text); --tblr-btn-hover-bg: var(--theme-subtle); --tblr-btn-hover-border-color: var(--theme-muted); --tblr-btn-active-color: var(--theme-text); --tblr-btn-active-bg: var(--theme-subtle); --tblr-btn-active-border-color: var(--theme-muted); }
 html[data-site-theme] .form-check-input:checked { background-color: var(--theme-button); border-color: var(--theme-button); }
 html[data-site-theme] .nav { --tblr-nav-link-color: var(--theme-text); --tblr-nav-link-hover-color: var(--theme-accent); }
+html[data-site-theme] .btn-link { color: var(--theme-accent); }
+html[data-site-theme] .btn-link:hover, html[data-site-theme] .btn-link:focus-visible { color: var(--theme-text); }
+html[data-site-theme] .btn-outline-danger { --tblr-btn-color: var(--tblr-danger-text-emphasis); }
 html[data-site-theme] .badge[class*="-lt"] { color: var(--theme-text) !important; }
 html[data-site-theme] .nav-pills { --tblr-nav-pills-link-active-bg: var(--theme-button); --tblr-nav-pills-link-active-color: #fff; }
 html[data-site-theme] .nav-tabs { --tblr-nav-tabs-link-active-bg: var(--theme-surface); --tblr-nav-tabs-link-active-color: var(--theme-text); }
