@@ -503,3 +503,46 @@ control restart weightroom turnstile
     assert answer.returncode==1
     assert (tmp_path/'stops').read_text().splitlines()==['service:stop turnstile.service','service:stop weightroom.service']
     assert 'start weightroom.service' not in answer.stdout and 'UNEXPECTED_VERSIONS' not in answer.stdout
+
+
+def metadata_helper():
+    spec = importlib.util.spec_from_file_location('project_metadata_fixture', ROOT / 'scripts/refresh-project-metadata.py')
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    return helper
+
+
+def test_update_refreshes_editable_package_map_without_changing_dependencies(tmp_path):
+    root = tmp_path / 'checkout'
+    (root / '.venv').mkdir(parents=True)
+    manifest = root / 'pyproject.toml'
+    manifest.write_text('[project]\nname="openWeightGym"\n[tool.setuptools]\npackages=["toollocker", "developer_tools"]\n')
+    calls = []
+    def run(command, **options):
+        calls.append((command, options))
+    helper = metadata_helper()
+    helper.refresh(root, run)
+    assert calls[0][0] == [str(root / '.venv/bin/python'), '-m', 'pip', 'install', '--no-deps', '--editable', str(root)]
+    assert calls[1][0][1:3] == ['-I', '-c'] and 'developer_tools' in calls[1][0][-1]
+    assert calls[1][1]['cwd'] == root.parent
+    marker = root / '.venv/.owg-project-metadata'
+    assert marker.stat().st_mode & 0o777 == 0o600
+    helper.refresh(root, run)
+    assert len(calls) == 2
+    manifest.write_text(manifest.read_text() + '# changed registration\n')
+    helper.refresh(root, run)
+    assert len(calls) == 4
+
+
+def test_failed_package_registration_is_retried_not_marked_complete(tmp_path):
+    (tmp_path / '.venv').mkdir()
+    (tmp_path / 'pyproject.toml').write_text('[project]\nname="openWeightGym"\n')
+    helper = metadata_helper()
+    def fail(command, **options):
+        raise subprocess.CalledProcessError(1, command)
+    with pytest.raises(subprocess.CalledProcessError):
+        helper.refresh(tmp_path, fail)
+    assert not (tmp_path / '.venv/.owg-project-metadata').exists()
+    calls = []
+    helper.refresh(tmp_path, lambda command, **options: calls.append(command))
+    assert len(calls) == 2

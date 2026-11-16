@@ -114,6 +114,10 @@ refresh_runtime_sources() {
   local root=$1 program
   shift
   [[ -x $root/.venv/bin/python && -f $root/scripts/update-runtime-source.py ]] || return 0
+  if [[ -f $root/scripts/refresh-project-metadata.py ]]; then
+    ui_step "Refreshing installed package metadata" -- as_owner "$root/.venv/bin/python" \
+      "$root/scripts/refresh-project-metadata.py" --root "$root" || return 1
+  fi
   local -a options=(--root "$root" --unit-dir "$(receipt_unit_dir)" --apply)
   for program in "$@"; do options+=(--service "$program"); done
   ui_step "Selecting current checkout for services" -- as_owner "$root/.venv/bin/python" \

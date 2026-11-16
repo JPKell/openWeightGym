@@ -96,6 +96,9 @@ run `python -m developer_tools.code --settings /absolute/path/developer-tools.to
 Tool-folder hosts accept the same `[code]` section in their existing `--settings` file.
 Use `owg restart toollocker` after changing operator configuration; ordinary source edits need
 no restart. Apply software updates through `owg update` followed by `owg restart`.
+OWG refreshes editable package registration when `pyproject.toml` changes, so new root packages
+are importable even when a service's working directory is outside the checkout. This does not
+upgrade installed dependencies or replace custom library paths.
 
 Each background cycle embeds up to 16 pending docstrings (at most 8,000 characters each).
 Failed batches remain pending and rotate behind unattempted work before retrying, so one bad
