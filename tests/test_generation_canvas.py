@@ -279,6 +279,8 @@ def test_main_canvas_previews_switch_and_compact_queue_survive_polling(canvas, w
          'status': 'paused', 'request_counts': {'total': 20, 'completed': 2}},
         {'id': 'failed', 'model': 'sketch', 'status': 'failed',
          'error': 'An extended error message that must remain available without expanding the queue row.'},
+        {'id': 'queued', 'model': 'sketch', 'status': 'in_progress', 'progress': {'stage': 'queued'},
+         'request_counts': {'total': 2, 'completed': 0}},
     ]
     controls = []
 
@@ -319,7 +321,10 @@ def test_main_canvas_previews_switch_and_compact_queue_survive_polling(canvas, w
         page.locator('[data-mw-view=queue]').click()
         playwright.expect(page.locator('#mw-preview-label')).to_be_visible()
         queue_rows = page.locator('#mw-jobs > .mw-job')
-        playwright.expect(queue_rows).to_have_count(3)
+        playwright.expect(queue_rows).to_have_count(4)
+        playwright.expect(queue_rows.nth(3).locator('[data-state]')).to_have_text('Queued')
+        playwright.expect(queue_rows.nth(3).locator('[data-pause]')).to_be_visible()
+        playwright.expect(queue_rows.nth(3).locator('[data-stop]')).to_be_visible()
         for row in queue_rows.all():
             assert row.bounding_box()['height'] <= 42
         queue_rows.first.locator('[data-pause]').click()

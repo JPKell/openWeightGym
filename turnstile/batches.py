@@ -7,6 +7,8 @@ it, and compute only ever sees a request like any other. The store is the one co
 """
 
 import asyncio
+from contextlib import asynccontextmanager
+import json
 from loadcoach import observability as observation
 import time
 
@@ -48,6 +50,9 @@ class FrontBatches:
         self.image_work = None  # optional image progress/storage hook; admission stays in LoadCoach
         self.setting = lambda name: default_for("turnstile",name)
         self.audio_work = None  # the same for SoundRoom's audio
+        self.image_waiting = {}  # FIFO job descriptors; queued images have not begun a batch line
+        self.image_active = {}
+        self.image_changed = asyncio.Condition()
 
     # ---- what compute calls its models -----------------------------------------------------------
 
@@ -82,6 +87,93 @@ class FrontBatches:
 
     # ---- the work --------------------------------------------------------------------------------
 
+    @staticmethod
+    def resident_image_servers(models, catalogue, status):
+        """Locate ready native servers by pinned identity and per-node aliases."""
+        found = set()
+        for name, identity in models:
+            for model in catalogue:
+                identities = (model.get('model_id'), 'sha256:'+model['content_sha256'] if model.get('content_sha256') else None)
+                matches = identity in identities if identity else model['id'] == name
+                if not matches:
+                    continue
+                for place in model.get('locations') or [{'id':model['id']}]:
+                    if not place.get('enabled', True):
+                        continue
+                    for server in status.get('loaded', []):
+                        same_node = not place.get('machine') or place['machine'] == server.get('machine')
+                        names = [server['model'], *server.get('answers', [])]
+                        if server.get('state') == 'ready' and same_node and place['id'] in names:
+                            found.add((server.get('machine', ''), server['model']))
+        return found
+
+    async def image_parallel(self, models, user):
+        """Only overlap jobs on distinct already-resident models; LoadCoach still admits requests."""
+        if len(models) != 1 or any(len(active) != 1 for active, _ in self.image_active.values()):
+            return False
+        owners = {user.name:user}
+        for _, owner_for in self.image_active.values():
+            owner = owner_for()
+            if owner is None:
+                return False
+            owners[owner.name] = owner
+        headers = lambda owner: {'authorization':'Bearer '+self.internal_key(owner.name), 'x-turnstile-no-wake':'1'}
+        try:
+            *inventories, status = await asyncio.gather(
+                *(self.door.get('/v1/models', headers=headers(owner), timeout=5) for owner in owners.values()),
+                self.door.get('/loadcoach/status', headers=headers(user), timeout=5))
+            if any(answer.status_code != 200 for answer in [*inventories, status]):
+                return False
+            catalogues = {name:answer.json().get('data', []) for name, answer in zip(owners, inventories)}
+            status = status.json()
+            servers = self.resident_image_servers(models, catalogues[user.name], status)
+            if not servers:
+                return False
+            for active, owner_for in self.image_active.values():
+                owner = owner_for()
+                if owner is None or owner.name not in catalogues:
+                    return False
+                other = self.resident_image_servers(active, catalogues[owner.name], status)
+                if not other or servers & other:
+                    return False
+            return True
+        except (httpx.HTTPError, ValueError):
+            return False
+
+    @asynccontextmanager
+    async def image_turn(self, number, models, owner_for, continuing):
+        """Keep each image job together, releasing its turn on pause, cancellation or shutdown."""
+        if not models:
+            yield
+            return
+        keys = {identity or 'name:'+name for name, identity in models}
+        self.image_waiting[number] = models
+        try:
+            async with self.image_changed:
+                while continuing():
+                    user = owner_for()
+                    if user is None:
+                        break  # The ordinary worker records the ownership failure without inference.
+                    earlier = list(self.image_waiting).index(number)
+                    ahead = list(self.image_waiting.values())[:earlier]
+                    overlap = lambda others: any(keys & {identity or 'name:'+name for name, identity in other} for other in others)
+                    if not overlap([*ahead, *(active for active, _ in self.image_active.values())]):
+                        if (not self.image_active and not ahead) or (self.image_active and await self.image_parallel(models, user)):
+                            if continuing():
+                                self.image_active[number] = (models, owner_for)
+                            break
+                    try:
+                        await asyncio.wait_for(self.image_changed.wait(), 1)
+                    except TimeoutError:
+                        pass
+                self.image_waiting.pop(number, None)
+            yield
+        finally:
+            async with self.image_changed:
+                self.image_waiting.pop(number, None)
+                self.image_active.pop(number, None)
+                self.image_changed.notify_all()
+
     def line_outcome(self, batch, line, status, request_id, result, *, duration=None):
         """Record request metadata and failures, without prompts or generated output."""
         details = dict(batch=batch['id'], line=line['line'] + 1, custom_id=line['custom_id'],
@@ -100,6 +192,8 @@ class FrontBatches:
 
     def work(self, number: str, user_for) -> None:
         """Execute queued batch lines and persist their durable outcomes."""
+        if (current := self.working.get(number)) and not current.done():
+            return
         batch = self.store.get(number)
         self.log.add('batch', 'running', batch['user'], trace=number, batch=number,
                      endpoint=batch['endpoint'], **batch['request_counts'])
@@ -111,6 +205,10 @@ class FrontBatches:
         """Answer the requests of one batch that have no answer yet, one after another, and end the batch when all have one."""
         store = self.store
         batch = store.get(number)
+        models = []
+        if batch['endpoint'].startswith('/v1/images/'):
+            models = list(dict.fromkeys((json.loads(body)['model'], identity) for body, identity in
+                store.db.execute('SELECT body,model_id FROM batch_lines WHERE batch=? AND result IS NULL ORDER BY line', (number,))))
         headers = {"authorization": "Bearer " + self.internal_key(batch["user"]), "x-loadcoach-priority": "low", "x-loadcoach-trace": number}
         waiting = None
         def deferred(line, reason, **details):
@@ -127,69 +225,71 @@ class FrontBatches:
             store.keep(number, line['line'], status, request_id, result)
             self.line_outcome(batch, line, status, request_id, result, **details)
         try:
-            while store.get(number)["status"] == "in_progress":
-                if not (line := store.next_line(number, on_failure=lambda *args: self.line_outcome(batch, *args))):
-                    break
-                endpoint = line.get('endpoint') or batch['endpoint']
-                body = {**line['body']}
-                if endpoint != '/v1/rerank':
-                    body['stream'] = False
-                if endpoint == '/v1/responses':
-                    original = line['body']
-                    mcp = isinstance(original.get('tools'), list) and any(isinstance(tool, dict) and tool.get('type') == 'mcp' for tool in original['tools'])
-                    if 'stream' in original or original.get('store') is True or 'previous_response_id' in original or mcp:
-                        keep(line, 400, '', {'error': {'message': 'Responses batch lines must be stateless: no stream, store:true, previous_response_id or MCP tools.',
-                            'type': 'invalid_request_error', 'code': 'unsupported_parameter'}})
-                        continue
-                    body.setdefault('store', False)
-                current_user=user_for(batch["user"])
-                if current_user is None or self.task_owner and not self.task_owner(current_user,batch):
-                    keep(line, 401, "", {"error": {"message": "The account this was handed in by is gone or disabled."}})
-                    continue
-                if line.get("model_id"):  # pinned when it was handed in: asked of the model that was meant, under whatever it is called now
-                    models, complete = await self.model_catalogue(current_user)
-                    current = next((one["id"] for one in sorted(models, key=lambda one: one["id"] != body["model"]) if line["model_id"] in
-                                    (one.get("model_id"), "sha256:" + one["content_sha256"] if one.get("content_sha256") else None)), None)
-                    if current is None:
-                        if not complete:  # A partial inventory cannot establish that the pinned model was deleted.
-                            deferred(line, 'Waiting for a complete model inventory before retrying.')
-                            store.not_begun(number, line["line"])
-                            await self.retry_delay()
+            async with self.image_turn(number, models, lambda: user_for(batch['user']),
+                                       lambda: store.get(number)['status'] == 'in_progress'):
+                while store.get(number)["status"] == "in_progress":
+                    if not (line := store.next_line(number, on_failure=lambda *args: self.line_outcome(batch, *args))):
+                        break
+                    endpoint = line.get('endpoint') or batch['endpoint']
+                    body = {**line['body']}
+                    if endpoint != '/v1/rerank':
+                        body['stream'] = False
+                    if endpoint == '/v1/responses':
+                        original = line['body']
+                        mcp = isinstance(original.get('tools'), list) and any(isinstance(tool, dict) and tool.get('type') == 'mcp' for tool in original['tools'])
+                        if 'stream' in original or original.get('store') is True or 'previous_response_id' in original or mcp:
+                            keep(line, 400, '', {'error': {'message': 'Responses batch lines must be stateless: no stream, store:true, previous_response_id or MCP tools.',
+                                'type': 'invalid_request_error', 'code': 'unsupported_parameter'}})
                             continue
-                        keep(line, 404, "", {"error": {"message": "The recorded model was removed.", "code": "model_not_found"}})
+                        body.setdefault('store', False)
+                    current_user=user_for(batch["user"])
+                    if current_user is None or self.task_owner and not self.task_owner(current_user,batch):
+                        keep(line, 401, "", {"error": {"message": "The account this was handed in by is gone or disabled."}})
                         continue
-                    body["model"] = current
-                self.in_flight[number] = {"line": line["line"], "model": body["model"], "since": time.monotonic()}
-                began = time.monotonic()
-                try:
-                    with observation.job("batch_line", number+":"+str(line["line"]), user_for(batch["user"]), getattr(self.log, "observations", None)):
-                        observation.annotate(benchmark=bool(batch.get('metadata', {}).get('benchmark')))
-                        if self.image_work and endpoint.startswith(('/v1/images/','/v1/videos/')):
-                            answer=await self.image_work.execute_line(number,line,body,current_user,headers)
-                        elif self.audio_work and endpoint.startswith('/v1/audio/'):
-                            answer = await self.audio_work.execute_line(number, line, body, current_user, headers)
-                        else:
-                            answer = await self.door.post(endpoint, json=body, headers=headers, timeout=None)
-                except httpx.HTTPError as problem:
-                    deferred(line, 'Inference connection unavailable; waiting to retry.', error_type=type(problem).__name__)
-                    store.not_begun(number, line["line"])
-                    await self.retry_delay()
-                    continue
-                finally:
-                    self.in_flight.pop(number, None)
-                if answer.headers.get("x-turnstile") in ("compute-off", "busy") or answer.status_code == 504 or answer.status_code in (429, 503) and "retry-after" in answer.headers:
-                    # Not now: compute is off or waking, turnstile is full, it waited too long, or the account has too much under way. Not a try, and not an answer.
-                    deferred(line, 'Waiting for inference capacity before retrying.', status=answer.status_code)
-                    store.not_begun(number, line["line"])
-                    await self.retry_delay()
-                    continue
-                try:
-                    said = answer.json()
-                except ValueError:
-                    said = {"text": answer.text}
-                keep(line, answer.status_code, answer.headers.get("x-loadcoach-request-id", ""), said,
-                     duration=time.monotonic() - began)
-                waiting = None
+                    if line.get("model_id"):  # pinned when it was handed in: asked of the model that was meant, under whatever it is called now
+                        models, complete = await self.model_catalogue(current_user)
+                        current = next((one["id"] for one in sorted(models, key=lambda one: one["id"] != body["model"]) if line["model_id"] in
+                                        (one.get("model_id"), "sha256:" + one["content_sha256"] if one.get("content_sha256") else None)), None)
+                        if current is None:
+                            if not complete:  # A partial inventory cannot establish that the pinned model was deleted.
+                                deferred(line, 'Waiting for a complete model inventory before retrying.')
+                                store.not_begun(number, line["line"])
+                                await self.retry_delay()
+                                continue
+                            keep(line, 404, "", {"error": {"message": "The recorded model was removed.", "code": "model_not_found"}})
+                            continue
+                        body["model"] = current
+                    self.in_flight[number] = {"line": line["line"], "model": body["model"], "since": time.monotonic()}
+                    began = time.monotonic()
+                    try:
+                        with observation.job("batch_line", number+":"+str(line["line"]), user_for(batch["user"]), getattr(self.log, "observations", None)):
+                            observation.annotate(benchmark=bool(batch.get('metadata', {}).get('benchmark')))
+                            if self.image_work and endpoint.startswith(('/v1/images/','/v1/videos/')):
+                                answer=await self.image_work.execute_line(number,line,body,current_user,headers)
+                            elif self.audio_work and endpoint.startswith('/v1/audio/'):
+                                answer = await self.audio_work.execute_line(number, line, body, current_user, headers)
+                            else:
+                                answer = await self.door.post(endpoint, json=body, headers=headers, timeout=None)
+                    except httpx.HTTPError as problem:
+                        deferred(line, 'Inference connection unavailable; waiting to retry.', error_type=type(problem).__name__)
+                        store.not_begun(number, line["line"])
+                        await self.retry_delay()
+                        continue
+                    finally:
+                        self.in_flight.pop(number, None)
+                    if answer.headers.get("x-turnstile") in ("compute-off", "busy") or answer.status_code == 504 or answer.status_code in (429, 503) and "retry-after" in answer.headers:
+                        # Not now: compute is off or waking, turnstile is full, it waited too long, or the account has too much under way. Not a try, and not an answer.
+                        deferred(line, 'Waiting for inference capacity before retrying.', status=answer.status_code)
+                        store.not_begun(number, line["line"])
+                        await self.retry_delay()
+                        continue
+                    try:
+                        said = answer.json()
+                    except ValueError:
+                        said = {"text": answer.text}
+                    keep(line, answer.status_code, answer.headers.get("x-loadcoach-request-id", ""), said,
+                         duration=time.monotonic() - began)
+                    waiting = None
         except asyncio.CancelledError:
             if store.get(number)["status"] != "cancelling":
                 self.log.add('batch', 'interrupted', batch['user'], trace=number, batch=number,

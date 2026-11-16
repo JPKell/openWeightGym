@@ -380,7 +380,7 @@
         const progress=row.progress||{},failed=progress.stage==='failed'||row.error||progress.error||row.request_counts?.failed>0;
         fragment.querySelector('[data-title]').textContent=row.model||row.settings?.model||row.settings?.request?.model||'Image job';
         fragment.querySelector('[data-title]').title=fragment.querySelector('[data-title]').textContent;
-        fragment.querySelector('[data-state]').textContent=failed?'Failed':row.status.replaceAll('_',' ');
+        fragment.querySelector('[data-state]').textContent=failed?'Failed':row.status==='in_progress'&&row.progress?.stage==='queued'?'Queued':row.status.replaceAll('_',' ');
         const counts=row.request_counts||{};
         fragment.querySelector('[data-detail]').textContent=row.error||progress.error?.message||[progress.stage,progress.step?progress.step+'/'+progress.total_steps:'',counts.total?((counts.completed||0)+' / '+counts.total+' images'):''].filter(Boolean).join(' · ');
         fragment.querySelector('[data-detail]').title=fragment.querySelector('[data-detail]').textContent;

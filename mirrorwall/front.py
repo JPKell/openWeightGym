@@ -253,10 +253,10 @@ class Front:
                         failure=result.get('body',{}).get('error',{}).get('message','Image generation failed.')
                         break
             jobs.append({**row,'status':batch['status'] if batch else 'completed',
-                         'request_counts':batch.get('request_counts',{}) if batch else {},'progress':self.progress.get(row['id']),'error':failure})
+                         'request_counts':batch.get('request_counts',{}) if batch else {},'progress':{'stage':'queued'} if row['id'] in self.batches.image_waiting else self.progress.get(row['id']),'error':failure})
         for identifier,row in self.transient.items():
             if row['owner']==user.identity:
-                jobs.insert(0,{'id':identifier,**{k:v for k,v in row.items() if k not in ('owner','task')},'progress':self.progress.get(identifier)})
+                jobs.insert(0,{'id':identifier,**{k:v for k,v in row.items() if k not in ('owner','task')},'progress':{'stage':'queued'} if identifier in self.batches.image_waiting else self.progress.get(identifier)})
         return JSONResponse({'models':models,'assets':self.store.listing(user.identity,kind='output'),
              'references':self.store.listing(user.identity,kind='reference'),'presets':self.visible_presets(user,models),
              'jobs':jobs,'preferences':self.store.preferences(user.identity),'can_manage':user.can('manage-models'),'can_unlogged':bool(user.can('unlogged') and await self.batches.can_unlogged(user))},headers={'cache-control':'no-store'})
@@ -441,14 +441,18 @@ class Front:
                 async def execute():
                     """Run temporary image lines without retaining SQL job history."""
                     try:
-                        for index,line in enumerate(lines):
-                            current=self.users.by_identity(user.identity)
-                            if not current:
-                                raise ValueError('The image job owner is no longer enabled.')
-                            answer=await self.execute_line(identifier,{'line':index},line['body'],current,{'authorization':'Bearer '+self.batches.internal_key(current.name)},quiet=True)
-                            if answer.status_code>=400:
-                                raise ValueError(answer.json().get('error',{}).get('message','Generation failed.'))
-                        self.transient[identifier]['status']='completed'
+                        identity='sha256:'+selected['content_sha256'] if selected.get('content_sha256') else selected.get('model_id')
+                        async with self.batches.image_turn(identifier, [] if video else [(selected['id'],identity)],
+                                                           lambda: self.users.by_identity(user.identity),
+                                                           lambda: self.transient[identifier]['status']=='in_progress'):
+                            for index,line in enumerate(lines):
+                                current=self.users.by_identity(user.identity)
+                                if not current:
+                                    raise ValueError('The image job owner is no longer enabled.')
+                                answer=await self.execute_line(identifier,{'line':index},line['body'],current,{'authorization':'Bearer '+self.batches.internal_key(current.name)},quiet=True)
+                                if answer.status_code>=400:
+                                    raise ValueError(answer.json().get('error',{}).get('message','Generation failed.'))
+                            self.transient[identifier]['status']='completed'
                     except asyncio.CancelledError:
                         self.transient[identifier]['status']='cancelled'
                         raise

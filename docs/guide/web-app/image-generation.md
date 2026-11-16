@@ -23,6 +23,12 @@ comparison and viewing controls sit below the image, followed by links to the ot
 **Library** keeps the larger thumbnail grid and batch actions. **Queue** shows one compact row
 per job with status, progress and pause/stop controls below the main viewer.
 
+The queue finishes all images and sweep variations in a job before starting the next job for
+that model. Jobs run in parallel only on different models that are already loaded; a job that
+needs another model loaded waits for the current job to finish. Pausing releases the model's
+turn after its current image, and cancelling releases it immediately. Temporary jobs follow
+the same ordering without retaining job history.
+
 Press **Delete** to arm **Delete image**, then press **Delete** again to confirm. Holding the
 key does not repeat deletion. Escape cancels; typing in a form or viewing a live preview never
 deletes a saved image. Image details and settings export remain below the viewer.

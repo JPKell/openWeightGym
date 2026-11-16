@@ -17,3 +17,5 @@ Inspect durable batch progress, results and exact lifecycle history.
 ## Limits and troubleshooting
 
 Downloads remain owner-only and expire with configured file retention. **Cancel** confirms before stopping remaining work; completed results stay available. If event history is missing, the saved batch record can still explain its state. Submitted API batches are described in [API reference](/docs/api).
+
+Image batches follow the job ordering described in [Image generation](/docs/web-app/image-generation#review-images-and-runs).
