@@ -20,6 +20,22 @@ from test_app import fake_llama_server, gateway, add_user, model  # noqa: F401
 from test_postgresql import postgres  # noqa: F401
 
 
+def test_bracketed_citations_link_only_visible_local_guides():
+    from weightroom.docs_help import presentation
+    person = SimpleNamespace(can=frozenset({'use-tools'}))
+    guide = '/docs/getting-started/navigation#forms-and-confirmations'
+    text = (f'Click twice【{guide}】. Cancel with Escape【{guide}】. '
+            '【/docs/api/developer-tools】 【/docs/no-such-guide】 '
+            '【https://external.test/】 <script>window.docsPwned=true</script>')
+    html, sources = presentation(text, person)
+    assert [source['url'] for source in sources] == [guide]
+    assert html.count(f'href="{guide}"') == 2
+    assert 'href="/docs/api/developer-tools"' not in html
+    assert 'href="/docs/no-such-guide"' not in html
+    assert 'href="https://external.test/' not in html
+    assert '<script>' not in html
+
+
 @pytest.fixture
 def help_desk(docs_gateway, tmp_path):
     server, users, caller = docs_gateway

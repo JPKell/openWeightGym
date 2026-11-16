@@ -40,6 +40,10 @@ def presentation(text, person):
         parsed = urlsplit(url)
         return url if not parsed.scheme and not parsed.netloc and parsed.path in visible else None
     text = text.replace(MARKER, '').strip()[:20000]
+    # Some local models emit bracketed source URLs even when asked for Markdown.
+    # Normalize only catalogue-backed links under the same caller visibility rules.
+    text = re.sub(r'【(/docs/[^\s【】]+)】',
+                  lambda match: f'[Source]({match[1]})' if link(match[1]) else match[0], text)
     sources, seen = [], set()
     for url in re.findall(r'\]\(([^\s)]+)\)', text):
         if link(url) and url not in seen:

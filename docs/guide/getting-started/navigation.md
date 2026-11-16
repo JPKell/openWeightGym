@@ -21,6 +21,7 @@ Use the category menu to reach the pages your account is allowed to use.
 | Control | Use |
 |---|---|
 | `/` in Docs | Focus search when you are not typing in a field. |
+| **Ask** in Docs | Ask about the console, then follow the cited guides to verify the answer. Available with tool access and a configured help model. |
 | **My account** | Open the account menu by selecting your name. |
 | **Chat options** / **Main menu** | Switch the smaller-screen chat drawer between conversation controls and navigation. |
 
