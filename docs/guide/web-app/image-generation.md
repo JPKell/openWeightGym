@@ -16,9 +16,10 @@ Create or edit images using a permitted image model and workflow.
 
 ## Review images and runs
 
-**Gallery** puts the selected image in the main viewer with a narrow, scrollable thumbnail list
-on the right. Click a thumbnail or use the arrow keys to move between images; navigation follows
-the current image filter. Download, reuse, favorite and delete controls sit below the image.
+**Gallery** gives the selected image the full available frame height, without a heading, with a
+narrow, scrollable thumbnail list on the right. Click a thumbnail or use the arrow keys to move
+between images; navigation follows the current image filter. Download, reuse, favorite, delete,
+comparison and viewing controls sit below the image, followed by links to the other workspace views.
 **Library** keeps the larger thumbnail grid and batch actions. **Queue** shows one compact row
 per job with status, progress and pause/stop controls below the main viewer.
 

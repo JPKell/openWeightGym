@@ -490,9 +490,11 @@
     renderReferences();
   }
   function setView(view) {
+    const galleryChanged=view==='gallery'||root.dataset.view==='gallery';
     root.dataset.view=view;
     for(const button of all('[data-mw-view]')){const active=button.dataset.mwView===view;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));}
     if(view==='gallery')selectImage(selected);
+    if(galleryChanged)root.scrollIntoView({block:'start'});
   }
   function setTool(tool) {
     const mode=tool==='resize'?'resize':'generate';

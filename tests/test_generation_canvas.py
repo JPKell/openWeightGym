@@ -192,6 +192,16 @@ def test_gallery_thumbnail_rail_keyboard_filter_download_and_delete(canvas, widt
         playwright.expect(thumbs).to_have_count(len(rows))
         viewer = page.locator('.ig-viewer').bounding_box()
         rail = page.locator('.ig-history').bounding_box()
+        artboard = page.locator('#mw-canvas').bounding_box()
+        header_height = page.locator('body > header').bounding_box()['height']
+        playwright.expect(page.locator('#mw-page-header .page-title')).to_be_hidden()
+        playwright.expect(page.locator('#mw-viewer-heading')).to_be_hidden()
+        playwright.expect(page.locator('.ig-history .section-title')).to_be_hidden()
+        assert abs(artboard['height'] - (1000 - header_height - 32)) < 2
+        assert header_height <= artboard['y'] <= header_height + 18
+        assert page.locator('.ig-subnav').bounding_box()['y'] >= artboard['y'] + artboard['height']
+        assert page.locator('.ig-viewer-bar').bounding_box()['y'] >= artboard['y'] + artboard['height']
+        assert page.locator('#mw-page-header .page-actions').bounding_box()['y'] >= artboard['y'] + artboard['height']
         assert rail['x'] >= viewer['x'] + viewer['width']
         assert rail['width'] <= 140
         assert page.locator('#mw-thumbnails').evaluate('el => el.scrollHeight > el.clientHeight')
@@ -231,6 +241,7 @@ def test_gallery_thumbnail_rail_keyboard_filter_download_and_delete(canvas, widt
         page.locator('#mw-library-filter').select_option('all')
         thumbs.first.click()
         page.locator('[data-mw-view=generate]').click()
+        playwright.expect(page.locator('#mw-page-header .page-title')).to_be_visible()
         page.locator('#mw-prompt').fill('A draft to keep')
         page.keyboard.press('ArrowRight')
         page.keyboard.press('Delete')

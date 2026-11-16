@@ -39,13 +39,26 @@
 }
 .ig-canvas[data-view=library] .ig-workspace { grid-template-columns: minmax(0,1fr) minmax(0,1fr); grid-template-areas: 'viewer history'; }
 .ig-canvas[data-view=queue] .ig-workspace { grid-template-columns: minmax(0,1fr); grid-template-areas: 'viewer' 'queue'; }
+.ig-canvas[data-view=gallery] { --gallery-height: calc(100dvh - var(--top,6rem) - 2rem); display: flex; flex-direction: column; gap: 12px; }
+.ig-canvas[data-view=gallery] > .ig-workspace { order: 0; }
+.ig-canvas[data-view=gallery] > .ig-subnav { order: 1; margin: 0; }
+.ig-canvas[data-view=gallery] > .page-header { order: 2; margin-bottom: 0 !important; }
+.ig-canvas[data-view=gallery] > .page-header .min-w-0,
+.ig-canvas[data-view=gallery] :is(.ig-session-status,.ig-art-label,.ig-history .section-heading,#mw-viewer-heading) { display: none !important; }
 .ig-canvas[data-view=gallery] .ig-workspace { grid-template-columns: minmax(0,1fr) 140px; grid-template-areas: 'viewer history'; gap: 16px; }
-.ig-canvas[data-view=gallery] .ig-artboard { height: clamp(280px,calc(100dvh - 475px),900px); }
-.ig-canvas[data-view=gallery] .ig-history { display: flex; flex-direction: column; max-height: calc(100dvh - 280px); }
-.ig-canvas[data-view=gallery] .ig-history > .d-flex { margin-bottom: 8px !important; }
+.ig-canvas[data-view=gallery] .ig-viewer { display: flex; flex-direction: column; border: 0; background: transparent; }
+.ig-canvas[data-view=gallery] :is(.ig-artboard,.ig-empty) { order: 0; height: var(--gallery-height); min-height: 240px; flex-shrink: 0; border-radius: var(--suite-frame-radius); }
+.ig-canvas[data-view=gallery] .ig-result-bar { order: 1; }
+.ig-canvas[data-view=gallery] .ig-viewer > .d-flex { order: 2; }
+.ig-canvas[data-view=gallery] .ig-viewer-bar { order: 3; }
+.ig-canvas[data-view=gallery] .ig-result-details { order: 4; }
+.ig-canvas[data-view=gallery] .ig-artboard:fullscreen { height: 100dvh; }
+.ig-canvas[data-view=gallery] .ig-history { display: flex; flex-direction: column; }
+.ig-canvas[data-view=gallery] .ig-history > .d-flex { order: 1; margin: 8px 0 0 !important; }
+.ig-canvas[data-view=gallery] #mw-older { order: 2; }
 .ig-canvas[data-view=gallery] #mw-library-filter { width: 100% !important; }
 .ig-canvas[data-view=gallery] #mw-library-actions { display: none !important; }
-.ig-canvas[data-view=gallery] .ig-thumbnails { grid-template-columns: minmax(0,1fr); overflow-y: auto; gap: 8px; padding: 3px; }
+.ig-canvas[data-view=gallery] .ig-thumbnails { grid-template-columns: minmax(0,1fr); max-height: var(--gallery-height); overflow-y: auto; gap: 8px; padding: 3px; }
 .ig-canvas[data-view=gallery] .ig-thumbnail img { aspect-ratio: 1; }
 .ig-canvas[data-view=gallery] .ig-thumbnail :is(span,small),
 .ig-canvas[data-view=gallery] [data-select-image] { display: none; }
@@ -57,8 +70,6 @@
  .ig-canvas[data-sweep=false] .ig-workspace { grid-template-areas: 'tools' 'compose' 'settings' 'viewer' 'history' 'queue'; }
  .ig-canvas[data-view=library] .ig-workspace { grid-template-areas: 'viewer' 'history'; }
  .ig-canvas[data-view=gallery] .ig-workspace { grid-template-columns: minmax(0,1fr) 76px; grid-template-areas: 'viewer history'; gap: 8px; }
- .ig-canvas[data-view=gallery] .ig-artboard { min-height: 180px; height: clamp(180px,30dvh,400px); }
- .ig-canvas[data-view=gallery] .ig-history { max-height: 70dvh; }
  .ig-canvas[data-view=gallery] #mw-library-filter { padding-left: 4px; padding-right: 20px; font-size: 11px; }
  .ig-canvas[data-view=queue] .ig-workspace { grid-template-areas: 'viewer' 'queue'; }
  .ig-canvas .ig-session-status { display: none; }
