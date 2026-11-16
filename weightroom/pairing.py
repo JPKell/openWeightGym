@@ -108,7 +108,25 @@ def node_name(wanted: str, taken: set[str]) -> str:
     return name
 
 
-def join(settings_path: Path, address: str, wanted: str = "", voice: bool = False) -> dict:
+def wake_values(mac: str | None = None, address: str | None = None) -> dict[str, str]:
+    """Validate optional installer Wake details using the settings catalogue's rules.
+
+    Omitted fields preserve existing settings when a node pairs again.
+    """
+    from loadcoach.setting_catalog import _wake_mac, _wake_address
+    values = {}
+    for key, value, check in (('wake_mac', mac, _wake_mac), ('wake_address', address, _wake_address)):
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            raise ValueError(f'{key} must be text.')
+        check(value)
+        values[key] = value
+    return values
+
+
+def join(settings_path: Path, address: str, wanted: str = "", voice: bool = False,
+         wake_mac: str | None = None, wake_address: str | None = None) -> dict:
     """Record the node at `address` and say which name and machine key it signs with.
 
     Every node is a [machines.NAME]. The first one, while the install still has the placeholder
@@ -117,6 +135,7 @@ def join(settings_path: Path, address: str, wanted: str = "", voice: bool = Fals
     its own. A node that pairs again from the same address keeps its name and key; the old
     default node, still a top-level `compute` until `owg update` moves it, keeps the name compute.
     """
+    wake = wake_values(wake_mac, wake_address)
     folder = settings_path.parent
     original = settings_path.read_text()
     told = tomllib.loads(original)
@@ -164,6 +183,10 @@ def join(settings_path: Path, address: str, wanted: str = "", voice: bool = Fals
             for key, value in (("compute", f"http://{host}:8442"), ("spotter", f"http://{host}:8444"),
                                ("machine_key_file", f"../keys/machines/{name}.key")):
                 text = set_toml_value(text, f"machines.{name}.{key}", value)
+    # The legacy primary node retains its top-level Wake fields until migration.
+    prefix = '' if legacy else f'machines.{name}.'
+    for key, value in wake.items():
+        text = set_toml_value(text, prefix + key, value)
     key_file = key_file.resolve()
     if not key_file.exists():
         key_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

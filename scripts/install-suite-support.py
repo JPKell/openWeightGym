@@ -766,6 +766,8 @@ def main() -> int:
     rendering.add_argument("--compute", default="")
     rendering.add_argument("--llama-server", default="")
     rendering.add_argument("--machine-name", default="")
+    rendering.add_argument("--wake-mac", default="")
+    rendering.add_argument("--wake-address", default="255.255.255.255")
     rendering.add_argument("--voice", action="store_true")
     rendering.add_argument("--voice-model", default="")
     rendering.add_argument("--platform-services", default="images,speech,audio,downloads,classifiers")
@@ -806,6 +808,14 @@ def main() -> int:
             args.machine_name, args.voice, args.voice_model)
         if args.example.stem == 'weightroom':
             values.update({key: service in selected for key, service in SERVICE_SETTINGS.items()})
+            if args.wake_mac:
+                from weightroom.pairing import wake_values
+                wake = wake_values(args.wake_mac, args.wake_address)
+                peer = next((key.removesuffix('.compute') for key in values
+                             if key.startswith('machines.') and key.endswith('.compute')), '')
+                if not peer:
+                    parser.error('Wake needs a compute node in the new console settings.')
+                values.update({f'{peer}.{key}': value for key, value in wake.items()})
         return render(args.example, args.target, root, args.home, values)
     if args.command in {"audit", "state", "firewall-ports"}:
         services = [item for item in args.services.split(",") if item]

@@ -46,6 +46,8 @@ FRONT_URL=
 COMPUTE_URL=
 LLAMA_SERVER=
 MACHINE_NAME=
+WAKE_MAC=
+WAKE_ADDRESS=255.255.255.255
 VOICE_MODEL=
 PLATFORM_SERVICES=images,speech,audio,downloads,classifiers
 START_NEW=0
@@ -97,6 +99,8 @@ change both the service set and database engine before anything is installed.
   --compute-url URL          the GPU node's LoadCoach, such as http://192.168.1.20:8442
   --llama-server PATH        the llama-server LoadCoach runs (see install-llamacpp.sh)
   --machine-name NAME        the name the console knows this GPU node by (default: compute)
+  --wake-mac MAC             Wake-on-LAN hardware address for the node in new console settings
+  --wake-address IP          Wake broadcast destination (default: 255.255.255.255)
   --voice-model NAME         conversation model for newly written voice settings (default: the voice defaults')
   --platform-services LIST   initial console services: images,speech,audio,downloads,classifiers or none
   --start-new                also start services whose settings were just written
@@ -228,6 +232,8 @@ while (($#)); do
     --compute-url) (($# >= 2)) || usage_error '--compute-url needs a URL'; COMPUTE_URL=$2; shift 2 ;;
     --llama-server) (($# >= 2)) || usage_error '--llama-server needs a path'; LLAMA_SERVER=$2; shift 2 ;;
     --machine-name) (($# >= 2)) || usage_error '--machine-name needs a name'; MACHINE_NAME=$2; shift 2 ;;
+    --wake-mac) (($# >= 2)) || usage_error '--wake-mac needs a MAC address'; WAKE_MAC=$2; shift 2 ;;
+    --wake-address) (($# >= 2)) || usage_error '--wake-address needs an IPv4 address'; WAKE_ADDRESS=$2; shift 2 ;;
     --voice-model) (($# >= 2)) || usage_error '--voice-model needs a model'; VOICE_MODEL=$2; shift 2 ;;
     --platform-services) (($# >= 2)) || usage_error '--platform-services needs a list or none'; PLATFORM_SERVICES=$2; shift 2 ;;
     --start-new) START_NEW=1; shift ;;
@@ -944,6 +950,7 @@ install_example_config() {
       "$PY" "$ROOT/scripts/install-suite-support.py" render --example "$source_config" --target "$target_config" \
         --root "$ROOT" --home "$HOME" --topology "$TOPOLOGY" --address "${ADDRESS:-127.0.0.1}" \
         --front "$FRONT_URL" --compute "$COMPUTE_URL" --llama-server "$LLAMA_SERVER" --machine-name "$MACHINE_NAME" \
+        --wake-mac "$WAKE_MAC" --wake-address "$WAKE_ADDRESS" \
         --platform-services "$PLATFORM_SERVICES" "${voice_options[@]}" ||
         die "The settings file $(shell_path "$target_config") could not be written." \
           "The lines above say why" "Check the folder is yours and has room: ls -ld $(shell_path "$ROOT/settings") && df -h $(shell_path "$ROOT")"

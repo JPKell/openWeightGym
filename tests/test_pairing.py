@@ -138,7 +138,8 @@ def test_pairing_over_http_gives_the_key_once_and_turns_away_guessing(console, m
     with TestClient(build_app(settings, compute_off, tools_client=compute_off, voice_client=compute_off),
                     client=("10.0.0.5", 50000), base_url="http://console.lan:8440") as node:
         assert node.post("/pair", json={"code": "ABCD-EFGH"}).status_code == 403
-        answer = node.post("/pair", json={"code": code, "name": "gpu-box"})
+        answer = node.post("/pair", json={"code": code, "name": "gpu-box",
+                                          "wake_mac": "00:11:22:33:44:55", "wake_address": "10.0.0.255"})
         assert answer.status_code == 200
         assert answer.json() == {"name": "gpu-box", "machine_key": "the-machine-key", "restarting": True,
                                  "front": "http://console.lan:8442"}
@@ -148,7 +149,28 @@ def test_pairing_over_http_gives_the_key_once_and_turns_away_guessing(console, m
         assert node.post("/pair", json={"code": "WXYZ-WXYZ"}).status_code == 429
         assert node.post("/pair", content=b"not json").status_code in (400, 429)
     assert tomllib.loads(console.read_text())["machines"]["gpu-box"]["compute"] == "http://10.0.0.5:8442"
+    machine = turnstile_settings(console).machines['gpu-box']
+    assert (machine['wake_mac'], machine['wake_address']) == ('00:11:22:33:44:55', '10.0.0.255')
+    assert not pairing.join(console, '10.0.0.5')['changed']  # older installers preserve Wake
     assert len(restarts) == 1
+
+
+@pytest.mark.parametrize('values', [dict(wake_mac='shell;command'), dict(wake_mac=123),
+                                   dict(wake_address='300.1.2.3'), dict(wake_address='::1')])
+def test_invalid_wake_details_do_not_change_settings_or_keys(console, values):
+    original = console.read_bytes()
+    keys = list((console.parent.parent / 'keys').rglob('*'))
+    with pytest.raises(ValueError):
+        pairing.join(console, '10.0.0.8', 'new-node', **values)
+    assert console.read_bytes() == original
+    assert list((console.parent.parent / 'keys').rglob('*')) == keys
+
+
+def test_legacy_pairing_saves_wake_for_the_legacy_node(console):
+    console.write_text(FRONT_ONLY.replace('127.0.0.1:9442', '10.0.0.5:8442'))
+    pairing.join(console, '10.0.0.5', wake_mac='00:11:22:33:44:55', wake_address='10.0.0.255')
+    machine = turnstile_settings(console).machines[LEGACY]
+    assert (machine['wake_mac'], machine['wake_address']) == ('00:11:22:33:44:55', '10.0.0.255')
 
 
 def test_voice_pairing_supplies_a_scoped_front_key_and_updates_gateway_routing(console, monkeypatch):

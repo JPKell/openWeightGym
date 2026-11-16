@@ -3840,6 +3840,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
     async def pair_node(request: Request) -> Response:
         """Let a GPU node join with a one-time code: it is given its name, its machine key and turnstile's address.
 
+        Optional wake_mac and wake_address save validated Wake-on-LAN settings for this node.
         No sign-in: the code is the permission. Ten wrong codes from one address in ten minutes
         and that address waits. The node is recorded at the address its request came from.
         """
@@ -3856,11 +3857,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if not pairing.take_code(Path(settings.data), code):
             pairing_failures[client] = recent + [now]
             return JSONResponse({"error": {"message": "That code is wrong, used or out of date. Make a new one on the console."}}, status_code=403)
+        try:
+            wake = pairing.wake_values(body.get('wake_mac'), body.get('wake_address'))
+        except ValueError as problem:
+            return JSONResponse({'error': {'message': str(problem)}}, status_code=400)
         # Seen from here is what turnstile can reach; the node's own word counts only from this machine itself.
         address = offered if client in pairing.LOOPBACK and offered else client
         if not pairing.valid_address(address):
             return JSONResponse({"error": {"message": "The node's address could not be told."}}, status_code=400)
-        joined = pairing.join(Path(settings.path), address, wanted, voice=body.get("voice") is True)
+        joined = pairing.join(Path(settings.path), address, wanted, voice=body.get("voice") is True, **wake)
         extra = {}
         if body.get("voice") is True:
             from weightroom.bootstrap import voice_service_identity

@@ -42,7 +42,7 @@ start WSL again before installing.
    driver supports), disk space, and whether this account already runs openWeightGym from another
    folder, in which case it stops rather than replace those services.
 2. **Game plan.** Asks how this machine fits in (below), shows the plan and offers **Customize**:
-   who it runs as, voice, the database, the llama.cpp build, power control and
+   who it runs as, voice, the database, the llama.cpp build, Wake-on-LAN, power control and
    whether services keep running after you log out.
 3. **Account.** Asks for your console user name and password, typed twice.
 4. **Loading plates.** Fetches the code, uv and Python 3.13, a prebuilt llama.cpp for the cards it
@@ -65,6 +65,23 @@ arguments containing credentials are omitted. Logs are readable only by their ow
 | **Everything on this machine** | the console, the API gateway, the model runner, tools and the monitor | one box with a graphics card: the quickest start |
 | **Console only** | the web console, the API gateway and ToolLocker | a small always-on machine; GPU machines join it |
 | **GPU node** | the model runner and the monitor | a machine whose cards a console should use |
+
+### Wake-on-LAN during installation
+
+For **GPU node** and **Everything on this machine**, setup asks whether the console should be
+able to wake this computer (default: no). If enabled, confirm the network adapter's MAC address
+and the broadcast address reachable from the console. Setup suggests values from the interface
+used to reach the console, when available; check that this adapter supports Wake-on-LAN.
+The confirmed values survive interrupted installs in `.install-receipt`. Pairing sends them to
+the console's `[machines.NAME]` settings; a single-machine install writes them to its own node
+entry in new `settings/weightroom.toml`. Existing settings are preserved. With manual key setup,
+the installer displays the values to save under **Settings → Compute nodes → Wake** on the console.
+
+For unattended setup, pass `--wake-mac 00:11:22:33:44:55` and optionally
+`--wake-address 192.168.1.255`; otherwise the destination is `255.255.255.255`.
+Enable Wake-on-LAN separately in the computer's firmware and network adapter. Saving these
+settings does not enable hardware Wake or put the machine to sleep. A console on the sleeping
+computer cannot wake itself: another awake computer must send its Wake packet.
 
 Ports, for a firewall:
 
@@ -513,6 +530,7 @@ curl -fsSL …/install.sh | OWG_ADMIN_PASSWORD='…' bash -s -- --yes --topology
 | `--voice` | also speech recognition and voices |
 | `--voice-key-file FILE` | voice service key the control node keeps for a GPU node joined by hand |
 | `--power-control` | let the console sleep, restart or switch off this machine (a polkit rule) |
+| `--wake-mac MAC`, `--wake-address IP` | save Wake-on-LAN details; see [Wake-on-LAN during installation](#wake-on-lan-during-installation) |
 | `--no-linger`, `--no-browser` | skip linger, or opening the console |
 | `--ref BRANCH` | which branch to install |
 | `--plain`, `NO_COLOR`, `OWG_QUIET=1` | no colour and no animation, or colour without animation |

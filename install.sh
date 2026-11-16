@@ -64,6 +64,8 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
   --platform-services LIST  initial console services: images,speech,audio,downloads,classifiers or none
   --voice-key-file FILE   manual GPU-node setup: the console's voice-service.key (pairing supplies it)
   --power-control         let the console put this machine to sleep, restart or switch it off
+  --wake-mac MAC          let the console wake this computer using this network MAC address
+  --wake-address IP       Wake broadcast destination (default: 255.255.255.255)
   --no-linger             let the services stop when you log out
   --no-browser            do not open the console in a browser at the end
   --ref BRANCH            which branch of openWeightGym to fetch (default: main)
@@ -199,6 +201,7 @@ parse_arguments() {
   COMPUTE_URL='' LLAMA=auto DATABASE=sqlite VOICE=0 LINGER_WANTED=1 BROWSER=1 POWER_RULE=0
   ACTION='' PASSTHROUGH=() JOIN_URL='' PAIR_CODE='' PAIRED=0 MACHINE_NAME=''
   VOICE_KEY_FILE='' VOICE_KEY=''
+  WAKE_MAC='' WAKE_ADDRESS=255.255.255.255
   PLATFORM_SERVICES=images,speech,audio,downloads,classifiers
   ADD_SERVICES='' STRATA_ACTION=keep STRATA_HOST_RAM_MIB=22528
   SDCPP_ACTION=keep SDCPP_BACKEND=cuda AUDIOCPP_ACTION=keep AUDIOCPP_BACKEND=cuda WHISPERCPP_ACTION=keep WHISPERCPP_BACKEND=cuda
@@ -215,7 +218,7 @@ parse_arguments() {
     [--sdcpp]='install, skip or keep' [--sdcpp-backend]='cuda, vulkan or cpu'
     [--audiocpp]='install, skip or keep' [--audiocpp-backend]='cuda, vulkan or cpu'
     [--whispercpp]='install, skip or keep' [--whispercpp-backend]='cuda, vulkan or cpu'
-    [--classifier-tools]='install, skip or keep'
+    [--classifier-tools]='install, skip or keep' [--wake-mac]='a MAC address' [--wake-address]='an IPv4 address'
     [--platform-services]='images,speech,audio,downloads,classifiers or none')
   [[ -n $DIR ]] && DIR_GIVEN=1
   while (($#)); do
@@ -245,6 +248,8 @@ parse_arguments() {
         shift 2 ;;
       --voice-key-file) VOICE_KEY_FILE=$2; shift 2 ;;
       --power-control) POWER_RULE=1; PLAN_GIVEN[POWER_RULE]=1; shift ;;
+      --wake-mac) WAKE_MAC=$2; PLAN_GIVEN[WAKE_MAC]=1; shift 2 ;;
+      --wake-address) WAKE_ADDRESS=$2; PLAN_GIVEN[WAKE_ADDRESS]=1; shift 2 ;;
       --no-model) shift ;;  # no model is downloaded any more; still accepted so older commands work
       --no-linger) LINGER_WANTED=0; PLAN_GIVEN[LINGER_WANTED]=1; shift ;;
       --no-browser) BROWSER=0; shift ;;
@@ -288,6 +293,10 @@ parse_arguments() {
   done
   [[ $STRATA_HOST_RAM_MIB =~ ^[1-9][0-9]{0,8}$ ]] || ARGUMENT_ERROR='--strata-host-ram-mib needs a positive whole number of MiB.'
   [[ -z $ADD_SERVICES || $ACTION == components ]] || ARGUMENT_ERROR='--services requires --components.'
+  [[ -z $WAKE_MAC ]] || valid_wake_mac "$WAKE_MAC" || ARGUMENT_ERROR='--wake-mac needs a MAC address such as 00:11:22:33:44:55.'
+  valid_wake_address "$WAKE_ADDRESS" || ARGUMENT_ERROR='--wake-address needs an IPv4 address.'
+  [[ -z ${PLAN_GIVEN[WAKE_ADDRESS]:-} || -n $WAKE_MAC ]] || ARGUMENT_ERROR='--wake-address also needs --wake-mac.'
+  [[ $TOPOLOGY != front || -z $WAKE_MAC ]] || ARGUMENT_ERROR='Configure Wake on the GPU node when installing it, or in Compute nodes on the console.'
   if [[ $TOPOLOGY == front && ( $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install || $WHISPERCPP_ACTION == install || $CLASSIFIER_TOOLS_ACTION == install ) ]]; then
     ARGUMENT_ERROR='Engines need a model runner: choose --topology all or compute.'
   fi
@@ -405,7 +414,7 @@ resume_settings() {
     MACHINE_NAME:machine_name JOIN_URL:join_url STRATA_ACTION:strata STRATA_HOST_RAM_MIB:strata_host_ram_mib \
     SDCPP_ACTION:sdcpp SDCPP_BACKEND:sdcpp_backend AUDIOCPP_ACTION:audiocpp AUDIOCPP_BACKEND:audiocpp_backend WHISPERCPP_ACTION:whispercpp WHISPERCPP_BACKEND:whispercpp_backend \
     CLASSIFIER_TOOLS_ACTION:classifier_tools \
-    PLATFORM_SERVICES:platform_services; do
+    PLATFORM_SERVICES:platform_services WAKE_MAC:wake_mac WAKE_ADDRESS:wake_address; do
     variable=${pair%%:*} key=${pair#*:}
     value=$(receipt_get "$key")
     [[ -z $value || -n ${PLAN_GIVEN[$variable]:-} ]] || printf -v "$variable" '%s' "$value"
@@ -948,6 +957,7 @@ game_plan() {
       ui_die 'Model engines need a model runner on this machine.' 'Choose everything on this machine or install the engine on your GPU node'
   else choose_runtimes; fi
   choose_platform_services
+  choose_wake
 
   while true; do
     show_plan
@@ -986,6 +996,50 @@ choose_platform_services() {
   PLATFORM_SERVICES=${PLATFORM_SERVICES:-none}
 }
 
+valid_wake_mac() {
+  [[ $1 =~ ^([[:xdigit:]]{2}[:-]){5}[[:xdigit:]]{2}$ || $1 =~ ^[[:xdigit:]]{12}$ ]]
+}
+
+valid_wake_address() {
+  [[ $1 =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+  local octet
+  for octet in ${1//./ }; do
+    [[ $octet == 0 || $octet != 0* ]] && ((10#$octet <= 255)) || return 1
+  done
+}
+
+# Suggest the interface used to reach the console; never guess another adapter's MAC.
+detect_wake() {
+  DETECTED_WAKE_MAC='' DETECTED_WAKE_ADDRESS=255.255.255.255
+  command -v ip >/dev/null || return 0
+  local destination=${JOIN_URL:-${FRONT_URL:-1.1.1.1}} interface='' line
+  destination=${destination#*://}; destination=${destination%%[:/]*}
+  interface=$(ip -4 route get "$destination" 2>/dev/null | awk '{for (i=1;i<NF;i++) if ($i=="dev") {print $(i+1); exit}}') || true
+  [[ -n $interface && $interface != lo ]] || return 0
+  line=$(ip -o link show dev "$interface" 2>/dev/null) || return 0
+  DETECTED_WAKE_MAC=$(awk '{for (i=1;i<NF;i++) if ($i=="link/ether") {print $(i+1); exit}}' <<<"$line")
+  if ! valid_wake_mac "$DETECTED_WAKE_MAC" || [[ $DETECTED_WAKE_MAC == 00:00:00:00:00:00 ]]; then DETECTED_WAKE_MAC=''; fi
+  line=$(ip -o -4 addr show dev "$interface" 2>/dev/null | awk '{for (i=1;i<NF;i++) if ($i=="brd") {print $(i+1); exit}}') || true
+  if valid_wake_address "$line"; then DETECTED_WAKE_ADDRESS=$line; fi
+}
+
+choose_wake() {
+  if [[ $TOPOLOGY == front ]]; then
+    [[ -z $WAKE_MAC ]] || ui_die 'A console-only installation cannot configure Wake for this computer.' \
+      'Configure Wake when installing the GPU node, or under Settings → Compute nodes → Wake on the console'
+    return 0
+  fi
+  [[ -z ${PLAN_GIVEN[WAKE_MAC]:-} ]] || return 0
+  ((ASSUME_YES)) && return 0
+  local default=n
+  [[ -z $WAKE_MAC ]] || default=y
+  if ! ui_confirm 'Let the console wake this computer with Wake-on-LAN?' "$default"; then WAKE_MAC=''; return 0; fi
+  detect_wake
+  ui_note 'Enable Wake-on-LAN in the firmware and network adapter. The console must stay awake on another computer to wake this one.'
+  ui_input WAKE_MAC 'MAC address of the adapter that supports Wake-on-LAN' "${WAKE_MAC:-$DETECTED_WAKE_MAC}" valid_wake_mac
+  ui_input WAKE_ADDRESS 'Wake broadcast address reachable from the console' "${WAKE_ADDRESS/255.255.255.255/$DETECTED_WAKE_ADDRESS}" valid_wake_address
+}
+
 valid_host() {
   [[ $1 =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] && return 0
   ui_warn "That is not an address: use an IP address such as 192.168.1.10, or a host name"
@@ -1006,6 +1060,9 @@ redeem() {
   local body answer status json name
   name=$(uname -n | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')
   body=$(printf '{"code": "%s", "name": "%s", "address": "%s", "voice": %s}' "${PAIR_CODE^^}" "$name" "$HOST_ADDRESS" "$( ((VOICE)) && printf true || printf false)")
+  if [[ -n $WAKE_MAC ]]; then
+    body=${body%\}}$(printf ', "wake_mac": "%s", "wake_address": "%s"}' "$WAKE_MAC" "$WAKE_ADDRESS")
+  fi
   answer=$(curl -sS --max-time 30 -X POST -H 'content-type: application/json' -d "$body" -w '\n%{http_code}' "$JOIN_URL/pair" 2>>"$OWG_LOG") ||
     ui_die "Could not reach the console at $JOIN_URL." "Check the address, and that this machine can reach it on the network."
   status=${answer##*$'\n'} json=${answer%$'\n'*}
@@ -1135,6 +1192,7 @@ show_plan() {
     lines+=("${C_MUTED}Optional     ${C_RESET}Strata: $STRATA_ACTION · stable-diffusion.cpp: $SDCPP_ACTION · audio.cpp: $AUDIOCPP_ACTION; whisper.cpp: $WHISPERCPP_ACTION")
     lines+=("${C_MUTED}Conversion   ${C_RESET}Classifier tools: $CLASSIFIER_TOOLS_ACTION (CPU)")
     ((POWER_RULE)) && lines+=("${C_MUTED}Power        ${C_RESET}the console may sleep, restart or switch off this machine")
+    [[ -z $WAKE_MAC ]] || lines+=("${C_MUTED}Wake         ${C_RESET}$WAKE_MAC via $WAKE_ADDRESS")
   fi
   ui_box "Your setup" "${lines[@]}"
 }
@@ -1186,6 +1244,7 @@ customize() {
     esac
     choose_runtimes
     ui_confirm "Let the console put this machine to sleep, restart it or switch it off?" n && POWER_RULE=1 || POWER_RULE=0
+    choose_wake
   fi
   if ((SYSTEMD_USER && !SYSTEM)); then
     ui_confirm "Keep the services running when you are not signed in?" y && LINGER_WANTED=1 || LINGER_WANTED=0
@@ -1469,6 +1528,7 @@ setting_up() {
   [[ -n $COMPUTE_URL ]] && options+=(--compute-url "$COMPUTE_URL")
   [[ -n ${LLAMA_SERVER:-} ]] && options+=(--llama-server "$LLAMA_SERVER")
   [[ -n $MACHINE_NAME ]] && options+=(--machine-name "$MACHINE_NAME")
+  [[ -z $WAKE_MAC ]] || options+=(--wake-mac "$WAKE_MAC" --wake-address "$WAKE_ADDRESS")
   [[ $DATABASE == postgresql ]] && options+=(--install-postgresql --provision-postgresql)
   if [[ $DATABASE == postgresql ]]; then ui_sudo "installing and setting up PostgreSQL"; fi
   local rc=0
@@ -1625,6 +1685,8 @@ write_receipt() {
     echo "classifier_tools=${CLASSIFIER_TOOLS_ACTION:-keep}"
     echo "linger_wanted=$LINGER_WANTED"
     echo "power_rule=$POWER_RULE"
+    echo "wake_mac=${WAKE_MAC:-}"
+    echo "wake_address=${WAKE_ADDRESS:-255.255.255.255}"
     echo "front_url=$FRONT_URL"
     echo "compute_url=$COMPUTE_URL"
     echo "machine_name=$MACHINE_NAME"
@@ -1753,6 +1815,13 @@ finale() {
         lines+=("then: owg restart turnstile weightroom")
       fi ;;
   esac
+  if [[ -n ${WAKE_MAC:-} ]]; then
+    lines+=("" "Wake: $WAKE_MAC via $WAKE_ADDRESS (saved in the installation receipt).")
+    if [[ $TOPOLOGY == compute ]] && ((!PAIRED)); then
+      lines+=("On the console, save these under Settings → Compute nodes → Wake for this node.")
+    fi
+    lines+=("Enable Wake-on-LAN in the firmware and network adapter; an awake computer must send the packet.")
+  fi
   lines+=("" "${C_GOLD}owg${C_RESET} status · logs · update · doctor · uninstall")
   if ((SYSTEM)); then lines+=("${C_DIM}Installed in $DIR, run by the $SVC account · log: ${OWG_LOG/#$HOME/\~}${C_RESET}")
   else lines+=("${C_DIM}Installed in ${DIR/#$HOME/\~} · log: ${OWG_LOG/#$HOME/\~}${C_RESET}"); fi

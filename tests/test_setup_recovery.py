@@ -56,6 +56,100 @@ def support_module():
     return module
 
 
+@pytest.mark.parametrize('topology,enabled', [('compute', True), ('all', True), ('compute', False), ('front', True)])
+def test_installer_wake_prompt_suggests_route_interface_and_can_be_declined(tmp_path, topology, enabled):
+    answer = shell(tmp_path, script_functions('install.sh') + '''
+parse_arguments
+TOPOLOGY=$TEST_TOPOLOGY
+source "$TEST_REPO/scripts/lib/ui.sh"
+ui_init
+JOIN_URL=http://console.lan:8440
+ui_confirm() { [[ $ENABLE_WAKE == yes ]]; }
+ui_input() { "$4" "$3"; printf -v "$1" '%s' "$3"; }
+ip() {
+  case "$*" in
+    '-4 route get console.lan') printf '192.0.2.1 dev enp4s0 src 192.0.2.40\\n' ;;
+    '-o link show dev enp4s0') printf '2: enp4s0 link/ether 00:11:22:33:44:55 brd ff:ff:ff:ff:ff:ff\\n' ;;
+    '-o -4 addr show dev enp4s0') printf '2: enp4s0 inet 192.0.2.40/24 brd 192.0.2.255 scope global\\n' ;;
+    *) exit 91 ;;
+  esac
+}
+choose_wake
+printf 'saved=%s,%s' "$WAKE_MAC" "$WAKE_ADDRESS"
+''', env={'TEST_TOPOLOGY': topology, 'ENABLE_WAKE': 'yes' if enabled else 'no'})
+    assert answer.returncode == 0, answer.stderr
+    expected = '00:11:22:33:44:55,192.0.2.255' if enabled and topology != 'front' else ',255.255.255.255'
+    assert answer.stdout.endswith('saved=' + expected)
+
+
+@pytest.mark.parametrize('flags,valid', [
+    ('--wake-mac 00:11:22:33:44:55 --wake-address 192.0.2.255', True),
+    ('--wake-mac 001122334455', True), ('--wake-mac bad', False),
+    ('--wake-mac 00:11:22:33:44:55 --wake-address 256.0.0.1', False),
+    ('--wake-mac 00:11:22:33:44:55 --wake-address ::1', False),
+    ('--wake-address 192.0.2.255', False),
+    ('--topology front --wake-mac 00:11:22:33:44:55', False),
+])
+def test_wake_arguments_are_checked_before_installing(tmp_path, flags, valid):
+    answer = shell(tmp_path, script_functions('install.sh') + '\nparse_arguments ' + flags + '\nprintf "%s" "$ARGUMENT_ERROR"\n')
+    assert answer.returncode == 0, answer.stderr
+    assert bool(answer.stdout) is not valid
+
+
+def test_wake_choices_survive_a_saved_plan_and_explicit_overrides(tmp_path):
+    install = tmp_path / 'install'
+    install.mkdir()
+    answer = shell(tmp_path, script_functions('install.sh') + '''
+source "$TEST_REPO/scripts/lib/receipt.sh"
+parse_arguments --topology compute --wake-mac 00:11:22:33:44:55 --wake-address 192.0.2.255
+DIR=$INSTALL SERVICES=loadcoach,spotter
+write_receipt pending
+parse_arguments
+receipt_load "$INSTALL"
+resume_settings
+printf '%s,%s\\n' "$WAKE_MAC" "$WAKE_ADDRESS"
+parse_arguments --wake-mac aa:bb:cc:dd:ee:ff
+resume_settings
+printf '%s,%s' "$WAKE_MAC" "$WAKE_ADDRESS"
+''', env={'INSTALL': str(install)})
+    assert answer.returncode == 0, answer.stderr
+    assert answer.stdout.splitlines() == ['00:11:22:33:44:55,192.0.2.255', 'aa:bb:cc:dd:ee:ff,192.0.2.255']
+
+
+def test_pairing_installer_sends_confirmed_wake_details(tmp_path):
+    payload = tmp_path / 'request.json'
+    answer = shell(tmp_path, script_functions('install.sh') + '''
+source "$TEST_REPO/scripts/lib/ui.sh"
+ui_init
+parse_arguments --join http://console.lan:8440 --code ABCD-EF23 --wake-mac 00:11:22:33:44:55 --wake-address 192.0.2.255
+HOST_ADDRESS=192.0.2.40
+curl() {
+  while (($#)); do
+    if [[ $1 == -d ]]; then printf '%s' "$2" >"$PAYLOAD"; shift; fi
+    shift
+  done
+  printf '{"machine_key": "a-machine-key", "name": "gpu-box", "front": "http://console.lan:8442"}\\n200'
+}
+redeem
+''', env={'PAYLOAD': str(payload)})
+    assert answer.returncode == 0, answer.stderr
+    sent = json.loads(payload.read_text())
+    assert sent['wake_mac'] == '00:11:22:33:44:55' and sent['wake_address'] == '192.0.2.255'
+
+
+def test_wake_cli_renders_console_settings_for_the_correct_node(tmp_path):
+    target = tmp_path / 'weightroom.toml'
+    answer = subprocess.run([sys.executable, str(ROOT / 'scripts/install-suite-support.py'), 'render',
+                             '--example', str(ROOT / 'settings/examples/weightroom.toml'), '--target', str(target),
+                             '--root', str(tmp_path), '--home', str(tmp_path), '--topology', 'all',
+                             '--machine-name', 'gpu-box', '--wake-mac', '00:11:22:33:44:55',
+                             '--wake-address', '192.0.2.255'], text=True, capture_output=True)
+    assert answer.returncode == 0, answer.stderr
+    machine = tomllib.loads(target.read_text())['machines']['gpu-box']
+    assert machine['compute'] == 'http://127.0.0.1:9442'
+    assert machine['wake_mac'] == '00:11:22:33:44:55' and machine['wake_address'] == '192.0.2.255'
+
+
 def test_firewall_ports_follow_custom_ports_and_all_gateway_listeners(tmp_path):
     settings = tmp_path / 'settings'
     settings.mkdir()
@@ -267,7 +361,7 @@ def test_cuda_download_uses_the_published_runtime_asset_name(tmp_path):
     with tarfile.open(archive, "w:gz") as target:
         target.add(bundle, arcname="bundle")
     answer = shell(tmp_path, '''set -euo pipefail
-BUILD=b12008 OS_ARCH=x86_64 RELEASES=https://github.com/ggml-org/llama.cpp/releases/download
+BUILD=b12008 ARTIFACT_BUILD=b12008 OS_ARCH=x86_64 RELEASES=https://github.com/ggml-org/llama.cpp/releases/download
 ui_download() { printf '%s\\n' "$1" >>"$URLS"; cp "$ARCHIVE" "$2"; }
 ui_step() { shift 2; "$@"; }
 ui_die() { exit 1; }
@@ -986,7 +1080,7 @@ def test_voice_setup_provisions_credentials_routes_profiles_and_only_required_bu
     for service in set(services) - {"turnstile"}:
         support.render(ROOT / f"settings/examples/{service}.toml", install / f"settings/{service}.toml",
                        install, tmp_path, support.topology_values(service, topology, install, "10.0.0.5",
-                            "http://10.0.0.1:8442", "http://10.0.0.5:8442", "", voice=True, voice_model="qwen3-1.7b"))
+                            "http://10.0.0.1:8442", "http://10.0.0.5:8442", "", machine_name="test-node", voice=True, voice_model="qwen3-1.7b"))
     if topology == "compute":
         (install / "keys").mkdir()
         (install / "keys/voice-service.key").write_text("lc_paired_front_key\n")
@@ -1002,7 +1096,8 @@ def test_voice_setup_provisions_credentials_routes_profiles_and_only_required_bu
     if topology != "compute":
         door = load_settings(install / "settings/weightroom.toml")
         assert 8445 in door.ports
-        assert door.upstream(8445) == ("http://127.0.0.1:9445" if topology == "all" else "http://10.0.0.5:8445")
+        from turnstile.nodes import base
+        assert base(door.machines['test-node'], 8445, door.ports) == ("http://127.0.0.1:9445" if topology == "all" else "http://10.0.0.5:8445")
         users = Users(str(install / "data/accounts.db"), {})
         try:
             for name, abilities in {"voice-service": ("hold", "load", "see-all"),
