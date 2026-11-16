@@ -12,7 +12,19 @@ Create or edit images using a permitted image model and workflow.
 
 1. Open **Image generation**, choose a model and workflow, and write **Prompt**.
 2. Set the image size and offered sampling controls. Add **Reference images** only when the workflow supports them.
-3. Select **Generate**. Inspect the result on the canvas, use **Compare** for another owned image, and review **Library** or **Queue** without losing your selected picture.
+3. Select **Generate**. Live previews appear on the main canvas even when you have saved images. Use **View images** to browse your results and **View preview** to return to the current generation. Turning off **Live previews** shows saved images instead.
+
+## Review images and runs
+
+**Gallery** puts the selected image in the main viewer with a narrow, scrollable thumbnail list
+on the right. Click a thumbnail or use the arrow keys to move between images; navigation follows
+the current image filter. Download, reuse, favorite and delete controls sit below the image.
+**Library** keeps the larger thumbnail grid and batch actions. **Queue** shows one compact row
+per job with status, progress and pause/stop controls below the main viewer.
+
+Press **Delete** to arm **Delete image**, then press **Delete** again to confirm. Holding the
+key does not repeat deletion. Escape cancels; typing in a form or viewing a live preview never
+deletes a saved image. Image details and settings export remain below the viewer.
 
 ## Options
 

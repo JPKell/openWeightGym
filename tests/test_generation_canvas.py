@@ -1,6 +1,7 @@
 """Canvas studio uses real authenticated assets and the ordinary image job contract."""
 import base64
 import io
+import json
 import zipfile
 from copy import deepcopy
 from pathlib import Path
@@ -169,6 +170,162 @@ def test_canvas_two_click_delete_resets_when_image_changes_or_escape_is_pressed(
         remove_reference.click()
         playwright.expect(remove_reference).to_have_count(0)
         assert store.asset(owner, reference['id']) is None
+        browser.close()
+
+
+@pytest.mark.parametrize('width', [1440, 390, 320])
+def test_gallery_thumbnail_rail_keyboard_filter_download_and_delete(canvas, width):
+    server, wire, users, _ = canvas
+    store = wire.front.state.mirrorwall.store
+    owner = users.by_name('jordan').identity
+    for seed in range(12):
+        store.save(owner, picture(color='red'), kind='output', metadata={'seed': seed})
+    rows = store.listing(owner, kind='output')
+    with playwright.sync_playwright() as driver:
+        browser, page = browser_context(driver, server)
+        page.set_viewport_size({'width': width, 'height': 1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto('http://console.test/chat/images')
+        page.locator('[data-mw-view=gallery]').click()
+        thumbs = page.locator('#mw-thumbnails .mw-thumb')
+        playwright.expect(thumbs).to_have_count(len(rows))
+        viewer = page.locator('.ig-viewer').bounding_box()
+        rail = page.locator('.ig-history').bounding_box()
+        assert rail['x'] >= viewer['x'] + viewer['width']
+        assert rail['width'] <= 140
+        assert page.locator('#mw-thumbnails').evaluate('el => el.scrollHeight > el.clientHeight')
+        page.keyboard.press('ArrowDown')
+        playwright.expect(thumbs.nth(1)).to_have_attribute('aria-pressed', 'true')
+        page.keyboard.press('ArrowUp')
+        playwright.expect(thumbs.first).to_have_attribute('aria-pressed', 'true')
+        page.keyboard.press('ArrowLeft')
+        playwright.expect(thumbs.last).to_have_attribute('aria-pressed', 'true')
+        assert page.locator('#mw-thumbnails').evaluate('el => el.scrollTop > 0')
+        for _ in range(2):
+            page.keyboard.press('ArrowRight')
+        playwright.expect(thumbs.nth(1)).to_have_attribute('aria-pressed', 'true')
+        page.locator('#mw-favorite').click()
+        page.locator('#mw-library-filter').select_option('favorites')
+        playwright.expect(thumbs).to_have_count(1)
+        thumbs.first.click()
+        page.keyboard.press('ArrowRight')
+        playwright.expect(thumbs.first).to_have_attribute('aria-pressed', 'true')
+        # The browser bridge omits attachment headers; verify the real download response.
+        download = server.get(page.locator('#mw-download').get_attribute('href'))
+        assert download.content == store.content(owner, rows[1]['id'])
+        assert download.headers['content-disposition'].startswith('attachment;')
+        assert page.locator('#mw-delete').bounding_box()['y'] > page.locator('#mw-canvas').bounding_box()['y']
+        thumbs.first.focus()
+        page.keyboard.press('Delete')
+        playwright.expect(page.locator('#mw-delete')).to_have_text('Delete this image?')
+        page.dispatch_event('body', 'keydown', {'key': 'Delete', 'repeat': True})
+        assert store.asset(owner, rows[1]['id']) is not None
+        page.keyboard.press('Escape')
+        playwright.expect(page.locator('#mw-delete')).to_have_text('Delete image')
+        page.keyboard.press('Delete')
+        page.keyboard.press('Delete')
+        playwright.expect(thumbs).to_have_count(0)
+        assert store.asset(owner, rows[1]['id']) is None
+        playwright.expect(page.locator('#mw-empty')).to_be_visible()
+        page.locator('#mw-library-filter').select_option('all')
+        thumbs.first.click()
+        page.locator('[data-mw-view=generate]').click()
+        page.locator('#mw-prompt').fill('A draft to keep')
+        page.keyboard.press('ArrowRight')
+        page.keyboard.press('Delete')
+        playwright.expect(page.locator('#mw-prompt')).to_have_value('A draft to keep')
+        playwright.expect(thumbs.first).to_have_attribute('aria-pressed', 'true')
+        page.locator('[data-mw-view=gallery]').click()
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        folder = Path('build/generation-canvas')
+        folder.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(folder / f'gallery-{width}.png'), full_page=True)
+        thumbs.last.click()
+        focused_id = thumbs.last.get_attribute('data-id')
+        scroll = page.locator('#mw-thumbnails').evaluate('el => el.scrollTop')
+        store.save(owner, picture(color='green'), kind='output', metadata={'seed': 99})
+        playwright.expect(thumbs).to_have_count(len(rows), timeout=5000)
+        playwright.expect(page.locator('.mw-thumb[aria-pressed=true]')).to_have_attribute('data-id', focused_id)
+        assert page.evaluate('document.activeElement.dataset.id') == focused_id
+        assert abs(page.locator('#mw-thumbnails').evaluate('el => el.scrollTop') - scroll) < 2
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_main_canvas_previews_switch_and_compact_queue_survive_polling(canvas, width):
+    server, wire, users, _ = canvas
+    store = wire.front.state.mirrorwall.store
+    owner = users.by_name('jordan').identity
+    saved = store.listing(owner, kind='output')[0]
+    preview = base64.b64encode(picture(color='green')).decode()
+    jobs = [
+        {'id': 'live', 'model': 'sketch', 'status': 'in_progress',
+         'request_counts': {'total': 3, 'completed': 1},
+         'progress': {'stage': 'sampling', 'step': 2, 'total_steps': 28, 'b64_json': preview}},
+        {'id': 'paused', 'model': 'A very long model name that must fit on a single row',
+         'status': 'paused', 'request_counts': {'total': 20, 'completed': 2}},
+        {'id': 'failed', 'model': 'sketch', 'status': 'failed',
+         'error': 'An extended error message that must remain available without expanding the queue row.'},
+    ]
+    controls = []
+
+    def capture(route, path):
+        if path == '/mirrorwall-api/state':
+            data = server.get(path).json()
+            data['jobs'] = jobs
+            route.fulfill(content_type='application/json', body=json.dumps(data))
+            return True
+        if path.startswith('/mirrorwall-api/jobs/'):
+            controls.append((path, route.request.post_data_json))
+            route.fulfill(content_type='application/json', body='{}')
+            return True
+
+    with playwright.sync_playwright() as driver:
+        browser, page = browser_context(driver, server, capture=capture)
+        page.set_viewport_size({'width': width, 'height': 1000})
+        page.goto('http://console.test/chat/images')
+        playwright.expect(page.locator('#mw-preview-label')).to_contain_text('step 2 of 28')
+        playwright.expect(page.locator('#mw-large')).to_have_attribute('src', 'data:image/png;base64,' + preview)
+        playwright.expect(page.locator('#mw-delete')).to_be_disabled()
+        page.locator('#mw-canvas').click()
+        page.keyboard.press('Delete')
+        assert store.asset(owner, saved['id']) is not None
+        page.locator('#mw-toggle-preview').click()
+        playwright.expect(page.locator('#mw-large')).to_have_attribute('src', f'/mirrorwall-api/assets/{saved["id"]}/content')
+        jobs[0]['progress']['step'] = 3
+        with page.expect_response(lambda response: response.url.endswith('/mirrorwall-api/state')):
+            pass
+        playwright.expect(page.locator('#mw-preview-label')).to_be_hidden()
+        page.locator('#mw-toggle-preview').click()
+        playwright.expect(page.locator('#mw-preview-label')).to_contain_text('step 3 of 28')
+        page.locator('#mw-preview').uncheck()
+        playwright.expect(page.locator('#mw-preview-label')).to_be_hidden()
+        playwright.expect(page.locator('#mw-delete')).to_be_enabled()
+        page.locator('#mw-preview').check()
+        playwright.expect(page.locator('#mw-preview-label')).to_be_visible()
+        page.locator('[data-mw-view=queue]').click()
+        playwright.expect(page.locator('#mw-preview-label')).to_be_visible()
+        queue_rows = page.locator('#mw-jobs > .mw-job')
+        playwright.expect(queue_rows).to_have_count(3)
+        for row in queue_rows.all():
+            assert row.bounding_box()['height'] <= 42
+        queue_rows.first.locator('[data-pause]').click()
+        assert controls[-1] == ('/mirrorwall-api/jobs/live', {'action': 'pause'})
+        queue_rows.nth(1).locator('[data-pause]').click()
+        assert controls[-1] == ('/mirrorwall-api/jobs/paused', {'action': 'resume'})
+        queue_rows.first.locator('[data-stop]').click()
+        assert controls[-1] == ('/mirrorwall-api/jobs/live', {'action': 'cancel'})
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        folder = Path('build/generation-canvas')
+        folder.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(folder / f'queue-{width}.png'), full_page=True)
+        result = store.save(owner, picture(color='green'), kind='output', metadata={'seed': 44, 'job': 'live'})
+        jobs[0]['status'] = 'completed'
+        playwright.expect(page.locator('#mw-large')).to_have_attribute('src', f'/mirrorwall-api/assets/{result["id"]}/content', timeout=5000)
+        playwright.expect(page.locator('#mw-toggle-preview')).to_be_disabled()
+        playwright.expect(page.locator('#mw-delete')).to_be_enabled()
         browser.close()
 
 

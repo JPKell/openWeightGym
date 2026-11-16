@@ -29,7 +29,7 @@
   const fields = ['width', 'height', 'steps', 'n', 'seed', 'guidance', 'cfg_scale', 'sampler', 'scheduler', 'upscale', 'reference_megapixels', 'strength'];
   let state = {models: [], assets: [], references: [], presets: [], jobs: []};
   let selected = null, references = [], mask = null, modelName = '', gallerySignature = '', jobsSignature = '';
-  let runningPreview = '', polling = false, refreshProblem = false, referenceSignature = '', detailsSignature = '';
+  let viewerMode = 'preview', previewJobId = '', polling = false, refreshProblem = false, referenceSignature = '', detailsSignature = '';
   let older = [], moreImages = false;
   const drafts = new Map(), favorites = new Set(), librarySelection = new Set(), deletedImages = new Set();
   let libraryBusy = false, deleteTarget = null;
@@ -215,22 +215,43 @@
     if (row.width) sizes[row.id] = {width: row.width, height: row.height};
     return row;
   }
+  function livePreview() {
+    return $('preview').checked ? state.jobs.find(row=>row.status==='in_progress'&&row.progress?.b64_json) : null;
+  }
   function showSelected() {
-    const one=state.assets.find(row=>row.id===selected);
+    const job=livePreview(), preview=viewerMode==='preview'&&job?.progress;
+    const one=preview ? null : state.assets.find(row=>row.id===selected);
+    const images=visibleImages();
+    root.dataset.preview=String(Boolean(preview));
+    $('toggle-preview').disabled=!job;
+    $('toggle-preview').textContent=preview?'View images':'View preview';
+    $('toggle-preview').setAttribute('aria-pressed',String(Boolean(preview)));
     if(deleteTarget!==one?.id){deleteTarget=one?.id;resetConfirmation($('delete-form'));}
-    $('empty').hidden=Boolean(one);$('canvas').hidden=!one;$('large').hidden=!one;
-    $('preview-label').hidden=true;
-    ['delete','reuse','prev','next','zoom','favorite','export-settings','fullscreen','resize-selected'].forEach(name=>$(name).disabled=!one);
+    $('empty').hidden=Boolean(one||preview);$('canvas').hidden=!(one||preview);$('large').hidden=!(one||preview);
+    $('preview-label').hidden=!preview;
+    ['delete','reuse','favorite','export-settings','resize-selected'].forEach(name=>$(name).disabled=!one);
+    ['zoom','fullscreen'].forEach(name=>$(name).disabled=!(one||preview));
+    ['prev','next'].forEach(name=>$(name).disabled=!images.length);
     $('delete').disabled=!one||libraryBusy;
     $('download').hidden=!one;
-    $('result-title').textContent=one ? one.metadata?.settings?.detail_resize?'Resized with AI detail':'Generated image' : 'No image selected';
-    $('result-counter').textContent=one ? (state.assets.indexOf(one)+1)+' / '+state.assets.length : '0 / '+state.assets.length;
+    root.querySelector('.ig-result-details').hidden=Boolean(preview);
+    root.querySelector('.ig-art-label').hidden=Boolean(preview);
+    $('result-title').textContent=preview?'Live generation preview':one ? one.metadata?.settings?.detail_resize?'Resized with AI detail':'Generated image' : 'No image selected';
+    $('result-counter').textContent=preview?'Live':one ? (images.indexOf(one)+1)+' / '+images.length : '0 / '+images.length;
     const signature=JSON.stringify([selected,one?.metadata,one?.width,one?.height]);
     const changed=signature!==detailsSignature;detailsSignature=signature;
     if(changed)$('result-settings').replaceChildren();
-    if(one) {
+    if(preview) {
+      previewJobId=job.id;
+      const address='data:image/png;base64,'+preview.b64_json;
+      if($('large').getAttribute('src')!==address)$('large').src=address;
+      $('large').alt='Current generation preview';
+      $('preview-label').textContent='Live preview · step '+preview.step+' of '+preview.total_steps;
+      $('image-info').textContent=(job.model||'Image job')+' · step '+preview.step+' of '+preview.total_steps;
+    } else if(one) {
       const address=imageURL(one.id,'content');
       if($('large').getAttribute('src')!==address)$('large').src=address;
+      $('large').alt='Selected generated image';
       $('download').href=address+'?download=1';
       $('image-info').textContent=one.width+' × '+one.height+' · seed '+(one.metadata?.seed??'unknown')+(one.temporary?' · temporary':'');
       $('favorite').textContent=favorites.has(one.id)?'★':'☆';$('favorite').setAttribute('aria-pressed',String(favorites.has(one.id)));
@@ -240,20 +261,32 @@
       if(values.detail_resize)facts['Detail strength']=values.strength;
       if(changed)for(const [key,value] of Object.entries(facts)){const dt=element('dt',key),dd=element('dd',String(value));$('result-settings').append(dt,dd);}
     } else $('image-info').textContent='';
-    $('thumbnails').querySelectorAll('button').forEach(node=>node.setAttribute('aria-pressed',String(node.dataset.id===selected)));
+    $('thumbnails').querySelectorAll('button').forEach(node=>node.setAttribute('aria-pressed',String(!preview&&node.dataset.id===selected)));
     const before=$('compare-with').value;
     const choices=state.assets.filter(row=>row.id!==selected);
     if(resizeSource && !choices.some(row=>row.id===resizeSource.id) && resizeSource.id!==selected)choices.unshift(resizeSource);
     const options=choices.map(row=>[row.id,row.filename||'Image · seed '+(row.metadata?.seed??'unknown')]);
     if(JSON.stringify(options)!==JSON.stringify([...$('compare-with').options].map(option=>[option.value,option.text])))$('compare-with').replaceChildren(...options.map(([value,label])=>new Option(label,value)));
     if(choices.some(row=>row.id===before))$('compare-with').value=before;
-    $('compare').disabled=!one||!choices.length;$('compare-with').disabled=!choices.length;
+    $('compare').disabled=!one||!choices.length;$('compare-with').disabled=!one||!choices.length;
+    if(preview){$('compare-pane').hidden=true;$('canvas').classList.remove('is-comparing');$('compare').setAttribute('aria-pressed','false');}
     if(!$('compare-pane').hidden && choices.length){$('compare-pane').querySelector('img').src=imageURL($('compare-with').value,'content');}
     else if(!choices.length){$('compare-pane').hidden=true;$('canvas').classList.remove('is-comparing');$('compare').setAttribute('aria-pressed','false');}
   }
   function step(direction) {
-    const index = state.assets.findIndex(row => row.id === selected);
-    selected = state.assets[(index + direction + state.assets.length) % state.assets.length]?.id || null; showSelected();
+    const images=visibleImages(),index=images.findIndex(row=>row.id===selected);
+    selectImage(images[(index+direction+images.length)%images.length]?.id||null);
+  }
+  function selectImage(id) {
+    selected=id;viewerMode='images';showSelected();
+    if(root.dataset.view==='gallery') {
+      const button=all('.mw-thumb').find(node=>node.dataset.id===selected);
+      if(button){
+        const rail=$('thumbnails'),top=button.getBoundingClientRect().top-rail.getBoundingClientRect().top+rail.scrollTop;
+        if(top<rail.scrollTop)rail.scrollTop=top;
+        else if(top+button.offsetHeight>rail.scrollTop+rail.clientHeight)rail.scrollTop=top+button.offsetHeight-rail.clientHeight;
+      }
+    }
   }
   function resetConfirmation(form) {
     document.dispatchEvent(new CustomEvent('suite:actionsChanged',{detail:{form}}));
@@ -276,6 +309,10 @@
     renderLibrarySelection();
   }
   function forgetImage(id) {
+    if(selected===id){
+      const images=visibleImages(),index=images.findIndex(row=>row.id===id);
+      selected=(images[index+1]||images[index-1])?.id||null;
+    }
     deletedImages.add(id);librarySelection.delete(id);favorites.delete(id);
     older=older.filter(row=>row.id!==id);state.assets=state.assets.filter(row=>row.id!==id);
   }
@@ -307,58 +344,59 @@
     }finally{libraryBusy=false;renderLibrarySelection();showSelected();}
   }
   function renderGallery() {
+    const images=visibleImages();
+    if(!images.some(row=>row.id===selected))selected=images[0]?.id||null;
     const signature=JSON.stringify([state.assets.map(row=>[row.id,row.width,row.height]),[...favorites],$('library-filter').value]);
     if(signature!==gallerySignature){
+      const rail=$('thumbnails'),scroll=rail.scrollTop,focused=document.activeElement;
+      const focusId=rail.contains(focused)?focused.dataset.id:null,focusCheckbox=focused?.matches('[data-select-image]');
       gallerySignature=signature;
-      if(!state.assets.some(row=>row.id===selected))selected=state.assets[0]?.id||null;
       $('thumbnails').replaceChildren();
       visibleImages().forEach(row=>{
         const fragment=clone('result'),button=fragment.querySelector('button');button.dataset.id=row.id;
         const image=fragment.querySelector('img');image.src=imageURL(row.id);image.alt='Image, seed '+(row.metadata?.seed??'unknown');image.loading='lazy';
+        button.title=(row.filename||'Generated image')+' · '+row.width+' × '+row.height+' · seed '+(row.metadata?.seed??'unknown');
+        button.setAttribute('aria-label',button.title);
         fragment.querySelector('[data-title]').textContent=(favorites.has(row.id)?'★ ':'')+(row.metadata?.settings?.detail_resize?'AI detail resize':'Generated image');
         fragment.querySelector('[data-detail]').textContent=row.width+' × '+row.height+' · seed '+(row.metadata?.seed??'unknown');
         const checkbox=fragment.querySelector('[data-select-image]');checkbox.dataset.id=row.id;
         checkbox.setAttribute('aria-label','Select '+(row.filename||row.id)+' · seed '+(row.metadata?.seed??'unknown'));
         checkbox.onchange=()=>{if(checkbox.checked)librarySelection.add(row.id);else librarySelection.delete(row.id);selectionChanged();};
-        button.onclick=()=>{selected=row.id;runningPreview='';showSelected();};$('thumbnails').append(fragment);
+        button.onclick=()=>selectImage(row.id);$('thumbnails').append(fragment);
       });
+      rail.scrollTop=scroll;
+      if(focusId)all(focusCheckbox?'[data-select-image]':'.mw-thumb').find(node=>node.dataset.id===focusId)?.focus({preventScroll:true});
       $('library-empty').hidden=Boolean($('thumbnails').children.length);
     }
     renderLibrarySelection();
     showSelected();
   }
   function renderJobs() {
-    const signature = JSON.stringify(state.jobs.map(row => [row.id, row.status, row.request_counts, row.progress?.stage, row.progress?.step, row.error]));
+    const signature = JSON.stringify(state.jobs.map(row => [row.id, row.status, row.request_counts, row.progress?.stage, row.progress?.step, row.progress?.total_steps, row.progress?.error, row.error]));
     if (signature !== jobsSignature) {
       jobsSignature = signature; $('jobs').replaceChildren();
       state.jobs.forEach(row => {
         const fragment=clone('job');
         const progress=row.progress||{},failed=progress.stage==='failed'||row.error||progress.error||row.request_counts?.failed>0;
         fragment.querySelector('[data-title]').textContent=row.model||row.settings?.model||row.settings?.request?.model||'Image job';
+        fragment.querySelector('[data-title]').title=fragment.querySelector('[data-title]').textContent;
         fragment.querySelector('[data-state]').textContent=failed?'Failed':row.status.replaceAll('_',' ');
         const counts=row.request_counts||{};
         fragment.querySelector('[data-detail]').textContent=row.error||progress.error?.message||[progress.stage,progress.step?progress.step+'/'+progress.total_steps:'',counts.total?((counts.completed||0)+' / '+counts.total+' images'):''].filter(Boolean).join(' · ');
+        fragment.querySelector('[data-detail]').title=fragment.querySelector('[data-detail]').textContent;
         const meter=fragment.querySelector('progress');
         if(counts.total)meter.value=100*(counts.completed||0)/counts.total;else meter.removeAttribute('value');
         const pause=fragment.querySelector('[data-pause]'),stop=fragment.querySelector('[data-stop]');
         pause.hidden=!['in_progress','paused'].includes(row.status)||row.id.startsWith('quiet_');
         stop.hidden=!['in_progress','paused'].includes(row.status);
-        pause.textContent=row.status==='paused'?'Resume':'Pause after image';
+        pause.textContent=row.status==='paused'?'Resume':'Pause';
+        pause.title=row.status==='paused'?'Resume remaining images':'Pause after the current image';
         pause.onclick=safe(async()=>{await api('jobs/'+encodeURIComponent(row.id),{action:row.status==='paused'?'resume':'pause'});await refresh();});
         stop.onclick=safe(async()=>{await api('jobs/'+encodeURIComponent(row.id),{action:'cancel'});await refresh();});
         $('jobs').append(fragment);
       });
     }
     $('queue-empty').hidden=Boolean(state.jobs.length);
-    const preview = state.jobs.find(row => row.status === 'in_progress' && row.progress?.b64_json)?.progress;
-    $('live').hidden = !preview || !$('preview').checked;
-    if (preview && $('preview').checked && preview.b64_json !== runningPreview) {
-      runningPreview = preview.b64_json; $('live-image').src = 'data:image/png;base64,' + preview.b64_json;
-      $('live-info').textContent = 'Step ' + preview.step + ' of ' + preview.total_steps;
-    }
-    if (preview && $('preview').checked && !selected) {
-      $('canvas').hidden=false; $('large').src = $('live-image').src; $('large').hidden = false; $('empty').hidden = true; $('preview-label').hidden = false;
-    }
   }
   async function refresh() {
     if (polling || libraryBusy || document.hidden || !root.isConnected) return;
@@ -371,6 +409,9 @@
       const latest = new Set(state.assets.map(row => row.id));
       state.assets.push(...older.filter(row => !latest.has(row.id)));
       state.assets=state.assets.filter(row=>!deletedImages.has(row.id));
+      if(viewerMode==='preview'&&previewJobId&&!state.jobs.some(row=>row.id===previewJobId&&row.status==='in_progress')){
+        selected=state.assets.find(row=>row.metadata?.job===previewJobId)?.id||selected;previewJobId='';
+      }
       $('older').hidden = !moreImages;
       const before = $('model').value;
       if (JSON.stringify(state.models.map(row => row.id)) !== JSON.stringify([...$('model').options].map(row => row.value))) {
@@ -451,6 +492,7 @@
   function setView(view) {
     root.dataset.view=view;
     for(const button of all('[data-mw-view]')){const active=button.dataset.mwView===view;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));}
+    if(view==='gallery')selectImage(selected);
   }
   function setTool(tool) {
     const mode=tool==='resize'?'resize':'generate';
@@ -533,6 +575,8 @@
     else if(event.submitter?.value==='delete')await deleteImages(ids);
   });
   $('favorite').onclick=()=>{if(!selected)return;if(favorites.has(selected))favorites.delete(selected);else favorites.add(selected);renderGallery();};
+  $('toggle-preview').onclick=()=>{viewerMode=viewerMode==='preview'&&livePreview()?'images':'preview';showSelected();};
+  $('preview').addEventListener('change',showSelected);
   $('export-settings').onclick=()=>{const one=state.assets.find(row=>row.id===selected);if(one)downloadJSON({seed:one.metadata?.seed,settings:one.metadata?.settings||{},width:one.width,height:one.height});};
   $('compare').onclick=()=>{const enabled=$('compare-pane').hidden;$('compare-pane').hidden=!enabled;$('canvas').classList.toggle('is-comparing',enabled);$('compare').setAttribute('aria-pressed',String(enabled));if(enabled)$('compare-pane').querySelector('img').src=imageURL($('compare-with').value,'content');};
   $('compare-with').onchange=()=>{if(!$('compare-pane').hidden)$('compare-pane').querySelector('img').src=imageURL($('compare-with').value,'content');};
@@ -559,6 +603,7 @@
       submitting=true;
       const sweep=activeTool==='resize'?{}:sweepSettings();
       await api('jobs', {request: settings(), references:activeTool==='resize'?[resizeSource.id]:references, mask:activeTool==='resize'?null:mask, sweep, temporary: $('temporary').checked});
+      viewerMode='preview';
       await refresh();
     } finally { submitting=false;renderReferences(); }
   });
@@ -619,10 +664,15 @@
   };
   $('delete-form').onsubmit = safe(async event => { event.preventDefault(); if(selected)await deleteImages([selected]); });
   const handleKey = event => {
-    if(!root.isConnected||$('dialog').open)return;
+    if(!root.isConnected||$('dialog').open||document.querySelector('dialog[open]'))return;
     if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();setView('generate');$('form').requestSubmit();return;}
-    if(event.target.closest('input,textarea,select,button,a,summary'))return;
-    if(event.key==='ArrowLeft'){event.preventDefault();step(-1);}if(event.key==='ArrowRight'){event.preventDefault();step(1);}
+    if(event.ctrlKey||event.metaKey||event.altKey||event.shiftKey)return;
+    if(event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable=false]),summary'))return;
+    if(event.target.closest('button,a')&&!event.target.closest('.ig-viewer,.mw-thumb,[data-mw-view]'))return;
+    const gallery=root.dataset.view==='gallery';
+    if(event.key==='ArrowLeft'||gallery&&event.key==='ArrowUp'){event.preventDefault();step(-1);}
+    if(event.key==='ArrowRight'||gallery&&event.key==='ArrowDown'){event.preventDefault();step(1);}
+    if(event.key==='Delete'&&!event.repeat&&!$('delete').disabled){event.preventDefault();$('delete').click();}
   };
   document.addEventListener('keydown',handleKey);
   refresh();
