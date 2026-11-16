@@ -37,7 +37,7 @@ voice-gateway = "voice.gateway:main"
 voice-desktop = "voice.desktop:main"
 
 [tool.setuptools]
-packages = ["engines", "engines.llama_cpp", "engines.whisper_cpp", "engines.strata", "mirrorwall", "soundroom", "db", "db.drivers", "loadcoach", "benchmarks", "benchmarks.suites", "benchmarks.suites.ifeval", "benchmarks.suites.ifeval.vendor", "toollocker", "toollocker.tools", "weightroom", "spotter", "turnstile", "voice", "plugins", "plugins.hermes"]
+packages = ["developer_tools", "engines", "engines.llama_cpp", "engines.whisper_cpp", "engines.strata", "mirrorwall", "soundroom", "db", "db.drivers", "loadcoach", "benchmarks", "benchmarks.suites", "benchmarks.suites.ifeval", "benchmarks.suites.ifeval.vendor", "toollocker", "toollocker.tools", "weightroom", "spotter", "turnstile", "voice", "plugins", "plugins.hermes"]
 
 [tool.setuptools.package-data]
 mirrorwall = ["patches/*.patch", "patches/*.json", "pages/*.html", "static/*"]
@@ -47,6 +47,7 @@ soundroom = ["catalog.toml", "pages/*.html", "static/*"]
 "benchmarks.suites.ifeval.vendor" = ["LICENSE", "nltk_data/tokenizers/punkt_tab/README", "nltk_data/tokenizers/punkt_tab/english/*"]
 loadcoach = ["test.html", "pages/*.html"]
 toollocker = ["test.html", "README.md"]
+developer_tools = ["README.md"]
 weightroom = ["pages/*.html", "pages/engines/llama_cpp/*.html", "pages/engines/strata/*.html", "static/*", "docs_help_prompt.md"]
 "engines.llama_cpp" = ["schema.json"]
 "engines.strata" = ["schema.json"]

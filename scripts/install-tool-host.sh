@@ -94,13 +94,15 @@ fi
 
 # The program that reads the tool folder needs nothing beyond Python's own library. The suite's
 # own tool files are replaced on every run; any other file in the tool folder is yours and kept.
-mkdir -p "$PREFIX/toollocker/tools" "$TOOLS"
-chmod 700 "$PREFIX" "$PREFIX/toollocker" "$PREFIX/toollocker/tools" "$TOOLS"
+mkdir -p "$PREFIX/toollocker/tools" "$PREFIX/developer_tools" "$TOOLS"
+chmod 700 "$PREFIX" "$PREFIX/toollocker" "$PREFIX/toollocker/tools" "$PREFIX/developer_tools" "$TOOLS"
 cp "$SOURCE/__init__.py" "$PREFIX/toollocker/"
 cp "$SOURCE/tools/__init__.py" "$SOURCE/tools/__main__.py" "$PREFIX/toollocker/tools/"
+cp "$SOURCE/../developer_tools/"{__init__,code,code_index}.py "$PREFIX/developer_tools/"
+cp "$SOURCE/../developer_tools/README.md" "$PREFIX/developer_tools/"
 cp "$SOURCE/tools/files.py" "$SOURCE/tools/code.py" "$TOOLS/"
 cp "$SOURCE/README.md" "$PREFIX/README.md"
-chmod 600 "$PREFIX/toollocker/__init__.py" "$PREFIX/toollocker/tools/"*.py "$TOOLS/"*.py "$PREFIX/README.md"
+chmod 600 "$PREFIX/toollocker/__init__.py" "$PREFIX/toollocker/tools/"*.py "$PREFIX/developer_tools/"*.py "$PREFIX/developer_tools/README.md" "$TOOLS/"*.py "$PREFIX/README.md"
 
 mkdir -p "$CONFIG"
 chmod 700 "$CONFIG"

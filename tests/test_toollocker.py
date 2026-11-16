@@ -503,7 +503,7 @@ def test_the_suites_own_tools_load_from_their_folder_like_any_others(tmp_path):
     folder = Path(files.__file__).parent
     subprocess.run(["git", "init", "-q", str(tmp_path / "repo")], check=True)
     tools = load(folder, {"files": {"folders": [str(tmp_path)]}, "code": {"repositories": [str(tmp_path / "repo")]}})
-    assert [one.__name__ for one in tools] == ["repositories", "status", "log", "diff", "search", "list_folder", "read_file"]
+    assert [one.__name__ for one in tools] == [one.__name__ for one in code.TOOLS] + ["list_folder", "read_file"]
 
 
 # ---- the tool servers written here ------------------------------------------------------------

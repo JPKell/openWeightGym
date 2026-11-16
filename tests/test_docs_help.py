@@ -45,6 +45,8 @@ def help_desk(docs_gateway, tmp_path):
         names = {tool['function']['name'] for tool in body['tools']}
         assert all(name.startswith('docs__') or user.can('manage-settings') and name.startswith('code__') for name in names)
         assert 'danger__write' not in names
+        if getattr(rig, 'inference', None):
+            return await rig.inference(body)
         if rig.mode in ('error', 'allowance'):
             return httpx.Response(429 if rig.mode == 'allowance' else 500,
                                   json={'error': {'code': 'allowance_exceeded' if rig.mode == 'allowance' else 'fake_failed', 'message': 'refused'}})
@@ -293,3 +295,35 @@ def test_postgresql_gap_privacy_backup_and_transfer(postgres, tmp_path):
     restored.dismiss(expected[0]['id'])
     assert restored.listing() == []
     restored.db.close()
+
+
+def test_opt_in_live_model_explains_developer_tools_with_real_docs(help_desk):
+    """Opt-in real inference; ordinary CI keeps the deterministic caller/permission checks."""
+    import os
+    from pathlib import Path
+    address = os.environ.get('OWG_HELP_CHECK_URL')
+    key_file = os.environ.get('OWG_HELP_CHECK_KEY_FILE')
+    model_name = os.environ.get('OWG_HELP_CHECK_MODEL')
+    if not all((address, key_file, model_name)):
+        pytest.skip('Set OWG_HELP_CHECK_URL, OWG_HELP_CHECK_KEY_FILE and OWG_HELP_CHECK_MODEL for real inference')
+    _, api, _, rig, _ = help_desk
+    async def inference(body):
+        async with httpx.AsyncClient(timeout=180) as client:
+            reply = await client.post(address.rstrip('/') + '/v1/chat/completions',
+                                      headers={'authorization': 'Bearer ' + Path(key_file).read_text().strip(), 'x-turnstile-no-wake': '1'},
+                                      json={**body, 'model': model_name, 'max_tokens': 2048})
+            return httpx.Response(reply.status_code, content=reply.content, headers={'content-type': reply.headers.get('content-type', 'application/json')})
+    rig.inference = inference
+    response = api.post('/v1/responses', json={'model': 'docs-help', 'input':
+        'How do the developer code tools keep their Python graph current after edits, and does semantic docstring search work without configuring an embedding model? Explain the setup and limits concisely.', 'max_output_tokens': 2048})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    text = answer_text(result)
+    assert result['status'] == 'completed', result
+    assert any(item.get('name') == 'docs__search' for item in result['output'])
+    assert '/docs/api/developer-tools' in text, text
+    assert '](/docs/api/developer-tools' in text and len(text.split()) <= 350, text
+    assert 'embedding' in text.lower() and any(word in text.lower() for word in ('automatic', 'refresh', 'background')), text
+    assert MARKER not in text, text
+    # Captured only in an explicitly requested live run; never prints provider credentials.
+    print('\nLive docs answer:', text)

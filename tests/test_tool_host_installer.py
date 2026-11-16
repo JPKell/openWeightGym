@@ -100,3 +100,27 @@ def test_it_changes_nothing_when_asked_for_something_it_cannot_do(tmp_path):
         done = install(tmp_path, *wrong)
         assert done.returncode == 1 and says in done.stderr
     assert not (tmp_path / ".config").exists() and not (tmp_path / ".local").exists()
+
+
+def test_installed_code_host_includes_grouped_developer_tools(tmp_path):
+    import json
+    home, repo, port = tmp_path / 'home', tmp_path / 'repo', free_port()
+    home.mkdir()
+    repo.mkdir()
+    subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+    (repo / 'example.py').write_text('def example():\n    """Installed source search works."""\n    pass\n')
+    subprocess.run(['git', '-C', str(repo), 'add', 'example.py'], check=True)
+    done = install(home, '--name', 'code', '--code', str(repo), '--port', str(port), '--bind', '127.0.0.1')
+    assert done.returncode == 0, done.stderr
+    config = home / '.config/toollocker-host'
+    with (config / 'tools.toml').open('a') as stream:
+        stream.write(f'\nindex_directory = {json.dumps(str(home / "cache"))}\n')
+    server = serving(home, port)
+    try:
+        key = (config / 'host.key').read_text().strip()
+        result = ask(port, key, 'tools/call', {'name': 'docstring_search', 'arguments': {'query': 'Installed source'}}).json()['result']
+        assert not result['isError'], result
+        assert json.loads(result['content'][0]['text'])['hits'][0]['qualname'] == 'example'
+    finally:
+        server.kill()
+        server.wait()

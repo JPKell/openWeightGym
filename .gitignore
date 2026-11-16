@@ -8,6 +8,14 @@ __pycache__/
 /DEPLOYED
 .pytest_cache/
 .ruff_cache/
+# Generated QA evidence, browser sessions and coverage output; keep regression source in tests/.
+/qa/
+/.coverage
+/.coverage.*
+/coverage.xml
+/htmlcov/
+/test-results/
+/playwright-report/
 .env
 .env.*
 !.env.example

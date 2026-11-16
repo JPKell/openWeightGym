@@ -29,6 +29,7 @@ def test_documentation_index_covers_maintained_readmes_and_status_files():
         "build",
         "dist",
         "voice-test",
+        "qa",  # ignored browser evidence is not maintained product documentation
         "data",
         "__pycache__",
     }

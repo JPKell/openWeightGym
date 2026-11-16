@@ -65,7 +65,11 @@ def load(folder: Path, settings: dict) -> list[Callable]:
                     continue
                 module.setup(settings[path.stem])
             # Its own tools only: one it imports from another file is that file's.
-            mine = [one for one in vars(module).values() if getattr(one, "is_tool", False) and one.__module__ == module.__name__]
+            mine = getattr(module, "TOOLS", None)
+            if mine is None:
+                mine = [one for one in vars(module).values() if getattr(one, "is_tool", False) and one.__module__ == module.__name__]
+            elif not isinstance(mine, (tuple, list)) or any(not callable(one) or not getattr(one, "is_tool", False) for one in mine):
+                raise ValueError("TOOLS must explicitly list decorated tool functions")
             for one in mine:
                 describe(one)  # a parameter of an unknown kind is found now, not when a model is shown it
         except Exception as problem:  # anything wrong in one file leaves that file out, not the folder

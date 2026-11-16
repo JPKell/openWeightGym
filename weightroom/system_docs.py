@@ -223,7 +223,7 @@ SOURCES = {
             "soundroom/front.py", "soundroom/runtime.py", "mirrorwall/front.py", "mirrorwall/runtime.py", "mirrorwall/video_api.py", "plugins/_turnstile.py", "plugins/_runtime.py",
             "voice/gateway.py", "voice/service.py", "spotter/app.py", "toollocker/door.py", "toollocker/remote_settings.py", "weightroom/docs_views.py"),
     "weightroom": ("weightroom",), "turnstile": ("turnstile",), "soundroom": ("soundroom",),
-    "loadcoach": ("loadcoach",), "toollocker": ("toollocker",),
+    "loadcoach": ("loadcoach",), "toollocker": ("toollocker", "developer_tools"),
     "voice": ("voice",), "spotter": ("spotter",), "plugins": ("plugins",),
     "benchmarks": ("benchmarks",), "data": ("db", "loadcoach/backups.py", "loadcoach/backup_crypto.py", "loadcoach/backup_restore.py", "loadcoach/database_admin.py"),
     "hosted-providers": ("loadcoach/outside.py", "turnstile/hosted.py", "turnstile/allowances.py"),

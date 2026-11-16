@@ -179,6 +179,10 @@ does not disable a legacy compute gateway automatically.
 
 ## Built-in Documentation tools
 
+Code and documentation implementations are grouped in `developer_tools/` at the repository
+root. See [Developer tools](/docs/api/developer-tools) for automatic source indexing, the
+SQLite symbol graph, optional semantic docstring search and external developer integrations.
+
 With `front = "weightroom.toml"`, ToolLocker derives the local console address from that
 file's configured port and offers the built-in `docs` server and `/mcp/docs` tool set.
 The file-only `docs_url` setting overrides that console base URL; an explicit empty string

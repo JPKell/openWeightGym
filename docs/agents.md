@@ -138,6 +138,7 @@ Markdown limited to `README.md` (the project's front page: what it is and the in
 | [Voice specification](voice.md), [voice brief](../voice/README.md), [desktop instructions](../desktop/README.txt) | Speech/client protocols, capacity and device acceptance. |
 | [Plugin guide](../plugins/README.md), [specification](plugins/SPEC.md), [Hermes](../plugins/hermes/README.md) | Adapter runtime, permissions, authoring and delivery. |
 | [Tool authoring](../toollocker/README.md) | Tool folders and remote hosts; shipped with each host. |
+| [Developer tools](../developer_tools/README.md) | Code/docs MCP tools, automatic source graph, docstring vectors and extension checks. |
 | [Application sweep](application-sweep-2026-10-20.md), [observability](observability-work-plan.md) | Retained delivery/acceptance evidence and observation limits. |
 | [Application walkthrough](../app-walkthrough.md), [agent walkthrough](agent-walkthrough.md) | Page-by-page automated testing methods, live boundaries and links to the owner's findings. |
 | [Arithmetic audit](benchmarks/arithmetic-audit.md), [case contract](benchmarks/arithmetic-v3.md), [qualification](benchmarks/qualification-2026-10-15.md) | Versioned benchmark evidence; status remains in the ledger. |

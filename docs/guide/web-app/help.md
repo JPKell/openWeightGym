@@ -23,6 +23,7 @@ Ask needs [tool access](/docs/web-app/tools) and a configured help role. Your mo
 Ask does not create a stored conversation or stored Responses chain. Its messages live in the browser tab; normal model requests and tool calls still follow their existing logging/retention policy. Unanswered question text is kept anonymously for documentation improvements; see [My account privacy](/docs/web-app/my-account#privacy).
 
 Answers use the same visible library as Search. Administrative topics remain restricted. Ask can explain a documented task but cannot change settings or execute an operating action. Treat its citations as the place to verify a claim.
+Answers default to a short explanation with clickable sources; ask for detailed steps when needed.
 
 If the model returns nothing, fails, reaches allowance/capacity policy or cannot reach ToolLocker, the panel offers **Search documentation**. A configured role can still have no eligible permitted model; an administrator must check model access and readiness.
 
@@ -32,6 +33,8 @@ If the model returns nothing, fails, reaches allowance/capacity policy or cannot
 Open **Models → Roles**, expand **Create a role**, enter `docs-help` under **New role** and choose a chat model that supports tools. Save its candidates and weights using [Roles and routing](/docs/model-guides/roles). The application supplies the documentation prompt and caller-scoped sources; there is no separate knowledge base. For different group access, use the existing [group model policy](/docs/administration/groups) and role candidates. Ask uses the shared role rather than a separate per-group model picker.
 
 Ask offers documentation tools and any `code__*` tools already offered to an administrator by ToolLocker. It never adds permissions. Test source tools in [Settings → Tools](/docs/administration/tools) if listing or calls are refused.
+The [developer source index](/docs/api/developer-tools) reports excluded files and pending vectors.
+The assistant treats partial search results and static graph edges as limited evidence, not proof of absence or complete runtime impact.
 
 ## Review documentation gaps
 
