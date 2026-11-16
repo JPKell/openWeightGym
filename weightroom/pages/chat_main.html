@@ -49,7 +49,7 @@
       {% endif %}
       <div class="{{ 'col-12 col-sm-4' if not retry else 'col-12' }}">
         <div class="form-check form-check-inline"><input id="{{ prefix }}-thinking" name="thinking" type="checkbox" class="form-check-input" data-chat-setting{{ ' checked' if thinking }}><label for="{{ prefix }}-thinking" class="form-check-label">Reasoning</label></div>
-        {% if 'unlogged' in person.can %}<div class="form-check form-check-inline"><input id="{{ prefix }}-temporary" name="temporary" type="checkbox" class="form-check-input"{{ ' checked' if (talk.temporary if talk else typed_in.temporary is defined) }}{{ ' disabled' if talk }}><label for="{{ prefix }}-temporary" class="form-check-label">Temporary</label></div>{% endif %}
+        {% if 'unlogged' in person.can and person.me.get('chat', {}).get('unlogged', false) %}<div class="form-check form-check-inline"><input id="{{ prefix }}-temporary" name="temporary" type="checkbox" class="form-check-input"{{ ' checked' if (talk.temporary if talk else typed_in.temporary is defined) }}{{ ' disabled' if talk }}><label for="{{ prefix }}-temporary" class="form-check-label">Temporary</label></div>{% endif %}
       </div>
     </div>
     <label for="{{ prefix }}-system" class="form-label small fw-semibold mb-1">System prompt</label>

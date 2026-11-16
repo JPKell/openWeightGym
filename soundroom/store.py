@@ -143,7 +143,7 @@ class Store:
         limit = max(1, min(int(limit), 200))
         marks = ",".join("?" for _ in kinds)
         query = f"SELECT a.id FROM soundroom_assets a WHERE a.kind IN ({marks}) AND (a.owner_id=? OR EXISTS (SELECT 1 FROM soundroom_shares s WHERE s.item=a.id AND s.group_name=?))"
-        values = [*kinds, owner, group or "\0"]
+        values = [*kinds, owner, group or None]
         if before is not None:
             if before_id:
                 query += " AND (a.created<? OR (a.created=? AND a.id<?))"
@@ -263,7 +263,7 @@ class Store:
         """The caller's voices and those shared with the caller's group."""
         rows = self.db.execute("SELECT v.id,v.owner_id,v.name,v.asset,v.transcript,v.description,v.consent,v.created FROM soundroom_voices v "
                                "WHERE v.owner_id=? OR EXISTS (SELECT 1 FROM soundroom_shares s WHERE s.item=v.id AND s.group_name=?) ORDER BY v.name",
-                               (owner, group or "\0")).fetchall()
+                               (owner, group or None)).fetchall()
         return [{"id": r[0], "mine": r[1] == owner, "name": r[2], "asset": r[3], "transcript": r[4], "description": r[5],
                  "consent": r[6], "created": r[7], "shared_with": self.shared_with(r[0]) if r[1] == owner else []} for r in rows]
 

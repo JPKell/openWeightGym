@@ -20,11 +20,13 @@ Use an account with [model management](/docs/system/abilities#ability-manage-mod
 
 ## Options
 
+**Adapters → Remove from draft** removes one adapter on Save without deleting its file. **Discard changes** restores saved rows.
+
 **Presets** reuses compatible settings. **Load preset** fills the editor; saving applies it. **Save preset** retains a named configuration. Shared presets can affect compatible quantizations; **Same file only** and **This entry only** identify narrower scopes. The target retains its own file, projector and adapters.
 
 ### Native MoE caching and host RAM
 
-For a llama.cpp GPU model that keeps experts or other weights in host RAM, set **Hardware → Host RAM budget (MiB)** on each node. This reserves the full budget before loading and caps the whole process in the worker's existing memory controls. Include weights, context, work buffers and loading overhead; the GPU cache size alone does not describe host RAM use. A positive budget is required when native caching is enabled. With caching disabled, blank or zero retains existing admission. CPU-only models continue to use measured RAM admission.
+For a llama.cpp GPU model that keeps experts or other weights in host RAM, set **Hardware → Host RAM budget (MiB)** on each node. This reserves the full budget before loading and caps the whole process in the worker's existing memory controls. Include weights, context, work buffers and loading overhead; the GPU cache size alone does not describe host RAM use. A positive budget is required when native caching is enabled. With caching disabled, blank or zero retains existing admission. CPU-only models use measured RAM admission and reject a nonzero Host RAM budget.
 
 With llama.cpp 1.0, **Advanced loading flags** can set `cpu-moe = true` (keep all expert weights in host RAM), or `n-cpu-moe` (the first N layers), together with `moe-cache-mib` (the GPU expert cache) and `moe-cache-cpu-share` (the fraction of cache misses computed on the CPU, from 0 to 1). These flags require an installed runtime that advertises them. The cache helps small decode batches; large prompt batches still upload their experts. Both host RAM and measured VRAM must fit. CUDA unified memory stays governed by the existing node policy; CPU expert placement is a separate choice.
 

@@ -44,9 +44,6 @@ def routes(for_people, page, ask, platform):
 
     async def api(request, person):
         """Dispatch bounded session-authenticated Classifier operations."""
-        origin = request.headers.get('origin')
-        if request.method == 'POST' and origin and origin.rstrip('/') != str(request.base_url).rstrip('/'):
-            return JSONResponse({'error': {'message': 'Submit this request from the console.'}}, 403, headers=PRIVATE)
         action = request.path_params['action']
         try:
             if action == 'models' and request.method == 'GET':

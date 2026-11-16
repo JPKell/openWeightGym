@@ -1049,7 +1049,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if template == 'refused.html' and status >= 500:
             context = getattr(request.state, 'observation', None)
             error_request_id = context.root.request_id if context else uuid.uuid4().hex
-        response = pages.TemplateResponse(request, template, {"person": person, "front_state": front_state, "strip": strip, "spotter_available": bool(spotter), "wake_button": bool(settings.wake_mac), "nav": nav, "error_status": status, "error_request_id": error_request_id, "content_limits": content_limits.for_user(person), "settings_surface": bool(person and "manage-settings" in person.can and settings_views.surface(nav_path)), **more}, status_code=status)
+        api = urlsplit(settings.door + ':8442')
+        api_host = request.url.hostname if api.hostname in ('localhost', '127.0.0.1', '::1') else api.hostname
+        api_base_url = f'{api.scheme}://{pairing.url_host(api_host or request.url.hostname)}:{api.port}'
+        response = pages.TemplateResponse(request, template, {"person": person, "api_base_url": api_base_url, "front_state": front_state, "strip": strip, "spotter_available": bool(spotter), "wake_button": bool(settings.wake_mac), "nav": nav, "error_status": status, "error_request_id": error_request_id, "content_limits": content_limits.for_user(person), "settings_surface": bool(person and "manage-settings" in person.can and settings_views.surface(nav_path)), **more}, status_code=status)
         if error_request_id:
             response.headers['x-request-id'] = error_request_id
         response.headers['cache-control'] = 'no-store'
@@ -1150,7 +1153,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
         async def checked(request: Request) -> Response:
             """Authenticate the browser, enforce form origin and retain failed submissions."""
-            if request.method == "POST" and not ours(request):
+            if request.method not in ("GET", "HEAD", "OPTIONS") and not ours(request):
                 return Response("This form was not sent from weightroom's own page.", status_code=403)
             try:
                 person = await who(request)
@@ -1565,9 +1568,21 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         message = 'Feedback saved.' if result.status_code == 200 else result.json()['error']['message']
         return go(f'/requests/{number}?{"failed=1&" if result.status_code != 200 else ""}said=' + quote(message))
 
+    key_disclosures = {}
+
     async def account(request: Request, person: Person, said: str = "", new_key: str = "", failed: bool = False, opened: str = "") -> Response:
         """Identity, password and API keys on the account's main page."""
         asked = request.query_params
+        for token, result in list(key_disclosures.items()):
+            if result['expires'] <= time.monotonic():
+                key_disclosures.pop(token, None)
+        token = asked.get('created', '')
+        result = key_disclosures.get(token)
+        if request.method == 'GET' and result and result['session'] == person.key:
+            new_key = key_disclosures.pop(token)['key']
+            said = 'Copy this key now. It is not shown again.'
+        elif token:
+            said = 'This key has already been shown or its display expired. Remove it and create another if you did not copy it.'
         me = (await ask("GET", "/loadcoach/me", person.key)).json()
         sessions = await ask('GET', '/loadcoach/sessions', person.key)
         rows = sessions.json().get('sessions', []) if sessions.is_success else []
@@ -1648,7 +1663,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         answer = await ask("POST", f"/loadcoach/users/{person.name}/keys", person.key, json={"label": label, 'days':days})
         if answer.status_code != 201:
             return await account(request, person, answer.json()["error"]["message"], failed=True, opened="keys")
-        return await account(request, person, "Copy this key now. It is not shown again.", new_key=answer.json()["key"], opened="keys")
+        token = secrets.token_urlsafe(24)
+        for old, result in list(key_disclosures.items()):
+            if result['expires'] <= time.monotonic():
+                key_disclosures.pop(old, None)
+        if len(key_disclosures) >= 256:
+            key_disclosures.pop(next(iter(key_disclosures)))
+        key_disclosures[token] = {'session': person.key, 'key': answer.json()['key'], 'expires': time.monotonic() + 60}
+        return go('/account/keys?created=' + token)
 
     async def remove_key(request: Request, person: Person) -> Response:
         """Revoke the selected caller-owned API key."""
@@ -4155,7 +4177,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if not ref and not request.query_params.get('model') and preferred:
             draft.setdefault('model', preferred)
         return page(request, template, person, status=400 if said else 200, conversations=listed["conversations"], talk=talk,
-                    models=[*[name for name in person.me.get("models", []) if not person.me.get("chat", {}).get("models", {}).get(name, {}).get("video_generation") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("image_generation") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("audio") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("classifier") and not person.me.get("chat", {}).get("models", {}).get(name, {}).get("rerank")], *asked_as(person)], said=said, typed_in=draft,
+                    models=allowed, said=said, typed_in=draft,
                     adaptor_names={row["id"] for row in plugins.models(person.me)})  # fmt: skip
 
     async def collections_page(request: Request, person: Person, said='', result=None, form=None, failed=False, diagnostics=None) -> Response:
@@ -4442,7 +4464,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if initial_page(request):
             return page(request, 'usage_report.html', person, fragment_url=fragment_url(request, 'report'))
         params = {key: request.query_params[key] for key in
-                  ("start", "end", "user", "group", "model", "source", "outcome", "group_by", "timezone", "input_rate", "output_rate")
+                  ("start", "end", "user", "group", "model", "node", "level", "source", "outcome", "group_by", "timezone", "input_rate", "output_rate")
                   if request.query_params.get(key)}
         params.setdefault("timezone", settings.timezone or "UTC")
         params.setdefault("input_rate", settings.mock_input_rate)
@@ -5935,7 +5957,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             *response_routes(for_people, page, response_store),
             *classifier_routes(for_people, page, ask, platform),
             *account_routes(for_people, page, ask, typed, go, platform, conversations.state.workflows,
-                            notifications=notifications, notification_note=notification_note),
+                            notifications=notifications, notification_note=notification_note, keys_page=account),
             *notification_routes('/settings/alerts',for_people,typed,go,notifications,notification_render,notification_note),
             *plugin_routes(plugins, plugin_controller, for_people, page, go, typed),
             *conversations.routes,

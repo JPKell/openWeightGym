@@ -17,6 +17,8 @@ The requested model can run on any eligible node hosting that exact name. Differ
 
 Ask a question and choose an answer model, or retrieve excerpts only. Review the cited sources: similarity is a retrieval score, not a guarantee that an answer is correct. Collections and their sources are private to their owner. Resetting the embedding space clears its vectors and requires indexing again.
 
+A length-limited or reasoning-only reply explains why no cited answer was accepted and links the recorded request when available. Try a non-reasoning answer model; citation checks still apply.
+
 The guided workspace places sources above the question and evidence. Prepare sources, retrieve evidence, then review the answer against known facts. Create workflow starts a new research-to-draft plan with this collection selected.
 
 [Shared form controls and confirmations](/docs/getting-started/navigation#forms-and-confirmations)

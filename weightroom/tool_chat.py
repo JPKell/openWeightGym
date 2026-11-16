@@ -80,7 +80,7 @@ class ToolChat:
         await self.allowed(request,user,talk['id'],talk['level'])
         if request.query_params.get('peek') != '1' and not self.chats.touch(talk['id'], user.name):
             raise Problem('You have no such conversation.',404,'not_found')
-        return JSONResponse(self.shown(talk))
+        return JSONResponse(self.shown(self.talk(request, user)))
 
     async def body(self, request, fields):
         """Bound JSON arguments and reject unknown operation fields."""

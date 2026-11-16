@@ -175,7 +175,7 @@
       $('cleanup-dialog').showModal();
     }
     async function preview(action) {
-      invalidateReview();
+      invalidateReview(); $('cleanup-result').textContent = ''; notice('');
       const result = await request(api + 'preview', {scope: cleanupKeys, action, cutoff: $('cutoff').value, mode: $('reclaim-mode').value});
       review = result;
       $('maintenance-rows').replaceChildren(...result.stores.map(store => {

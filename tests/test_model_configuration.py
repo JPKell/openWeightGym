@@ -217,3 +217,21 @@ def test_strata_schema_fields_remain_available_without_llama_controls(desk, tmp_
         assert not errors
         browser.close()
     library.db.close()
+
+
+def test_adapter_labels_remove_and_discard_keep_saved_rows(matrix):
+    server, fleet = matrix
+    fleet.models['compute']['qwen']['adapters'] = {'style': {'file': '/compute/cache/a.gguf', 'scale': 0}}
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.goto('http://console.test/models/qwen?node=compute')
+        page.get_by_role('button', name='Edit Adapters', exact=True).click()
+        table = page.get_by_role('table', name='Adapters', exact=True)
+        playwright.expect(table.get_by_role('columnheader', name='Strength')).to_be_visible()
+        table.get_by_role('button', name='Remove from draft').click()
+        assert page.locator('[name=adapter]').input_value() == ''
+        assert fleet.models['compute']['qwen']['adapters']['style']['scale'] == 0
+        page.get_by_role('button', name='Discard changes', exact=True).click()
+        playwright.expect(table.locator('[name=adapter]')).to_have_value('style')
+        playwright.expect(table.locator('[name=adapter]')).to_be_visible()
+        browser.close()

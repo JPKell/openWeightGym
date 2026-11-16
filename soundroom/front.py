@@ -296,7 +296,7 @@ class Front:
         return JSONResponse({"models": models, "assets": assets, "next": next_page,
                              "voices": self.store.voices(user.identity, user.group_name), "jobs": jobs,
                              "groups": sorted(self.users.groups), "preferences": self.store.preferences(user.identity),
-                             "can_manage": user.can("manage-models"), "can_unlogged": user.can("unlogged")}, headers={"cache-control": "no-store"})
+                             "can_manage": user.can("manage-models"), "can_unlogged": bool(user.can("unlogged") and await self.batches.can_unlogged(user))}, headers={"cache-control": "no-store"})
 
     async def upload(self, request, user):
         """Keep a bounded source or reference upload and its retention choice."""
@@ -420,8 +420,8 @@ class Front:
             if any(self.store.asset(user.identity, key).get("temporary") for key in sources) and not temporary:
                 raise ValueError("Temporary source audio requires a temporary no-log job.")
             if temporary:
-                if not user.can("unlogged"):
-                    return error(403, "Your account may not make no-log requests.")
+                if not await self.batches.can_unlogged(user):
+                    return error(403, "Your account or the current compute policy does not permit no-log generation.")
                 observation.silence()
                 identifier = "quiet_audio_" + secrets.token_hex(12)
                 self.transient[identifier] = {"owner": user.identity, "status": "in_progress", "created": time.time(),

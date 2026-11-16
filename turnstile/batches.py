@@ -51,6 +51,13 @@ class FrontBatches:
 
     # ---- what compute calls its models -----------------------------------------------------------
 
+    async def can_unlogged(self, user):
+        """Offer no-log generation only when the account and live compute policy allow it."""
+        if not user.can('unlogged'):
+            return False
+        answer = await self.ask_compute(user, 'GET', '/loadcoach/me')
+        return bool(answer is not None and answer.is_success and answer.json().get('chat', {}).get('unlogged', False))
+
     async def retry_delay(self):
         """Re-read the delay during waits so a live change affects pending retries."""
         began = time.monotonic()

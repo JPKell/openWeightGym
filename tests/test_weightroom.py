@@ -218,6 +218,9 @@ def test_my_account_shows_and_changes_what_is_ones_own(desk):
     key = re.search(r'<pre class="secret">(lc_[\w-]+)</pre>', made.text).group(1)
     assert users.by_key(key).name == "pat"
     assert "&lt;b&gt;laptop&lt;/b&gt;" in made.text and "<b>laptop</b>" not in made.text  # what a person typed is never run as HTML
+    assert made.history[0].status_code == 303
+    refreshed = browser.get(str(made.url))
+    assert key not in refreshed.text and len(users.listing('pat')[0]['keys']) == 1
     key_id = users.listing("pat")[0]["keys"][0]["id"]
     assert key not in browser.get("/account").text  # shown once
     assert "Key removed." in browser.post(f"/account/keys/{key_id}/remove").text and users.by_key(key) is None

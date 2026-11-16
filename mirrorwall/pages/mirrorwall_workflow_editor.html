@@ -1,3 +1,4 @@
+{% from 'parts.html' import confirm_two %}
 {% from 'parts.html' import card, form_section, more, alert %}
 {% from 'image_design_parts.html' import field, select %}
 {% set video = media_kind|default('image') == 'video' %}
@@ -27,6 +28,6 @@
 <div class="col-12">{% call more('Version history') %}<label class="form-label" for="studio-history">Saved version</label><select id="studio-history" class="form-select mb-2"></select><p id="studio-history-detail" class="small text-secondary"></p><button id="studio-restore" class="btn btn-outline-secondary btn-sm" type="button" disabled>Use settings as draft</button>{% endcall %}</div>
 </div></fieldset>
 {% call alert('danger', role='alert', attrs={'id':'studio-save-error','hidden':''}, class_='mt-3') %}{% endcall %}
-<div class="editor-actions d-flex flex-wrap align-items-center gap-2 border-top pt-3 mt-3"><button id="studio-save" type="submit" class="btn btn-primary" disabled>Save workflow</button><button id="studio-discard" type="button" class="btn btn-outline-secondary" disabled>Discard changes</button><small class="text-secondary">Previous versions stay available.</small></div>
+<div class="editor-actions d-flex flex-wrap align-items-center gap-2 border-top pt-3 mt-3"><button id="studio-save" type="submit" class="btn btn-primary" disabled>Save workflow</button><button id="studio-delete" type="button" class="btn btn-outline-danger" hidden {{ confirm_two("Delete this workflow and all its versions? Saved jobs and outputs stay available.") }}>Delete workflow</button><button id="studio-discard" type="button" class="btn btn-outline-secondary" disabled>Discard changes</button><small class="text-secondary">Previous versions stay available.</small></div>
 </form>
 {% endcall %}

@@ -6,7 +6,7 @@ import re
 from starlette.responses import JSONResponse
 from turnstile.accounts import error, read_json
 from loadcoach.users import hash_key
-from voice.telephone_keys import TelephoneKeys, atomic_secret
+from voice.telephone_keys import TelephoneKeys, CredentialValidation, atomic_secret
 from voice.telephone_admin import effective, edited
 from voice.telephone_settings import validate, urls, configuration
 from voice.twilio_api import TwilioAPI, TwilioError
@@ -241,7 +241,7 @@ class TelephoneAdmin:
                 return error(400, 'Choose a telephone operation.')
             self.log.add('telephone', action, user.name)
             return JSONResponse({'credentials': self.keys.status()}, headers={'cache-control': 'no-store'})
-        except TwilioError as problem:
+        except (TwilioError, CredentialValidation) as problem:
             return error(400, str(problem))
         except (ValueError, TypeError) as problem:
             # Never echo values submitted to a credential endpoint.

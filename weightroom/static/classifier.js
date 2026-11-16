@@ -181,7 +181,7 @@
     }
     function developer() {
       let body = lastRequest; if (!body) { try { body = request(); } catch { body = {model:model.value,state:state.value,questions:{}}; } }
-      const url = `${location.protocol}//${location.hostname}:8442/v1/systemone`, pretty = JSON.stringify(body,null,2), kind = $('#classifier-code').value;
+      const url = `${root.dataset.apiBase}/v1/systemone`, pretty = JSON.stringify(body,null,2), kind = $('#classifier-code').value;
       const quoteShell = value => "'" + value.replaceAll("'", "'\\''") + "'";
       const code = kind === 'response' ? JSON.stringify(lastResponse || {},null,2) : kind === 'curl' ? `curl ${quoteShell(url)} -H 'Authorization: Bearer YOUR_API_KEY' -H 'Content-Type: application/json' --data ${quoteShell(pretty)}` :
         kind === 'python' ? `import json, requests\npayload = json.loads(${JSON.stringify(pretty)})\nresponse = requests.post(${JSON.stringify(url)}, headers={"Authorization": "Bearer YOUR_API_KEY"}, json=payload)\nresponse.raise_for_status()\nprint(response.json())` :

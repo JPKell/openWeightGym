@@ -6,7 +6,7 @@
 {% block main %}
 <div class="vc-page vc-live" id="voice-workspace" data-layout="transcript">
 {{ page_header('Voice chat') }}
-{% call alert('warning', attrs={'id':'configuration-notice','hidden':''}, class_='mb-3') %}<div class="d-flex flex-wrap align-items-center gap-2 w-100"><span id="configuration-error" class="flex-grow-1"></span><button type="button" id="retry-configuration" class="btn btn-outline-secondary btn-sm">Retry settings</button></div>{% endcall %}
+{% call alert('warning', attrs={'id':'configuration-notice','hidden':''}, class_='mb-3') %}<div class="d-flex flex-wrap align-items-center gap-2 w-100"><span id="configuration-error" class="flex-grow-1"></span>{% if 'manage-settings' in person.can %}<a href="/system/components" class="btn btn-outline-secondary btn-sm">Components</a><a href="/system/voice" class="btn btn-outline-secondary btn-sm">Voice settings</a>{% endif %}<button type="button" id="retry-configuration" class="btn btn-outline-secondary btn-sm">Retry settings</button></div>{% endcall %}
 <div class="vc-workspace-grid">{{ language_panel({'en':'English'}, preview=false) }}{{ call_panel(preview=false) }}{{ settings_panel(preview=false) }}{{ transcript_panel(preview=false) }}</div>
 <div id="action-status" class="small mt-3" role="status" aria-live="polite"></div>
 <footer class="vc-footnote"><span>Calls use the normal request log. Audio is kept in the audio library only when Record this call is selected.</span><a href="/voice/desktop">Get the Voice desktop app →</a></footer>

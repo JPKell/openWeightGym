@@ -259,7 +259,7 @@ class Front:
                 jobs.insert(0,{'id':identifier,**{k:v for k,v in row.items() if k not in ('owner','task')},'progress':self.progress.get(identifier)})
         return JSONResponse({'models':models,'assets':self.store.listing(user.identity,kind='output'),
              'references':self.store.listing(user.identity,kind='reference'),'presets':self.visible_presets(user,models),
-             'jobs':jobs,'preferences':self.store.preferences(user.identity),'can_manage':user.can('manage-models'),'can_unlogged':user.can('unlogged')},headers={'cache-control':'no-store'})
+             'jobs':jobs,'preferences':self.store.preferences(user.identity),'can_manage':user.can('manage-models'),'can_unlogged':bool(user.can('unlogged') and await self.batches.can_unlogged(user))},headers={'cache-control':'no-store'})
 
     async def assets(self,request,user):
         """Page through the caller's retained image library without loading pixels."""
@@ -433,8 +433,8 @@ class Front:
             if any(self.store.asset(user.identity,key).get('temporary') for key in references) and not temporary:
                 raise ValueError('Temporary references require a temporary no-log job.')
             if temporary:
-                if not user.can('unlogged'):
-                    return error(403,'Your account may not make no-log requests.')
+                if not await self.batches.can_unlogged(user):
+                    return error(403,'Your account or the current compute policy does not permit no-log generation.')
                 observation.silence()
                 identifier='quiet_image_'+secrets.token_hex(12)
                 self.transient[identifier]={'owner':user.identity,'status':'in_progress','created':time.time(),'settings':asked.get('request',{}),'references':references,'kind':'video' if video else 'image'}
@@ -553,6 +553,22 @@ class Front:
             return error(503,str(problem))
         return JSONResponse({'models':models,'presets':self.visible_presets(user,models),'can_manage':user.can('manage-models')},headers={'cache-control':'no-store'})
 
+    async def remove_preset(self, request, user):
+        """Remove a private workflow as its owner, or a shared workflow as a model manager."""
+        identifier = request.path_params['identifier']
+        row = next((row for row in self.store.presets(user.identity) if row['id'] == identifier), None)
+        if not row:
+            return error(404, 'There is no such workflow.')
+        if row['published'] and not user.can('manage-models'):
+            return error(403, 'Removing a shared workflow requires model-management permission.')
+        try:
+            version = int(request.query_params.get('version', ''))
+        except ValueError:
+            return error(400, 'Choose the saved workflow version to remove.')
+        if not self.store.remove_preset('*' if row['published'] else user.identity, identifier, version):
+            return error(409, 'This workflow changed elsewhere. Reload and review it before removing it.')
+        return JSONResponse({'removed': identifier}, headers={'cache-control': 'no-store'})
+
     async def preset_history(self,request,user):
         """Keep workflow revisions behind current ownership and shared-model access."""
         identifier=request.path_params['identifier']
@@ -579,4 +595,5 @@ class Front:
                 route('/mirrorwall/assets/{identifier}/content',self.asset),route('/mirrorwall/assets/{identifier}/thumbnail',self.asset),
                 route('/mirrorwall/jobs',self.start,'POST'),route('/mirrorwall/jobs/{identifier}',self.control,'POST'),
                 route('/mirrorwall/preferences',self.preferences),route('/mirrorwall/preferences',self.preferences,'POST'),route('/mirrorwall/presets',self.preset,'POST'),
-                route('/mirrorwall/workflows',self.workflows),route('/mirrorwall/presets/{identifier}',self.preset_history)]
+                route('/mirrorwall/workflows',self.workflows),route('/mirrorwall/presets/{identifier}',self.preset_history),
+                route('/mirrorwall/presets/{identifier}',self.remove_preset,'DELETE')]

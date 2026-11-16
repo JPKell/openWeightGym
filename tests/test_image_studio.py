@@ -159,12 +159,19 @@ def test_workflow_history_api_keeps_private_ownership(studio):
     assert server.get('/mirrorwall-api/presets/'+row['id']).status_code==404
     assert server.get('/models/images').status_code==403
     assert server.get('/models/images/workflows').status_code==200
+    assert server.delete('/mirrorwall-api/presets/'+row['id']+'?version=2').status_code==404
+    sign_in(server,'jordan')
+    assert server.delete('/mirrorwall-api/presets/'+row['id']+'?version=1').status_code==409
+    assert len(server.get('/mirrorwall-api/presets/'+row['id']).json()['versions'])==2
+    assert server.delete('/mirrorwall-api/presets/'+row['id']+'?version=2').status_code==200
+    assert server.get('/mirrorwall-api/presets/'+row['id']).status_code==404
 
 
 def test_member_edits_a_personal_copy_and_shared_history_follows_model_identity(studio):
     server,wire,_,library=studio
     shared=server.post('/mirrorwall-api/presets',json={'name':'Team portrait','model':'sketch','settings':{'steps':10},'published':True}).json()
     sign_in(server,'pat')
+    assert server.delete('/mirrorwall-api/presets/'+shared['id']+'?version=1').status_code==403
     with playwright.sync_playwright() as driver:
         browser,page=browser_context(driver,server)
         page.goto('http://console.test/models/images/workflows?model=sketch')
@@ -282,4 +289,26 @@ def test_rejected_workflow_save_keeps_draft_and_is_retryable(studio):
         page.locator('#workflow-steps').fill('20')
         page.locator('#studio-save').click()
         playwright.expect(page.locator('#studio-version')).to_have_text('Version 1')
+        browser.close()
+
+
+@pytest.mark.parametrize('width',[1440,390])
+def test_workflow_deletion_requires_two_clicks_and_cleans_versions(studio,width):
+    server,wire,_,_=studio
+    row=server.post('/mirrorwall-api/presets',json={'name':'Disposable','model':'sketch','settings':{'steps':10}}).json()
+    with playwright.sync_playwright() as driver:
+        browser,page=browser_context(driver,server)
+        page.set_viewport_size({'width':width,'height':1000})
+        page.goto('http://console.test/models/images/workflows?model=sketch')
+        button=page.locator('#studio-delete')
+        playwright.expect(button).to_be_visible()
+        button.click()
+        assert server.get('/mirrorwall-api/presets/'+row['id']).status_code==200
+        page.keyboard.press('Escape')
+        button.click()
+        assert server.get('/mirrorwall-api/presets/'+row['id']).status_code==200
+        button.click()
+        playwright.expect(page.locator('#studio-status')).to_contain_text('Workflow and version history deleted')
+        assert server.get('/mirrorwall-api/presets/'+row['id']).status_code==404
+        playwright.expect(button).to_be_hidden()
         browser.close()

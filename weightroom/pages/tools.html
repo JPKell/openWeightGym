@@ -4,7 +4,7 @@
 {% from "parts.html" import card, said_box, section_title, empty_row %}
 {% from "parts.html" import page_header, form_section, more %}
 {% block title %}Tools · openWeightGym{% endblock %}
-{% block scripts %}<script src="/static/tool-controls.js" defer></script><script src="/static/tools.js" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/tool-controls.js?v=1" defer></script><script src="/static/tools.js" defer></script>{% endblock %}
 {% block main %}
 {{ page_header('Tools', 'Manage available tools, access levels and connection checks.') }}
 <p><a href="/docs/modules/toollocker">ToolLocker setup and adding tools</a>: requirements, control node installation, a Python tool example and troubleshooting.</p>
@@ -30,7 +30,7 @@
 <div class="table-responsive"><table class="sortable table table-sm"><thead><tr><th>Tool</th><th>Level</th></tr></thead><tbody>
 {% for tool in tool_info.tools %}{% set server_level = servers.get(tool.name.split('__')[0], {}).get('level', 'normal') %}
 <tr><td><label for="level-{{ loop.index }}"><code>{{ tool.name }}</code></label></td><td><select id="level-{{ loop.index }}" name="level:{{ tool.name }}" class="form-select">
-<option value="">as its server ({{ server_level }})</option>
+<option value=""{{ " selected" if not levels.get(tool.name) }}>as its server ({{ server_level }})</option>
 {% for level in ('normal', 'sensitive', 'restricted') %}<option {{ "selected" if levels.get(tool.name) == level }}>{{ level }}</option>{% endfor %}
 </select></td></tr>
 {% else %}{% call empty_row(2) %}No tool descriptions on record yet.{% endcall %}{% endfor %}

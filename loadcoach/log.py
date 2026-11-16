@@ -249,7 +249,7 @@ class Log:
                 where.append(expression)
                 values.append(value)
         if members is not None:
-            where.append(f"user IN ({','.join('?' for _ in members)})" if members else "0")
+            where.append(f"user IN ({','.join('?' for _ in members)})" if members else "0 = 1")
             values.extend(members)
         if before:
             where.append('(at, id) < (SELECT at, id FROM events WHERE id = ?)' if order_by == 'time' else 'id < ?')

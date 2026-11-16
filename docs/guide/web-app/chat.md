@@ -14,6 +14,8 @@ Keep a conversation with a permitted model or compare two models side by side.
 2. Open **Options** before sending if you need a **System prompt**, attachments or a **Comparison model**.
 3. Select **Send**. Continue in the same conversation or choose **New conversation** in the sidebar.
 
+The model picker uses reported capabilities: embedding, reranking, classifier and media-only models are excluded from Text chat. A model name alone does not establish suitability.
+
 ## Options and keys {#chat-options}
 
 | Control | Use |

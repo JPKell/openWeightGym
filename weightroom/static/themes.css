@@ -141,6 +141,8 @@ html[data-site-theme] .btn-primary { --tblr-btn-color: #fff; --tblr-btn-bg: var(
 html[data-site-theme] .btn-outline-primary { --tblr-btn-color: var(--theme-accent); --tblr-btn-border-color: var(--theme-accent); --tblr-btn-hover-color: #fff; --tblr-btn-hover-bg: var(--theme-button); --tblr-btn-hover-border-color: var(--theme-button); --tblr-btn-active-color: #fff; --tblr-btn-active-bg: var(--theme-button-hover); --tblr-btn-active-border-color: var(--theme-button-hover); --tblr-btn-focus-shadow-rgb: var(--theme-button-rgb); }
 html[data-site-theme] .btn-outline-secondary { --tblr-btn-color: var(--theme-muted); --tblr-btn-border-color: var(--theme-border); --tblr-btn-hover-color: var(--theme-text); --tblr-btn-hover-bg: var(--theme-subtle); --tblr-btn-hover-border-color: var(--theme-muted); --tblr-btn-active-color: var(--theme-text); --tblr-btn-active-bg: var(--theme-subtle); --tblr-btn-active-border-color: var(--theme-muted); }
 html[data-site-theme] .form-check-input:checked { background-color: var(--theme-button); border-color: var(--theme-button); }
+html[data-site-theme] .nav { --tblr-nav-link-color: var(--theme-text); --tblr-nav-link-hover-color: var(--theme-accent); }
+html[data-site-theme] .badge[class*="-lt"] { color: var(--theme-text) !important; }
 html[data-site-theme] .nav-pills { --tblr-nav-pills-link-active-bg: var(--theme-button); --tblr-nav-pills-link-active-color: #fff; }
 html[data-site-theme] .nav-tabs { --tblr-nav-tabs-link-active-bg: var(--theme-surface); --tblr-nav-tabs-link-active-color: var(--theme-text); }
 

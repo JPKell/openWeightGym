@@ -11,7 +11,7 @@ root agent instructions, documentation contract and durable design decisions.
 - Start with `git status`; preserve unrelated work. Keep patches small and code readable enough
   for the owner to explain. Prefer existing components over abstractions, scaffolding or dependencies.
 - Finish authorized work without intermediate review gates. Proposals are not authorization.
-  Never push Git; keep any local commit limited to the intended files.
+  Push Git only with explicit owner authorization; keep commits limited to the intended files.
 - Distinguish implemented, locally tested, deployed, live-verified and owner-accepted claims.
   Date deployment/acceptance records; a passing fixture does not establish live behavior.
 - Use the existing routes, schedulers, stores and service lifecycle. Do not add a second model
@@ -25,7 +25,7 @@ Owner decisions D1–D7, recorded 2026-10-15/16, apply to the approved disposabl
 |---|---|
 | D1 | Advance approved gates, including DB1 retirement, without intermediate review or minimum backup retention. Preserve data and resolve differences through evidence; technical conflicts block dependent work. |
 | D2 | Diagnose capped extraction/retrieval with up to 32,768 outputs where context fits. Headline check accuracy plus whole-case accuracy; report caps separately. Version harder revisions and preserve old evidence. |
-| D3 | Live bindings remain SQLite. PostgreSQL 18 qualification is isolated; live engine cutover needs separate authorization. |
+| D3 | Preserve each installation’s configured database bindings. Qualify storage changes in isolation; live engine cutover needs separate authorization. |
 | D4 | Direct voice retains its least-privilege identity, private server-side key, private HTTPS and revocation contract. Never expose the key to chat/browser. |
 | D5 | Physical/subjective acceptance belongs to the owner. Completed acceptance must not reappear as a pending owner session. |
 | D6 | Preserve measured CPU resident-RAM admission, host/service headroom, idle-only eviction of unheld/unlocked models and each host's sleep policy. |
@@ -33,7 +33,7 @@ Owner decisions D1–D7, recorded 2026-10-15/16, apply to the approved disposabl
 
 - Deployment/restarts are permitted for approved work. Before affected restarts or new model
   loads, verify no benchmark is queued/running; freeze submitted implementations and identities
-  until drained. GPUs may run unattended. Use a reviewed immutable release with its dependencies.
+  until drained. GPUs may run unattended. Deploy reviewed commits through `owg update; owg restart` and verify the configured branch and effective running source.
 - Inspect deployer scope and every installed copy: control node, workers, standalone adapters/tool hosts
   and shared-checkout services can need separate updates. Report exactly what was activated.
 - Do not wake/suspend/reboot/power off hosts for qualification, change live DB engines, execute

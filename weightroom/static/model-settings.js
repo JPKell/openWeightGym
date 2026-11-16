@@ -83,6 +83,15 @@
   });
   document.addEventListener('input', event => { if (event.target.closest('[data-model-settings]')) updateParallel(); });
   document.addEventListener('click', event => {
+    const remove = event.target.closest('[data-remove-adapter]');
+    if (remove) {
+      const row = remove.closest('tr'), form = remove.closest('form');
+      if (row.hasAttribute('data-model-added')) row.remove();
+      else { row.hidden = true; row.dataset.adapterRemoved = ''; for (const input of row.querySelectorAll('input, select')) input.value = ''; }
+      form.querySelector('[data-add-row=adapter]')?.focus();
+      form.dispatchEvent(new Event('change', {bubbles: true}));
+      return;
+    }
     const button = event.target.closest('[data-add-row]');
     if (!button) return;
     const form = button.closest('form'), name = button.dataset.addRow;
@@ -94,7 +103,10 @@
     first?.focus();
   });
   const update = () => { document.querySelectorAll('[data-hardware]').forEach(box => updateHardware(box)); updateParallel(); };
-  document.addEventListener('reset', () => queueMicrotask(update));
+  document.addEventListener('reset', event => {
+    event.target.querySelectorAll('[data-adapter-removed]').forEach(row => { row.hidden = false; delete row.dataset.adapterRemoved; });
+    queueMicrotask(update);
+  });
   document.addEventListener('htmx:afterSwap', update);
   update();
 })();

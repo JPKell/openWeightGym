@@ -96,7 +96,13 @@ def routes(log: Log, users: Users, caller, ask_compute, prices, model_choices=la
         except (ValueError, ZoneInfoNotFoundError):
             return error(400, 'Choose a valid date and time range and timezone.')
         memberships = users.memberships(None if user.can('see-log') else user.name)
-        members = [name for name, group in memberships.items() if group == asked['group']] if asked.get('group') else None
+        if asked.get('group') == '(unknown)':
+            choices = await report(lambda view: view.choices(None if user.can('see-log') else user.name))
+            if isinstance(choices, Response):
+                return choices
+            members = [name for name in choices['user'] if name not in memberships]
+        else:
+            members = [name for name, group in memberships.items() if group == asked['group']] if asked.get('group') else None
         entries = await report(lambda view: view.read(after, limit, whose, asked.get("kind"), asked.get("trace"), with_text,
                                                       asked.get("what"), asked.get("model"), before, since=since, until=until, members=members,
                                                       node=asked.get('node'), q=asked.get('q'), q_field=asked.get('q_field', ''), order_by=asked.get('order', 'id')))

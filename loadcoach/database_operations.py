@@ -54,7 +54,7 @@ def read_connection(source):
         connection.close()
 
 
-def storage_headroom(source, required):
+def _storage_headroom(source, required):
     """Measure the actual database filesystem, refusing unobservable remote PostgreSQL disks."""
     if source.path is not None:
         folders = [source.path.parent]
@@ -77,6 +77,22 @@ def storage_headroom(source, required):
     if free < required + 64 * 1024 * 1024:
         raise OperationRefused('Insufficient database filesystem headroom. Free space and repeat the preview.')
     return {'free_bytes': free, 'required_bytes': required + 64 * 1024 * 1024}
+
+
+def storage_headroom(source, required):
+    """Explain inspection failures without exposing server paths, DSNs or driver messages."""
+    try:
+        return _storage_headroom(source, required)
+    except OperationRefused:
+        raise
+    except PermissionError:
+        raise OperationRefused('The service cannot inspect the database filesystem permissions. Use routine maintenance or ask the server administrator to check storage access.') from None
+    except OSError:
+        raise OperationRefused('Database filesystem space could not be measured. Check storage availability or choose routine maintenance.') from None
+    except Exception as problem:
+        if source.database.is_error(problem):
+            raise OperationRefused('The database refused the storage inspection. Ask its administrator to check monitoring permissions, or choose routine maintenance.') from None
+        raise
 
 
 @contextmanager

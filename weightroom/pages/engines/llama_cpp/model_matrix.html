@@ -69,7 +69,7 @@
   {% call group('hardware', 'Hardware', columns) %}
   <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row">Placement<small class="matrix-hint">GPUs, splitting and sharing</small></th>
     {% for column in columns %}{% call cell(column) %}{{ hardware(column.idp ~ 'model', column.showing.gpus, column.cards, column.showing.alone, column.showing.allow_split, field=column.prefix, ids=column.idp) }}{% endcall %}{% endfor %}</tr>
-  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><label for="{{ lead.idp }}host-ram-mib">Host RAM budget (MiB)</label><small class="matrix-hint">Reserves and caps CPU experts and buffers. Blank keeps existing admission.</small></th>
+  <tr class="matrix-row" data-matrix-row><th class="matrix-label" scope="row"><label for="{{ lead.idp }}host-ram-mib">Host RAM budget (MiB)</label><small class="matrix-hint">GPU models only: reserves and caps CPU experts and buffers. CPU-only models use measured RAM admission. Blank keeps existing admission.</small></th>
     {% for column in columns %}{% call cell(column) %}<input id="{{ column.idp }}host-ram-mib" name="{{ column.prefix }}host_ram_mib" type="number" min="0" max="2147483648" step="1" class="form-control form-control-sm" value="{{ column.showing.host_ram_mib|default('') }}" aria-label="host RAM budget in MiB{{ column.on }}">{% endcall %}{% endfor %}</tr>
   {% endcall %}
 
@@ -91,10 +91,12 @@
   {% if not classifier %}
   {% call group('adapters', 'Adapters', columns, shared=true) %}
   {% call shared_row(width) %}
-    <div class="table-responsive"><table class="table table-sm sortable mb-2" aria-label="Adapters" data-empty-message="No adapters. Select Add adapter to configure one."><thead><tr><th>Name</th><th>File</th><th>Strength</th></tr></thead><tbody data-adapter-rows>
-    {% for short, adapter in (showing.adapters or {}).items() %}<tr><td><input name="adapter" class="form-control" value="{{ short }}" aria-label="adapter name"></td><td>{{ part_choice('adapter_file', 'adapter', adapter.file, 'file of ' ~ short) }}</td><td><input name="adapter_scale" class="form-control" type="number" step="any" value="{{ adapter.scale|default('') }}" placeholder="1" aria-label="strength of {{ short }}"></td></tr>{% else %}{{ empty_row(3, "No adapters. Select Add adapter to configure one.") }}{% endfor %}
+    {% macro adapter_row(short='', adapter={}) %}<tr><td><input name="adapter" class="form-control" value="{{ short }}" placeholder="Adapter name" aria-label="adapter name"></td><td>{{ part_choice('adapter_file', 'adapter', adapter.get('file', ''), 'adapter file') }}</td><td><input name="adapter_scale" class="form-control" type="number" step="any" value="{{ adapter.get('scale', '') }}" placeholder="1" aria-label="adapter strength"></td><td><button type="button" class="btn btn-outline-secondary btn-sm" data-remove-adapter>Remove from draft</button></td></tr>{% endmacro %}
+    <div class="table-responsive"><table class="table table-sm sortable mb-2" aria-label="Adapters" data-empty-message="No adapters. Select Add adapter to configure one."><thead><tr><th>Name</th><th>File</th><th>Strength</th><th>Action</th></tr></thead><tbody data-adapter-rows>
+    {% for short, adapter in (showing.adapters or {}).items() %}{{ adapter_row(short, adapter) }}{% else %}{{ empty_row(4, "No adapters. Select Add adapter to configure one.") }}{% endfor %}
     </tbody></table></div><button class="btn btn-outline-secondary btn-sm" type="button" data-add-row="adapter">Add adapter</button>
-    <template data-row-template="adapter"><tr><td><input name="adapter" class="form-control" placeholder="Adapter name" aria-label="another adapter's name"></td><td>{{ part_choice('adapter_file', 'adapter', '', 'its file') }}</td><td><input name="adapter_scale" type="number" step="any" class="form-control" placeholder="1" aria-label="its strength"></td></tr></template>
+    <p class="form-hint mt-2">Remove from draft takes the adapter out on Save; its file stays on disk. Discard changes restores saved rows.</p>
+    <template data-row-template="adapter">{{ adapter_row() }}</template>
     <noscript><div class="input-group mt-2"><input name="adapter" class="form-control" placeholder="Adapter name" aria-label="New adapter name">{{ part_choice('adapter_file', 'adapter', '', 'New adapter file') }}<input name="adapter_scale" class="form-control" placeholder="1" aria-label="New adapter strength"></div></noscript>
   {% endcall %}
   {% endcall %}

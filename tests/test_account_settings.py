@@ -19,6 +19,21 @@ def api(server, switch, key, method, path, **kwargs):
     return server.portal.call(send)
 
 
+def test_key_disclosure_is_single_use_and_bound_to_creating_session(desk):
+    server, _, users = desk
+    sign_in(server, 'pat')
+    created = server.post('/account/keys', data={'label': 'Private disclosure'}, follow_redirects=False)
+    assert created.status_code == 303
+    url = created.headers['location']
+    other = users.new_key('jordan')
+    refused = server.get(url, headers={'cookie': 'weightroom=' + other})
+    assert '<pre class="secret">' not in refused.text
+    shown = server.get(url)
+    assert '<pre class="secret">' in shown.text
+    assert '<pre class="secret">' not in server.get(url).text
+    assert len(users.listing('pat')[0]['keys']) == 1
+
+
 def test_preferences_are_validated_atomic_and_account_scoped(desk):
     server, switch, users = desk
     sign_in(server, 'pat')

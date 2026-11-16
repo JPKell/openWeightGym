@@ -30,7 +30,7 @@ Open **Voices**. For cloning, provide **Name**, **Recording**, and **What the re
 
 ## Limits and troubleshooting
 
-Voice, cloning and design capabilities differ between models. A removed or no-longer-shared voice can block a script; reassign its cast entry. Files and generated takes remain subject to current ownership and sharing permissions. Temporary source audio requires a temporary job. Upload policy is shown by the workspace; administrators can inspect [shipped defaults](/docs/operations/settings-reference).
+Voice, cloning and design capabilities differ between models. A removed or no-longer-shared voice can block a script; reassign its cast entry. Files and generated takes remain subject to current ownership and sharing permissions. Temporary source audio requires a temporary job. Temporary generation is offered only when your account and current compute policy permit it. Upload policy is shown by the workspace; administrators can inspect [shipped defaults](/docs/operations/settings-reference).
 
 ## Related
 

@@ -131,7 +131,7 @@ def routes(for_people, page, ask, model_api):
         # Explicit shapes prevent this proxy from becoming a general management API.
         parts = action.split("/")
         permitted = ((action in ("state", "preferences", "assets", "workflows") and request.method == "GET") or
-                     (len(parts) == 2 and parts[0] == "presets" and request.method == "GET") or
+                     (len(parts) == 2 and parts[0] == "presets" and request.method in ("GET", "DELETE")) or
                      (action in ("assets", "assets/download", "jobs", "presets", "preferences") and request.method == "POST") or
                      (len(parts) == 2 and parts[0] == "jobs" and request.method == "POST") or
                      (len(parts) == 2 and parts[0] == "assets" and request.method == "DELETE") or

@@ -69,7 +69,7 @@ def host_ram_budget(settings: dict) -> int:
     if type(budget) is not int or not 0 <= budget <= 2**31:
         raise ValueError("host_ram_mib must be a whole number of MiB from 0 through 2147483648.")
     if budget and settings.get("gpus") == 0:
-        raise ValueError("host_ram_mib is for GPU models using host RAM; CPU-only models use measured RAM admission.")
+        raise ValueError("Host RAM budget is for GPU models using host RAM; CPU-only models use measured RAM admission.")
     return budget
 
 

@@ -920,7 +920,13 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
             if response.is_success:
                 choices = response.json()
             else:
-                problem = 'Voice settings are unavailable. Check the speech service and your access.'
+                problem = {401: 'Voice settings authentication failed. Sign in again; if it persists, ask an administrator to check the Voice service connection.',
+                           403: 'Voice settings access was refused. Ask an administrator to check your Voice abilities and compute permissions.',
+                           404: 'The configured Voice service does not provide its options endpoint. Check Components and Voice settings.',
+                           502: 'The Voice service could not be reached. Check Components and Voice settings.',
+                           503: 'No Voice compute service is ready. Check Components and Voice settings.',
+                           504: 'The Voice service timed out. Check Components and retry settings.'}.get(response.status_code,
+                           f'Voice settings failed (HTTP {response.status_code}). Check Components and Voice settings.')
             if settings.get("soundroom_profile"):
                 listed = await ask("GET", turnstile + "/soundroom/voices", key, timeout=3, no_wake=True)
                 voices = [{"id": one["id"], "name": one["name"]} for one in listed.json().get("voices", [])] if listed.is_success else []

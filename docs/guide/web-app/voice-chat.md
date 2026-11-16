@@ -29,7 +29,7 @@ Use HTTPS or localhost and allow microphone access. Your account needs [Voice ac
 
 ## Limits and troubleshooting
 
-Model choices are made before a call. A missing permission, unavailable profile or occupied voice capacity can refuse a start. Check the status message; ask an administrator to inspect Voice status if the gateway is unavailable. Export a transcript you need to keep; the visible transcript is tab-local.
+Model choices are made before a call. Voice discovery checks configured active nodes without waking them, including nodes whose service telemetry omits Voice; an explicit “not installed” report excludes a node. A missing permission, unavailable profile or occupied voice capacity can refuse a start. If settings fail, the notice distinguishes refused access, missing endpoints, timeouts and unavailable Voice compute. Administrators can open **Components** or **Voice settings** from the notice, restore the dependency, then select **Retry settings**. Export a transcript you need to keep; the visible transcript is tab-local.
 
 ## Related
 

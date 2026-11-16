@@ -9,9 +9,6 @@ code = "mirrorwall"
 # Mirror Wall
 
 Use the feature guides for current image generation and model configuration.
-
-## Overview {#overview}
-
 [Image generation](/docs/web-app/image-generation) explains the canvas, private library and queue.
 
 ## How an image is made {#workflow}

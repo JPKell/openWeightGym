@@ -26,6 +26,6 @@ contain separate per-database snapshots, not a simultaneous cluster recovery set
 
 For purge or disk reclaim, choose stores and preview the operation first. Review the counts,
 cutoff, locks and space requirements, then click **Apply reviewed operation** twice.
-Changing the cutoff or reclaim method invalidates the preview. The server rechecks the review
+Changing the cutoff or reclaim method invalidates the preview. A successful retry clears the previous error. If full reclamation cannot inspect filesystem space or permissions, use routine maintenance for space reuse or ask the database administrator to check storage access; routine maintenance does not promise a smaller file. The server rechecks the review
 and creates a verified recovery copy before changing each store; completed work cannot be
 cancelled or rolled back automatically. SQL exports may contain secrets; keep them private.

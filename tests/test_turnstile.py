@@ -322,3 +322,26 @@ def test_the_in_flight_settings_are_read_and_checked(tmp_path):
         file.write_text(f'compute = "http://c:1"\n[turnstile]\n{wrong}\n')
         with pytest.raises(SystemExit):
             load_settings(file)
+
+
+def test_voice_discovery_does_not_treat_missing_telemetry_as_uninstalled(tmp_path):
+    key_file = machine_key(tmp_path)
+    wakes, seen = [], []
+    async def compute(request):
+        if request.url.path != '/voice/options':
+            raise httpx.ConnectError('no unrelated service')
+        proof = statement.check(KEY, request.headers[statement.HEADER], 'GET', '/voice/options', b'', statement.Nonces())
+        seen.append(request.url.path)
+        return httpx.Response(200, json={'profiles': [{'id': 'default'}]},
+                              headers={statement.PROOF: statement.proof(KEY, proof['nonce'])})
+    users = Users(str(tmp_path / 'accounts.db'), {'plain': Group()})
+    users.add('pat', 'plain')
+    settings = Settings(compute='compute', data=str(tmp_path), machine_key_file=key_file, ports=(8442, 8445))
+    app = build_app(settings, httpx.AsyncClient(transport=httpx.MockTransport(compute)), lambda *args: wakes.append(args), users=users)
+    with TestClient(app, base_url='http://front:8445') as client:
+        headers = {'authorization': 'Bearer ' + users.new_key('pat')}
+        app.state.machines.seen['compute'] = {'telemetry': {'services': [{'name': 'loadcoach', 'installed': True}]}}
+        assert client.get('/voice/options', headers=headers).json()['profiles'] == [{'id': 'default'}]
+        app.state.machines.seen['compute']['telemetry']['services'].append({'name': 'voice', 'installed': False})
+        assert client.get('/voice/options', headers=headers).status_code == 503
+    assert len(seen) == 1 and not wakes

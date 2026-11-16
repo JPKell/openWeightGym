@@ -34,7 +34,7 @@ deletes a saved image. Image details and settings export remain below the viewer
 | **Seed** | Reuse a seed when comparing a parameter change. |
 | **Composite mask · PNG** | White or transparent areas take the generated result; other areas preserve the first reference. The mask blends after generation. |
 | **Set up a parameter sweep** | Open **Explore variations** and choose **Vary** and **Values · comma separated**. Advanced users can supply **Multiple axes · JSON**. |
-| **Temporary · no retained history** | Available only with the installation's no-log permission; temporary references need a temporary job. |
+| **Temporary · no retained history** | Available only when your account and current compute policy permit no-log generation; temporary references need a temporary job. |
 
 **MOSS-Image Base / SFT** offers CFG, negative prompts and text layout controls. For its required components and starting settings, see [MOSS-Image setup](/docs/model-guides/image-models#moss-image).
 

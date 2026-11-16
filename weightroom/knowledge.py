@@ -162,7 +162,17 @@ def cited_answer(reply, sources):
             or not answer['abstain'] and (not answer['answer'].strip() or not answer['source_ids'])):
             raise ValueError()
     except (ValueError,KeyError,IndexError,TypeError,AttributeError):
-        raise Problem('The model did not return a valid cited answer. No answer was accepted.',502) from None
+        choices = reply.get('choices') if isinstance(reply, dict) else None
+        choice = choices[0] if isinstance(choices, list) and choices else {}
+        choice = choice if isinstance(choice, dict) else {}
+        message = choice.get('message')
+        message = message if isinstance(message, dict) else {}
+        reason = (' The reply reached its output limit.' if choice.get('finish_reason') == 'length' else '')
+        if not message.get('content') and (message.get('reasoning_content') or message.get('reasoning')):
+            reason += ' It contained reasoning without a final answer.'
+        if reason:
+            reason += ' Choose a non-reasoning answer model and inspect the linked request before retrying.'
+        raise Problem('The model did not return a valid cited answer. No answer was accepted.' + reason,502) from None
     return answer
 
 
@@ -486,7 +496,12 @@ class Knowledge:
             if sum(len(m['content'].encode('utf-8')) for m in messages)+512+64 > context:
                 raise Problem('The selected answer model has too little context for these excerpts. Choose a larger-context model.')
             reply, entry = await self.post('/v1/chat/completions', {'model':answer_model['id'],'messages':messages,'stream':False,'max_tokens':512,'temperature':0},headers,answer_model)
-            answer = cited_answer(reply,sources)
+            try:
+                answer = cited_answer(reply,sources)
+            except Problem as problem:
+                if entry:
+                    problem.diagnostics['request'] = entry
+                raise
             await self.fresh(user, authorization, collection)
             if not self.store.current(user.name, number, collection['revision'], sources):
                 raise Problem('Sources changed during answering; ask again.',409)

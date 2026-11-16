@@ -12,7 +12,7 @@ Give an application a separate key that acts with your account's current permiss
 
 1. Open **My account → API keys**.
 2. Enter **Label for a new key**, choose **Expires after**, and select **Make a key**.
-3. Copy it when **Copy this key now** appears. The key is shown once; store it privately in your client.
+3. Copy it when **Copy this key now** appears. The key is shown once; store it privately in your client. Refreshing the result does not create another key. An unopened display link expires after 60 seconds or a console restart; remove the unused key and create another if you missed it.
 
 ## Connect a client {#api-connect}
 

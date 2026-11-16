@@ -41,10 +41,14 @@ def test_tool_chat_direct_and_approval_ui(tool_console,width,theme):
         page.goto('http://console.test/chat/tools')
         page.evaluate('(theme)=>document.documentElement.setAttribute("data-bs-theme",theme)',theme)
         playwright.expect(page.locator('#tool-chat-status')).to_have_text('Ready.')
-        page.locator('#tool-chat-argument-0').fill('<safe>')
+        page.get_by_text('Raw JSON arguments', exact=True).click()
+        page.locator('#tool-chat-raw-enabled').check()
+        page.locator('#tool-chat-raw').fill('{"text":"<safe>"}')
+        assert page.locator('#tool-chat-argument-0').is_disabled()
         page.get_by_role('button',name='Run tool',exact=True).click()
         playwright.expect(page.locator('#tool-chat-history')).to_contain_text('exact <result>')
         playwright.expect(page.locator('#tool-chat-history')).to_contain_text('isError: false')
+        assert rig.executions[-1][1]['arguments'] == {'text': '<safe>'}
         assert page.locator('#tool-chat-history img').count()==0
         page.locator('#tool-chat-composer textarea').fill('Use a tool')
         page.get_by_role('button',name='Send',exact=True).click()

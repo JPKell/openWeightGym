@@ -20,7 +20,7 @@ Use an account with [model management](/docs/system/abilities#ability-manage-mod
 
 ## Options
 
-**Duplicate** creates a separate workflow. **Version history → Saved version → Use settings as draft** loads an earlier version into the editor; saving creates a new version. Workflow limits bound the choices offered in Image generation.
+**Duplicate** creates a separate workflow. **Version history → Saved version → Use settings as draft** loads an earlier version into the editor; saving creates a new version. Workflow limits bound the choices offered in Image generation. **Delete workflow** uses two-click confirmation and removes all its versions. You can delete your personal workflows; shared workflows require model-management permission. Saved jobs, resolved settings and outputs remain available. A concurrent edit requires reloading before deletion.
 
 ## MOSS-Image
 

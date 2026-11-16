@@ -20,9 +20,6 @@ def routes(for_people, page, ask, content_limits=None):
 
     async def api(request, person):
         """Proxy only allowlisted extraction operations under this session."""
-        origin = request.headers.get('origin')
-        if request.method != 'GET' and origin and origin.rstrip('/') != str(request.base_url).rstrip('/'):
-            return JSONResponse({'error': {'message': 'This request must come from the console page.'}}, 403, headers=PRIVATE)
         path = request.path_params['path']
         first, _, suffix = path.partition('/')
         roots = {'models': '/owg/extraction-models', 'assets': '/owg/extraction-assets',

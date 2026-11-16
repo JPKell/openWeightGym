@@ -20,7 +20,7 @@ Use a permitted classifier model. These probabilities are uncalibrated; check th
 
 ## Options
 
-**Developer drawer** shows request/response JSON and client examples. **History in this tab** supports **Export JSON** and **Export CSV**; reloading loses that tab history.
+**Developer drawer** shows request/response JSON and client examples using the configured model API scheme, independently of the console’s HTTPS scheme. Replace the base address when your client uses a different API proxy. **History in this tab** supports **Export JSON** and **Export CSV**; reloading loses that tab history.
 
 <!-- audience: admin -->
 ## Install classifiers

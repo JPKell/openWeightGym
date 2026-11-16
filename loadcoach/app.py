@@ -1072,6 +1072,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 "chat": {"unlogged": config.unlogged, "models": {
                     name: {"context": request_context((library.get(name) or {}).get("flags", {})) or 8192,
                            "model_id": library.identity(name), "name_history": library.name_history(name),
+                           "chat": engine_for(library.get(name)).capabilities(library.get(name)).get("chat", False),
+                           "embedding": engine_for(library.get(name)).capabilities(library.get(name)).get("embeddings", False),
                            "vision": bool((library.get(name) or {}).get("flags", {}).get("mmproj")),
                            "tools": supports_model_tools(name, library.get(name)),
                            "json_schema": engine_for(library.get(name)).capabilities(library.get(name)).get('json_schema', False),

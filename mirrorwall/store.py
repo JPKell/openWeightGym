@@ -307,6 +307,16 @@ class Store:
         return [{"version":r[0],"name":r[1],"model_id":r[2],"model":r[3],"settings":json.loads(r[4]),"updated":r[5]}
                 for r in self.db.execute("SELECT version,name,model_id,model_name,settings,updated FROM mirrorwall_preset_versions WHERE id=? ORDER BY version DESC",(identifier,))]
 
+    def remove_preset(self, owner, identifier, version):
+        """Delete an owned workflow and its revisions only at the reviewed version."""
+        with self.db:
+            removed = self.db.execute('DELETE FROM mirrorwall_presets WHERE id=? AND owner_id=? AND version=?',
+                                      (identifier, owner, version))
+            if removed.rowcount != 1:
+                return False
+            self.db.execute('DELETE FROM mirrorwall_preset_versions WHERE id=?', (identifier,))
+        return True
+
     def save_preset(self,owner,name,model_name,model_id,settings,identifier=None,expected_version=None):
         """Create/update a preset while incrementing its version and preserving ownership."""
         if not isinstance(name,str) or not 1<=len(name.strip())<=100:

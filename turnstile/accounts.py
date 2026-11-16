@@ -382,7 +382,7 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         if password and own and (stored := users.password_hash(name)):
             # A sign-in that fell into the wrong hands must not be enough to change the password.
             if not await asyncio.to_thread(check_password, stored, str(asked.get("current_password"))):
-                return error(403, "Give your current password as current_password to change it.")
+                return error(403, "Your current password is incorrect. Enter it again to change your password.")
         try:
             users.change(name, group, enabled, password, must_change=not own, second_step=asked.get("second_step"), own=asked.get("own"))
         except ValueError as problem:

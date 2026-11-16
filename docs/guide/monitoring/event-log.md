@@ -16,7 +16,7 @@ Follow a trace through chronological events or a compact table.
 
 ## Options
 
-Double-click or press Enter to inspect a compact row. Historical paging uses timestamps. Refresh preserves the selected event, scroll position and chosen view.
+Double-click or press Enter to inspect a compact row. **Group → (unknown)** selects retained events whose named account has no current membership, including deleted accounts. Historical paging uses timestamps. Refresh preserves the selected event, scroll position and chosen view.
 
 ## Limits and troubleshooting
 

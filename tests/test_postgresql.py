@@ -719,3 +719,22 @@ def test_postgresql_user_details_serialize_nonzero_usage(postgres, tmp_path):
         assert response.status_code == 200, response.text
         for row in response.json()['usage']:
             assert row['requests'] == 1 and row['prompt_tokens'] == 20 and row['answer_tokens'] == 11
+
+
+def test_postgresql_audio_without_group_and_empty_event_group(postgres, tmp_path):
+    from soundroom.store import Store
+    from test_soundroom import wav_bytes
+    batches = Batches(postgres)
+    store = Store(batches.db, tmp_path / 'audio')
+    clip = store.save('owner', wav_bytes(), kind='reference')
+    store.share('owner', clip['id'], ['team'], {'team'})
+    assert [row['id'] for row in store.listing('owner')] == [clip['id']]
+    assert store.listing('other') == []
+    assert [row['id'] for row in store.listing('other', 'team')] == [clip['id']]
+    voice = store.save_voice('owner', 'Sample', clip['id'], consent=True)
+    assert [row['id'] for row in store.voices('owner')] == [voice['id']]
+    assert store.voices('other') == []
+    log = Log(postgres)
+    log.add('qa', 'created', 'owner')
+    assert log.read(members=[]) == []
+    log.db.close(); batches.db.close()

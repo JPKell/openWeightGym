@@ -14,8 +14,8 @@
   const text=(node,selector,value)=>{node.querySelector(selector).textContent=value;};
   const announce=value=>{ $('status').textContent=value; };
   const error=(value,save=false)=>{ const box=$(save?'save-error':'error'); box.hidden=!value; box.textContent=value || ''; };
-  async function api(path,body) {
-    const response=await fetch('/mirrorwall-api/'+path+(video?'?kind=video':''),{method:body?'POST':'GET',cache:'no-store',
+  async function api(path,body,method=body?'POST':'GET') {
+    const response=await fetch('/mirrorwall-api/'+path+(video?(path.includes('?')?'&':'?')+'kind=video':''),{method,cache:'no-store',
       headers:body?{'content-type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
     if(response.redirected) { location.href='/sign-in'; throw new Error('Please sign in again.'); }
     const value=await response.json(); if(video && value.models) value.models=value.models.map(m=>({...m,image_workflow:m.video_workflow})); if(!response.ok) throw new Error(value.error?.message || 'Image workflows are unavailable.'); return value;
@@ -119,7 +119,10 @@
   function showEditor() {
     document.getElementById('editor-panel').hidden=!selected;
     document.getElementById('workflows-panel').hidden=!selected;
+    document.dispatchEvent(new CustomEvent('suite:actionsChanged'));
     const p=profile(), rules=Profiles.spec(p.family), row=current();
+    $('delete').hidden=!row || (row.published && !library.can_manage);
+    $('delete').disabled=saving || loading;
     if(video && $('qualify')) $('qualify').disabled=!selected || !available() || saving || loading;
     const draft=drafts.get(key()) || baseline();
     $('workflow-fields').disabled=!selected || saving || loading;
@@ -206,6 +209,16 @@
   $('new-workflow').onclick=()=>{remember(); workflowID=null; if(!drafts.has(key())) drafts.set(key(),baseline()); showWorkflows(); showEditor(); field('name').focus();};
   $('duplicate').onclick=()=>{const draft=read(); remember(); workflowID=null; draft.name=(draft.name+' copy').slice(0,100); draft.published=false; drafts.set(key(),draft); showWorkflows(); showEditor(); field('name').focus();};
   $('discard').onclick=()=>{drafts.delete(key()); showEditor();};
+  $('delete').onclick=async () => {
+    const row=current(), originalKey=key(); if(!row || saving) return;
+    saving=true; $('delete').disabled=true;
+    try {
+      await api('presets/'+encodeURIComponent(row.id)+'?version='+row.version,null,'DELETE');
+      library.presets=library.presets.filter(item=>item.id!==row.id); histories.delete(row.id); drafts.delete(originalKey);
+      workflowID=null; announce('Workflow and version history deleted. Saved jobs and outputs are unchanged.');
+    } catch(problem) { error(problem.message,true); }
+    finally { saving=false; showWorkflows(); showEditor(); }
+  };
   $('workflow-form').addEventListener('input',mark); $('workflow-form').addEventListener('change',mark);
   $('history').onchange=updateHistory;
   $('restore').onclick=()=>{const entry=histories.get(workflowID)?.find(row=>String(row.version)===$('history').value); if(!entry) return;

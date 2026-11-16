@@ -563,7 +563,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                  if place["id"] in details.get(place["machine"], {})), None)
                 if metadata is not None:
                     result["models"].append(logical["id"])
-                    result["chat"]["models"][logical["id"]] = metadata
+                    # Cached native capabilities also cover workers predating the chat flag.
+                    capabilities = logical.get('capabilities', {})
+                    result["chat"]["models"][logical["id"]] = {**metadata,
+                        'chat': capabilities.get('chat', metadata.get('chat', True)),
+                        'embedding': logical.get('embedding', capabilities.get('embeddings', metadata.get('embedding', False)))}
         result["unavailable_machines"] = [name for name, answer in zip(names, answers)
                                           if answer is None or answer.headers.get("x-suite-retained") or answer.status_code != 200]
         return httpx.Response(200, json={**result, **listed})
@@ -1435,8 +1439,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     def voice_order() -> list[str]:
         """The nodes voice sessions are tried on: the preferred node, then every other active node in the configured order."""
         preferred = node(live('turnstile', 'preferred_voice_node', settings.preferred_voice_node) or "")
-        names = [name for name in machines.active_names if any(
-            one.get('name') == 'voice' and one.get('installed') is not False
+        # Older/custom Spotter lists can omit Voice entirely. Absence is unknown,
+        # not proof that it is uninstalled; signed passive requests establish readiness.
+        names = [name for name in machines.active_names if not any(
+            one.get('name') == 'voice' and one.get('installed') is False
             for one in machines.seen.get(name, {}).get('telemetry', {}).get('services', []))]
         names.sort(key=lambda name: (machines.available(name) is False,
                                     machines.seen.get(name, {}).get('waiting', 0), name))
@@ -1456,7 +1462,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             if isinstance(upstream, Response):
                 last = upstream
                 continue
-            if upstream.status_code in (429, 502, 503, 504):  # full, or not able to start one now: try the next
+            if upstream.status_code in (404, 429, 502, 503, 504):  # absent, full, or not able to start one now: try the next
                 await upstream.aread()
                 await upstream.aclose()
                 last = JSONResponse(json.loads(upstream.extensions.get("suite_complete") or b"{}") or {"error": {"message": "Voice is busy."}},
@@ -1637,9 +1643,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(404, f"No node called {named}.")
         if port == settings.voice_port and not named:
             if request.method == 'GET' and path in ('/voice/options', '/voice/prompts', '/voice/status', '/voice/ready'):
-                for name in voice_order():
-                    answer = await ask_compute(user, 'GET', where, machine=name, port=port, timeout=5)
-                    if answer is not None and answer.status_code not in (502, 503, 504):
+                answers = await asyncio.gather(*(ask_compute(user, 'GET', where, machine=name, port=port, timeout=3)
+                                                 for name in voice_order()))
+                for answer in answers:
+                    if answer is not None and answer.status_code not in (404, 502, 503, 504):
                         return JSONResponse(answer.json(), status_code=answer.status_code)
                 return error(503, 'No voice service is answering.')
             named = next(iter(voice_order()), "")  # voice's other pages: the preferred node's

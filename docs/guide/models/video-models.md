@@ -22,7 +22,7 @@ Video uses the existing stable-diffusion.cpp engine, Files library and workflow 
 3. Choose GPUs, split strategy, host RAM cap, staging and bounds. Video always reserves its GPUs
    exclusively. Do not raise bounds beyond a measured profile envelope.
 4. Save the model. Create named workflows beside it; saving another version preserves the
-   previous version. **Use settings as draft** restores earlier settings for review.
+   previous version. **Use settings as draft** restores earlier settings for review. Workflow removal follows the [shared workflow rules](/docs/model-guides/image-models#options).
 
 ## Components and sources
 

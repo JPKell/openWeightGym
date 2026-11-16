@@ -48,6 +48,12 @@ def test_workflow_versions_cannot_be_claimed_by_another_owner(tmp_path):
     two = store.save_preset('one', 'Product', 'klein', 'model-1', {'steps':8}, one['id'])
     assert two['version'] == 2 and two['settings']['steps'] == 8
     assert store.presets('two') == []
+    assert not store.remove_preset('two', one['id'], 2)
+    assert not store.remove_preset('one', one['id'], 1)
+    assert len(store.preset_history('one', one['id'])) == 2
+    assert store.remove_preset('one', one['id'], 2)
+    assert store.presets('one') == [] and store.preset_history('one', one['id']) is None
+    assert store.db.execute('SELECT COUNT(*) FROM mirrorwall_preset_versions').fetchone()[0] == 0
 
 
 def test_image_batches_and_their_files_do_not_follow_a_recreated_username(tmp_path):
@@ -132,9 +138,9 @@ def test_adult_previews_require_global_permission_and_each_users_opt_in(desk,mon
     jordan={'authorization':'Bearer '+browser.cookies['weightroom']}
     setting='/loadcoach/settings/turnstile'
     preferences='/mirrorwall/preferences'
-    searches=('/loadcoach/hub?source=civitai&search=style&adult=true&adult=true',
+    searches=('/turnstile/artifacts/hub?source=civitai&search=style&adult=true&adult=true',
               '/turnstile/artifacts/hub?source=civitai&search=style&adult=true',
-              '/loadcoach/%68ub?source=civitai&search=style&adult=true')
+              '/turnstile/artifacts/%68ub?source=civitai&search=style&adult=true')
     assert api.get(preferences,headers=jordan).json()=={'adult_previews':False,'adult_previews_allowed':False}
     assert 'id="mw-adult"' not in browser.get('/civitai').text
     assert api.post(preferences,headers=jordan,json={'adult_previews':True}).status_code==403

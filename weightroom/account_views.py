@@ -23,7 +23,8 @@ def chat_models(person):
     """Match the chat composer's permitted text models and role strengths."""
     details = person.me.get('chat', {}).get('models', {})
     models = [name for name in person.me.get('models', []) if not any(
-        details.get(name, {}).get(kind) for kind in ('image_generation', 'audio', 'classifier', 'rerank'))]
+        details.get(name, {}).get(kind) for kind in ('video_generation', 'image_generation', 'audio', 'classifier', 'rerank', 'embedding'))
+        and details.get(name, {}).get('chat', True)]
     return models + [role + strength for role in person.me.get('roles', []) for strength in ('', ':best', ':available', ':fast')]
 
 
@@ -57,12 +58,14 @@ def workflow_notices(data, choices, identity, clearance, workflows):
     return data
 
 
-def routes(for_people, page, ask, typed, go, platform, workflows, *, notifications=None, notification_note=None):
+def routes(for_people, page, ask, typed, go, platform, workflows, *, notifications=None, notification_note=None, keys_page=None):
     """Reuse authenticated account APIs and the established origin-checked form wrapper."""
     async def render(request, person, section=None, said='', failed=False):
         """Render the selected account panel using current session-owned preferences."""
         section = section or request.url.path.rsplit('/', 1)[-1]
         section = 'privacy' if section=='notifications' else section
+        if section == 'keys' and keys_page is not None:
+            return await keys_page(request, person, opened='keys')
         context = dict(me=person.me, said=said or request.query_params.get('said', ''), failed=failed)
         if section == 'workspace':
             context.update(zones=sorted(available_timezones()), default_models=chat_models(person),

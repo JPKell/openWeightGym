@@ -24,7 +24,7 @@ accounts and local messaging rules can restrict SMS destinations.
    Port changes remain pending until the voice gateway restarts; the page names the in-force port.
 2. Save the **auth token**. Optionally provide an API key SID and secret (recommended for API
    operations). The auth token remains required to verify Twilio signatures. Fields stay empty
-   after saving; empty submissions retain saved values. Check credentials to verify API access.
+   after saving; empty submissions retain saved values. Check credentials to verify API access. Validation identifies the field and rule without echoing its value: tokens and secrets contain no spaces/control characters (maximum 8192 characters); an API key SID is `SK` plus 32 hexadecimal characters and requires its paired secret.
 3. Create a phone account, then open its **Users** page to choose models, tools and limits.
    Creating an account does not grant unrestricted model access. Several numbers may share it.
 4. Choose and configure a public route below. Set its resulting HTTPS address in setup and use

@@ -16,7 +16,7 @@ Review scoped activity, token totals and recorded or estimated costs.
 
 ## Options
 
-**Recorded USD**, **Model-rate USD** and **Mock fallback USD** distinguish the cost basis. **Mock input rate / M tokens** and its output counterpart change fallback estimates; they do not rewrite recorded charges. **Reset** returns to the default filters.
+**Recorded USD**, **Model-rate USD** and **Mock fallback USD** distinguish the cost basis. **Mock input rate / M tokens** and its output counterpart change fallback estimates; they do not rewrite recorded charges. **Reset** returns to the default filters. Node and Level selections remain in the URL and apply to the report, including after refresh.
 
 Video work adds a resource band for completed clips, output seconds, frames and GPU-seconds.
 GPU-seconds count reserved cards multiplied by generation elapsed time. Video does not report

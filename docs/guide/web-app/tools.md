@@ -21,7 +21,7 @@ The built-in extraction tools work with your private uploaded image assets. In [
 ## Use Tool chat
 
 1. Open **Tool chat** and choose **Tool set**. Use **Search tools** to inspect the available descriptions.
-2. For a direct call, choose **Tool**, fill its arguments and select **Run tool**.
+2. For a direct call, choose **Tool**, fill its arguments and select **Run tool**. For nested or advanced inputs, enable **Use raw JSON**; typed fields are inactive until you switch back.
 3. To ask a model, send a message in **Ask with tools**. Review each proposed call and choose **Run**, **Edit arguments** or **Decline**. Inspect the exact tool result before using it.
 
 Tool chat keeps separate private conversations. It can call a tool directly even when no tool-capable model is available.

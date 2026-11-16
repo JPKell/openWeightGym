@@ -3,7 +3,12 @@ window.OWGTools = (() => {
   const field = id => document.getElementById(id);
   /** Render text, number, boolean and enum fields; retain raw JSON for arbitrary schemas. */
   function argumentsFor(prefix, schema = {}, values = {}) {
-    const box = field(prefix + '-arguments');
+    const box = field(prefix + '-arguments'), raw = field(prefix + '-raw-enabled');
+    const mode = () => {
+      for (const input of box.querySelectorAll('[data-name]')) input.disabled = raw.checked;
+      field(prefix + '-raw').disabled = !raw.checked;
+    };
+    raw.onchange = mode;
     box.replaceChildren();
     field(prefix + '-raw').value = JSON.stringify(values, null, 2);
     const complex = Object.values(schema.properties || {}).some(p => !['string','integer','number','boolean'].includes(p.type) || p.oneOf || p.anyOf || p.$ref);
@@ -27,6 +32,7 @@ window.OWGTools = (() => {
       fragment.querySelector('p').textContent = [property.description, property.enum ? 'Values: ' + property.enum.map(v => JSON.stringify(v)).join(', ') : ''].filter(Boolean).join(' · ');
       box.append(fragment);
     }
+    mode();
   }
   /** Read typed arguments without coercing omitted values or losing explicit false and zero. */
   function read(prefix) {

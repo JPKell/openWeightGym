@@ -18,7 +18,7 @@
 .model-node-scope .form-selectgroup-label { min-height: 0; font-size: .85rem; }
 .model-configuration-enhanced .model-matrix-scroll { max-height: 60dvh; }
 .model-configuration-enhanced .model-matrix.is-single { min-width: 0; }
-.model-configuration-enhanced .model-config-group[data-shared="true"]:not([data-model-group="model"]) thead { display: none; }
+.model-configuration-enhanced .model-config-group[data-shared="true"]:not([data-model-group="model"]) .model-matrix > thead { display: none; }
 .model-configuration-enhanced [data-matrix-pick] { display: none; }
 .model-config-save { border: 1px solid var(--bs-border-color); border-radius: var(--suite-frame-radius); }
 .model-config-save.has-changes { border-color: var(--suite-accent); }
