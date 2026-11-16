@@ -84,7 +84,8 @@ window.suiteNodeLabel = name => name === 'front' ? 'Control node' : name;
   document.addEventListener('htmx:beforeCleanupElement', event => {
     if ([...armed.keys()].some(button => event.detail.elt.contains(button))) reset();
   });
-  addEventListener('pageshow', () => reset());
+  // A fresh page may already accept clicks before its load event finishes.
+  addEventListener('pageshow', event => { if (event.persisted) reset(); });
   /** Mark a submitted action only after its fields have been serialized. */
   function startWorking(form, button) {
     if (!form || !button || working.has(form) || !button.isConnected) return;
@@ -123,7 +124,7 @@ window.suiteNodeLabel = name => name === 'front' ? 'Control node' : name;
     const form = formRequests.get(event.detail.xhr) || event.detail.elt?.closest('form');
     if (form) finishWorking(form);
   });
-  addEventListener('pageshow', () => { for (const form of working.keys()) finishWorking(form); });
+  addEventListener('pageshow', event => { if (event.persisted) for (const form of working.keys()) finishWorking(form); });
   document.addEventListener('change', event => {
     if (event.target.matches('[data-engine-picker]')) {
       // The page again with the engine's own fields, keeping what was chosen. `node` stays the page's pill;

@@ -815,11 +815,15 @@ def test_confirmation_cancellation_keyboard_and_acknowledgement():
         page.goto('http://confirmation.test/')
         apply = page.locator('#apply')
         field = page.locator('[name=name]')
-        for cancel in ('escape', 'edit', 'other', 'timeout', 'refresh'):
+        for cancel in ('escape', 'edit', 'other', 'timeout', 'refresh', 'back'):
             apply.click()
             playwright.expect(apply).to_have_attribute('data-confirm-armed', 'true')
             assert page.locator('[name=acknowledge]').count() == 0
-            if cancel == 'escape': page.keyboard.press('Escape')
+            # A late initial load must not disarm a click on the newly rendered page.
+            page.evaluate("dispatchEvent(new PageTransitionEvent('pageshow', {persisted:false}))")
+            playwright.expect(apply).to_have_attribute('data-confirm-armed', 'true')
+            if cancel == 'back': page.evaluate("dispatchEvent(new PageTransitionEvent('pageshow', {persisted:true}))")
+            elif cancel == 'escape': page.keyboard.press('Escape')
             elif cancel == 'edit': field.fill('changed')
             elif cancel == 'other': page.locator('#other').click()
             elif cancel == 'timeout': page.clock.fast_forward(10001)

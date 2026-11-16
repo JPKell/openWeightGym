@@ -32,7 +32,8 @@ an **Add model** action; each runtime keeps its own file and hardware options.
 
 Actions that need confirmation use the same button twice: click once to read the prompt,
 then click it again within ten seconds. Enter or Space works too. Escape, editing the form,
-choosing another action, closing a dialog or replacing its content cancels confirmation.
+choosing another action, closing a dialog, returning with Back/Forward or replacing the
+content cancels confirmation.
 Checkboxes select items or settings; they no longer arm an action. Keep reviewing the named
 object and scope before confirming. Server permissions and validation still apply.
 

@@ -76,6 +76,7 @@ def test_dry_fit_saves_cpu_selection_reviews_loads_holds_and_undoes(loadout_desk
         assert library.get('cpu')['flags']['ctx-size'] == 2048
         page.get_by_role('button', name='Are you sure? Restore settings', exact=True).click()
         assert library.stored('cpu') == settings
+        playwright.expect(page.locator('.said-box')).to_contain_text('Restored the reviewed configuration.')
         page.get_by_role('button', name='Delete saved set', exact=True).click()
         page.get_by_role('button', name='Are you sure? Delete saved set', exact=True).click()
         playwright.expect(page.locator('#fit-saved')).to_contain_text('No saved load-outs.')
