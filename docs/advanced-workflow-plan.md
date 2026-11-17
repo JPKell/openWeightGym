@@ -19,6 +19,12 @@ Phase 5 as delivered differs from the plan below in these ways:
   with linear fades across the overlaps. A step makes at most 64 tiles. An SDXL start image may
   now be prepared at the output size beyond the model's reference size, so 1024-pixel tiles and
   refine passes work.
+- Native qualification (2026-11-17, one RTX 5060 Ti 16 GB, SDXL base with
+  `diffusers/controlnet-canny-sdxl-1.0` fp16): sample 8a at 768², edges at strength 0.7, took
+  19 s, with an 8.3 GiB peak. Edge overlap with the source rose from 0.41 without control to 0.59
+  at the same seed. Sample 8b: 768² → UltraSharp 2× → four 1024-pixel tiles at strength 0.3 →
+  1536² took 73 s, with a 7.4 GiB peak and about 11 s per tile. The column and row steps at the
+  joins stayed within the image's own range, and no seam is visible.
 
 Phase 4 as delivered differs from the plan below in these ways:
 
