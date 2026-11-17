@@ -10,7 +10,7 @@
   const FAMILIES = Profiles.labels;
   const modelDrafts = new Map();
   const dialog = document.getElementById('model-dialog');
-  let nodeCards = [], nodeCardsByNode = {}, enginesByNode = {}, models = [], selected = null, checking = 0, timer = null, initialized = false, refreshing = 0, filtering = 0;
+  let loraFiles = [], nodeCards = [], nodeCardsByNode = {}, enginesByNode = {}, models = [], selected = null, checking = 0, timer = null, initialized = false, refreshing = 0, filtering = 0;
   const modelKey = model => model ? JSON.stringify([model.node, model.name]) : '';
   const activeNode = () => selected?.node || node || defaultNode;
   const publish = () => document.dispatchEvent(new CustomEvent('weightroom:image-inventory',{
@@ -212,6 +212,8 @@
       $(name).replaceChildren(new Option(name === 'diffusion' ? 'Choose diffusion weights' : 'No file', ''));
       listed.filter(name === 'text_encoder' ? encoder : image).forEach(file => $(name).add(fileOption(file.path,file.machine,file.tier)));
     });
+    loraFiles = listed.filter(file => file.facts?.image_identity?.kind === 'lora' || file.facts?.kind === 'lora');
+    $('lora-rows').querySelectorAll('select[data-lora-field="file"]').forEach(select => loraChoices(select, select.value));
     window.suiteFilterOptions?.($('model-form'));
   }
   function renderLoras() {
@@ -220,11 +222,25 @@
     $('lora-rows').replaceChildren();
     for (const [name, entry] of Object.entries(values)) addLora(name, entry);
   }
+  /** List the library's LoRA files like the model file choices; an existing model keeps to copies on its own node. */
+  function loraChoices(select, value = '') {
+    select.replaceChildren(new Option('Choose a LoRA file', ''));
+    loraFiles.forEach(file => select.add(fileOption(file.path, file.machine, file.tier)));
+    if (value) pick(select, value, activeNode(), true); else select.value = '';
+    Array.from(select.options).forEach(option => {
+      option.disabled = Boolean(selected && option.value && option.value !== select.value &&
+        (option.dataset.machine !== activeNode() || option.dataset.tier === 'storage'));
+    });
+  }
   function addLora(name = '', entry = {}) {
     const row = $('lora-row').content.firstElementChild.cloneNode(true);
-    for (const [key, value] of [['name', name], ['file', entry.file || ''], ['scale', entry.scale ?? 1]]) {
-      row.querySelector('[data-lora-field="'+key+'"]').value=value;
-    }
+    row.querySelector('[data-lora-field="name"]').value = name;
+    row.querySelector('[data-lora-field="scale"]').value = entry.scale ?? 1;
+    loraChoices(row.querySelector('[data-lora-field="file"]'), entry.file || '');
+    row.querySelector('[data-lora-field="file"]').addEventListener('change', event => {
+      const label = row.querySelector('[data-lora-field="name"]');
+      if (!label.value.trim() && event.target.value) label.value = event.target.value.split('/').pop().replace(/\.[^.]+$/, '');
+    });
     if(video)row.querySelector('[data-lora-field="is_high_noise"]').checked=entry.is_high_noise===true || entry.is_high_noise==='true';
     row.querySelector('[data-remove-lora]').onclick = () => {
       row.remove();
