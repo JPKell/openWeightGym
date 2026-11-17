@@ -1,4 +1,4 @@
-"""Control-node-owned image assets, workflow presets and existing-batch ownership bindings."""
+"""Control-node-owned image assets, workflow presets, workflow graphs and existing-batch ownership bindings."""
 from db.migrations import Migration
 
 MIRRORWALL = (Migration(1,"private image assets and versioned workflow presets","""
@@ -30,4 +30,13 @@ MIRRORWALL = (Migration(1,"private image assets and versioned workflow presets",
         updated DOUBLE PRECISION NOT NULL, PRIMARY KEY(id,version));
     INSERT INTO mirrorwall_preset_versions (id,version,name,model_id,model_name,settings,updated)
         SELECT id,version,name,model_id,model_name,settings,updated FROM mirrorwall_presets;
+"""),Migration(4,'advanced image workflow graphs and their versions',"""
+    CREATE TABLE IF NOT EXISTS mirrorwall_graphs (
+        id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+        version INTEGER NOT NULL, published INTEGER NOT NULL, author TEXT NOT NULL,
+        document TEXT NOT NULL, updated DOUBLE PRECISION NOT NULL);
+    CREATE TABLE IF NOT EXISTS mirrorwall_graph_versions (
+        id TEXT NOT NULL, version INTEGER NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL,
+        author TEXT NOT NULL, document TEXT NOT NULL, updated DOUBLE PRECISION NOT NULL,
+        published DOUBLE PRECISION, PRIMARY KEY(id,version));
 """))

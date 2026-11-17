@@ -18,6 +18,7 @@ from db import migrate
 from mirrorwall.schema import MIRRORWALL
 
 ASSET_ID=re.compile(r"image_[a-f0-9]{32}")
+GRAPH_ID=re.compile(r"graph_[a-f0-9]{24}")
 from loadcoach.content_limits import value as limit_value
 
 MAX_BYTES=20*2**20
@@ -345,3 +346,90 @@ class Store:
             self.db.execute("INSERT INTO mirrorwall_preset_versions VALUES (?,?,?,?,?,?,?)",
                             (identifier,version,name.strip(),model_id or "",model_name,json.dumps(settings),updated))
         return next(row for row in self.presets(owner) if row["id"]==identifier)
+
+    # Advanced workflow graphs: team documents managed with `manage-workflows`. Each save is a
+    # new immutable version; one version at a time is published, and published versions stay
+    # callable when pinned as workflow:<api name>@<version>.
+    def graphs(self):
+        """List every workflow graph with its latest document and published version (0 when unpublished)."""
+        rows=self.db.execute("SELECT id,slug,name,version,published,author,document,updated FROM mirrorwall_graphs ORDER BY name").fetchall()
+        return [self._graph(row) for row in rows]
+
+    @staticmethod
+    def _graph(row):
+        return {'id':row[0],'api_name':row[1],'name':row[2],'version':row[3],'published':row[4],'author':row[5],
+                'document':json.loads(row[6]),'updated':row[7]}
+
+    def graph(self,identifier):
+        """One graph's current record, or None."""
+        if not isinstance(identifier,str) or not GRAPH_ID.fullmatch(identifier):
+            return None
+        row=self.db.execute("SELECT id,slug,name,version,published,author,document,updated FROM mirrorwall_graphs WHERE id=?",(identifier,)).fetchone()
+        return self._graph(row) if row else None
+
+    def graph_versions(self,identifier):
+        """Every saved version, newest first, with when it was first published."""
+        return [{'version':r[0],'name':r[1],'api_name':r[2],'author':r[3],'document':json.loads(r[4]),'updated':r[5],'published':r[6]}
+                for r in self.db.execute("SELECT version,name,slug,author,document,updated,published FROM mirrorwall_graph_versions WHERE id=? ORDER BY version DESC",(identifier,))]
+
+    def save_graph(self,author,document,identifier=None,expected_version=None):
+        """Save a checked document as the graph's next version; the latest version must be the one edited."""
+        if identifier is not None and (not isinstance(identifier,str) or not GRAPH_ID.fullmatch(identifier)):
+            raise ValueError('Invalid workflow ID.')
+        identifier=identifier or 'graph_'+secrets.token_hex(12)
+        name,api_name=document['name'],document['api_name']
+        updated=time.time()
+        with self.db:
+            existing=self.db.execute("SELECT version FROM mirrorwall_graphs WHERE id=?",(identifier,)).fetchone()
+            if existing is None and expected_version is not None:
+                raise ValueError('There is no such workflow.')
+            if existing and (type(expected_version) is not int or expected_version!=existing[0]):
+                raise ValueError('This workflow changed elsewhere. Reload its latest version or save a copy.')
+            clash=self.db.execute("SELECT name FROM mirrorwall_graphs WHERE slug=? AND id<>?",(api_name,identifier)).fetchone()
+            if clash:
+                raise ValueError(f'The workflow “{clash[0]}” already uses the API name {api_name}.')
+            version=existing[0]+1 if existing else 1
+            encoded=json.dumps(document,separators=(',',':'))
+            if existing:
+                changed=self.db.execute("UPDATE mirrorwall_graphs SET slug=?,name=?,version=?,author=?,document=?,updated=? WHERE id=? AND version=?",
+                                        (api_name,name,version,author,encoded,updated,identifier,existing[0]))
+                if changed.rowcount!=1:
+                    raise ValueError('This workflow changed elsewhere. Reload its latest version or save a copy.')
+            else:
+                self.db.execute("INSERT INTO mirrorwall_graphs VALUES (?,?,?,?,?,?,?,?)",(identifier,api_name,name,version,0,author,encoded,updated))
+            self.db.execute("INSERT INTO mirrorwall_graph_versions VALUES (?,?,?,?,?,?,?,?)",(identifier,version,name,api_name,author,encoded,updated,None))
+        return self.graph(identifier)
+
+    def publish_graph(self,identifier,version,expected_version):
+        """Publish one saved version (callers then run it), or unpublish with version 0."""
+        with self.db:
+            current=self.db.execute("SELECT version FROM mirrorwall_graphs WHERE id=?",(identifier,)).fetchone()
+            if not current:
+                raise ValueError('There is no such workflow.')
+            if expected_version!=current[0]:
+                raise ValueError('This workflow changed elsewhere. Reload its latest version first.')
+            if version:
+                changed=self.db.execute("UPDATE mirrorwall_graph_versions SET published=COALESCE(published,?) WHERE id=? AND version=?",
+                                        (time.time(),identifier,version))
+                if changed.rowcount!=1:
+                    raise ValueError('There is no such version of this workflow.')
+            self.db.execute("UPDATE mirrorwall_graphs SET published=? WHERE id=?",(version,identifier))
+        return self.graph(identifier)
+
+    def remove_graph(self,identifier,version):
+        """Delete a graph and its versions only at the reviewed latest version; outputs and jobs stay."""
+        with self.db:
+            removed=self.db.execute('DELETE FROM mirrorwall_graphs WHERE id=? AND version=?',(identifier,version))
+            if removed.rowcount!=1:
+                return False
+            self.db.execute('DELETE FROM mirrorwall_graph_versions WHERE id=?',(identifier,))
+        return True
+
+    def runnable_graph(self,api_name,version=None):
+        """The published document callers run: the current published version, or a pinned once-published version."""
+        row=self.db.execute("SELECT id,published FROM mirrorwall_graphs WHERE slug=?",(api_name,)).fetchone()
+        if not row or not row[1]:
+            return None
+        found=self.db.execute("SELECT version,document FROM mirrorwall_graph_versions WHERE id=? AND version=? AND published IS NOT NULL",
+                              (row[0],version or row[1])).fetchone()
+        return {'id':row[0],'api_name':api_name,'version':found[0],'document':json.loads(found[1])} if found else None

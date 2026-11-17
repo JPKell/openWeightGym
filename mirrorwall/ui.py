@@ -131,7 +131,10 @@ def routes(for_people, page, ask, model_api):
                 return JSONResponse({"error": {"message": "Use this site's own image page."}}, 403)
         # Explicit shapes prevent this proxy from becoming a general management API.
         parts = action.split("/")
-        permitted = ((action in ("state", "preferences", "assets", "workflows") and request.method == "GET") or
+        permitted = ((action in ("state", "preferences", "assets", "workflows", "graphs") and request.method == "GET") or
+                     (action == "graphs" and request.method == "POST") or
+                     (len(parts) == 2 and parts[0] == "graphs" and request.method in ("GET", "DELETE")) or
+                     (len(parts) == 3 and parts[0] == "graphs" and parts[2] == "publish" and request.method == "POST") or
                      (len(parts) == 2 and parts[0] == "presets" and request.method in ("GET", "DELETE")) or
                      (action in ("assets", "assets/download", "jobs", "presets", "preferences") and request.method == "POST") or
                      (len(parts) == 2 and parts[0] == "jobs" and request.method == "POST") or

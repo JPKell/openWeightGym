@@ -53,6 +53,7 @@ ABILITIES = {
     "manage-users": "add, change and remove users, within what one may do oneself",
     "manage-groups": "add, change and remove groups, within what one may do oneself",
     "manage-models": "add, change and remove models, and see, move and delete their files",
+    "manage-workflows": "create, change, publish and remove advanced image workflows; running one needs only its models",
     "restart-services": "start, stop and restart services on a compute node, and read their output",
     "power": "restart a compute node, put it to sleep or switch it off",
     "manage-settings": "see every program's settings, and change those that can be changed from the site",

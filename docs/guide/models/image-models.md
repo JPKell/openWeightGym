@@ -38,6 +38,24 @@ Raw starts at 1024 × 1024, 20 Euler steps, the discrete scheduler and CFG 3.5. 
 
 See the [native setup guide](https://github.com/leejet/stable-diffusion.cpp/blob/95ff76230889898e1bf40058ba272a3699b50dc6/docs/krea2.md).
 
+## Advanced workflows {#advanced-workflows}
+
+Advanced workflows chain several steps (samplers, refine passes, upscaling and outputs) into one
+versioned graph that callers run like a model. Creating, changing, publishing and removing them
+needs the [manage-workflows](/docs/system/abilities#ability-manage-workflows) ability, which is
+separate from model management.
+
+- Each save is a new version. Saving fails when someone else saved first; reload and save again.
+- One version is published at a time, and only a version without run problems (missing sources,
+  uninstalled models, family limits, steps of later phases) can be published.
+- Anyone allowed to use every model a published workflow uses may run it and sees only its
+  inputs, overridable bounds and outputs. Drafts and history stay with workflow managers.
+- The ten shipped samples are read-only templates; save a copy to change one.
+- Removing a workflow keeps the images and job records it produced.
+
+The editor page and `workflow:<name>` API calls are not available yet. Until then the shipped
+samples can be compared in the Image workflows design preview (see Design previews).
+
 ## Limits and troubleshooting
 
 Parts from different model families are not interchangeable. Read the checklist's reason when a component is missing or incompatible. An upscaler is needed when a workflow must enlarge a reference. The editor's drafts remain in page memory across switches; reloading loses unsaved edits. Saving configuration does not establish image quality or memory fit on a node.

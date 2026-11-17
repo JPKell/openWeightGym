@@ -14,7 +14,7 @@ from starlette.routing import Route
 
 from loadcoach import observability as observation
 from mirrorwall.requests import checked_request,MAX_REQUEST_BYTES
-from mirrorwall import stream
+from mirrorwall import graph,stream
 
 IMAGE_PATHS=("/v1/images/generations","/v1/images/edits")
 
@@ -588,6 +588,95 @@ class Front:
                 return error(404,'There is no such workflow.')
         return JSONResponse({'versions':self.store.preset_history(user.identity,identifier)},headers={'cache-control':'no-store'})
 
+    async def graph_models(self,user):
+        """The caller's image models with their families, for workflow checks and access."""
+        return [{'id':m['id'],'family':(m.get('image_workflow') or {}).get('family')} for m in await self.media_catalogue(user,'image')]
+
+    def runnable(self,row,models):
+        """A published workflow's caller view, when the caller may use every model it uses."""
+        found=self.store.runnable_graph(row['api_name']) if row['published'] else None
+        if not found or not set(graph.models_of(found['document']))<={m['id'] for m in models}:
+            return None
+        return {'id':row['id'],'version':found['version'],**graph.interface(found['document'])}
+
+    async def graph_library(self,request,user):
+        """Workflows the caller may run; managers also see drafts, run problems, sample templates and the catalogue."""
+        try:
+            models=await self.graph_models(user)
+        except ValueError as problem:
+            return error(503,str(problem))
+        manage=user.can('manage-workflows')
+        if manage:
+            body={'workflows':[{**row,'problems':graph.problems(row['document'],models)} for row in self.store.graphs()],
+                  'templates':graph.SAMPLES,'catalogue':graph.catalogue()}
+        else:
+            body={'workflows':[one for row in self.store.graphs() if (one:=self.runnable(row,models))]}
+        return JSONResponse({**body,'models':models,'can_manage':manage},headers={'cache-control':'no-store'})
+
+    async def graph_detail(self,request,user):
+        """A manager reads every version; a caller reads only a runnable workflow's interface."""
+        row=self.store.graph(request.path_params['identifier'])
+        try:
+            models=await self.graph_models(user) if row else []
+        except ValueError as problem:
+            return error(503,str(problem))
+        if row and user.can('manage-workflows'):
+            return JSONResponse({**row,'problems':graph.problems(row['document'],models),'versions':self.store.graph_versions(row['id'])},
+                                headers={'cache-control':'no-store'})
+        found=self.runnable(row,models) if row else None
+        return JSONResponse(found,headers={'cache-control':'no-store'}) if found else error(404,'There is no such workflow.')
+
+    async def graph_save(self,request,user):
+        """Check and save a workflow document as a new version."""
+        if not user.can('manage-workflows'):
+            return error(403,'Saving image workflows requires the manage-workflows ability.')
+        try:
+            asked=await self.read_json(request)
+            if not isinstance(asked,dict) or asked.keys()-{'id','version','document'}:
+                raise ValueError('Send id, version and document.')
+            document,problems=graph.check(asked.get('document'),await self.graph_models(user))
+            row=self.store.save_graph(user.identity,document,asked.get('id'),asked.get('version'))
+            return JSONResponse({**row,'problems':problems},201 if row['version']==1 else 200,headers={'cache-control':'no-store'})
+        except (ValueError,TypeError) as problem:
+            return error(400,str(problem))
+
+    async def graph_publish(self,request,user):
+        """Publish a version with no run problems, or unpublish with version 0."""
+        if not user.can('manage-workflows'):
+            return error(403,'Publishing image workflows requires the manage-workflows ability.')
+        try:
+            asked=await self.read_json(request)
+            identifier,version,expected=request.path_params['identifier'],asked.get('version'),asked.get('expected_version')
+            if type(version) is not int or type(expected) is not int or version<0:
+                raise ValueError('Send the version to publish (0 unpublishes) and the expected latest version.')
+            if not self.store.graph(identifier):
+                return error(404,'There is no such workflow.')
+            if version:
+                chosen=next((one for one in self.store.graph_versions(identifier) if one['version']==version),None)
+                if not chosen:
+                    raise ValueError('There is no such version of this workflow.')
+                failing=[one['text'] for one in graph.problems(chosen['document'],await self.graph_models(user)) if one['level']=='error']
+                if failing:
+                    raise ValueError('Fix these problems before publishing: '+' '.join(failing))
+            return JSONResponse(self.store.publish_graph(identifier,version,expected),headers={'cache-control':'no-store'})
+        except (ValueError,TypeError) as problem:
+            return error(400,str(problem))
+
+    async def graph_remove(self,request,user):
+        """Delete a workflow at its reviewed latest version; saved images and job records remain."""
+        if not user.can('manage-workflows'):
+            return error(403,'Removing image workflows requires the manage-workflows ability.')
+        identifier=request.path_params['identifier']
+        if not self.store.graph(identifier):
+            return error(404,'There is no such workflow.')
+        try:
+            version=int(request.query_params.get('version',''))
+        except ValueError:
+            return error(400,'Choose the saved workflow version to remove.')
+        if not self.store.remove_graph(identifier,version):
+            return error(409,'This workflow changed elsewhere. Reload and review it before removing it.')
+        return JSONResponse({'removed':identifier},headers={'cache-control':'no-store'})
+
     def routes(self,caller,log):
         """Expose control-node-owned image operations through the existing API-key authority."""
         from turnstile.accounts import signed_in
@@ -600,4 +689,7 @@ class Front:
                 route('/mirrorwall/jobs',self.start,'POST'),route('/mirrorwall/jobs/{identifier}',self.control,'POST'),
                 route('/mirrorwall/preferences',self.preferences),route('/mirrorwall/preferences',self.preferences,'POST'),route('/mirrorwall/presets',self.preset,'POST'),
                 route('/mirrorwall/workflows',self.workflows),route('/mirrorwall/presets/{identifier}',self.preset_history),
-                route('/mirrorwall/presets/{identifier}',self.remove_preset,'DELETE')]
+                route('/mirrorwall/presets/{identifier}',self.remove_preset,'DELETE'),
+                route('/mirrorwall/graphs',self.graph_library),route('/mirrorwall/graphs',self.graph_save,'POST'),
+                route('/mirrorwall/graphs/{identifier}',self.graph_detail),route('/mirrorwall/graphs/{identifier}',self.graph_remove,'DELETE'),
+                route('/mirrorwall/graphs/{identifier}/publish',self.graph_publish,'POST')]

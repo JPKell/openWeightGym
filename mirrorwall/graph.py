@@ -5,6 +5,10 @@ Images, masks, text and settings pass between steps; latents never leave a nativ
 (see docs/advanced-workflow-plan.md).
 """
 
+import json
+import math
+import re
+
 from mirrorwall import model as _model
 
 # Every sampler and scheduler of the pinned stable-diffusion.cpp revision, by native name;
@@ -292,3 +296,222 @@ def catalogue():
     return {'components': COMPONENTS, 'order': list(COMPONENTS), 'port_types': PORT_TYPES, 'families': FAMILIES, 'defaults': DEFAULTS,
             'samplers': list(NATIVE_SAMPLERS), 'schedulers': list(NATIVE_SCHEDULERS), 'limits': LIMITS}
 
+
+# ---- Validation: the server's copy of the editor's rules (weightroom/static/workflow-graph.js) ----
+
+LABEL = re.compile(r'[a-z][a-z0-9_]{0,39}')
+SLUG = re.compile(r'[a-z0-9][a-z0-9._-]{0,79}')
+MAX_DOCUMENT_BYTES = 256 * 1024
+RUNNABLE_PHASE = 4  # components of later phases are saved but cannot run yet
+
+
+def slug(name):
+    """The API name a workflow name gives, as the editor derives it."""
+    value = re.sub(r'[^a-z0-9._-]+', '-', str(name or 'workflow').lower()).strip('-')[:80]
+    return value or 'workflow'
+
+
+def _value(field, value):
+    """Check one component value against its field; None means unset for optional advanced numbers."""
+    kind, label = field['kind'], field['label']
+    if kind == 'number':
+        if value is None and field['default'] is None:
+            return None
+        if type(value) not in (int, float) or not math.isfinite(value) or not field.get('min', -math.inf) <= value <= field.get('max', math.inf):
+            raise ValueError(f"{label} must be a number from {field.get('min')} to {field.get('max')}.")
+        return value
+    if kind == 'toggle':
+        if type(value) is not bool:
+            raise ValueError(f'{label} must be on or off.')
+        return value
+    if kind == 'choice':
+        if value not in field['choices']:
+            raise ValueError(f'{label} must be one of: ' + ', '.join(map(str, field['choices'])) + '.')
+        return value
+    if not isinstance(value, str) or len(value) > field.get('max', 200) or '\0' in value:
+        raise ValueError(f"{label} must be text of at most {field.get('max', 200)} characters.")
+    return value
+
+
+def _ports(node, side):
+    return {port['name']: port for port in COMPONENTS[node['type']].get(side, [])}
+
+
+def check(document, models=None):
+    """Validate a workflow document. Structural faults raise ValueError; run problems are returned.
+
+    `models` lists the installed image models as {'id', 'family'}; without it, model-dependent
+    rules are skipped. Returns (normalized document, [{'node', 'level', 'text'}]).
+    """
+    if not isinstance(document, dict):
+        raise ValueError('A workflow must be a JSON object.')
+    if len(json.dumps(document)) > MAX_DOCUMENT_BYTES:
+        raise ValueError('A workflow document may be at most 256 KiB.')
+    unknown = document.keys() - {'schema', 'name', 'summary', 'family', 'media', 'api_name', 'nodes', 'links'}
+    if unknown:
+        raise ValueError('Unsupported workflow fields: ' + ', '.join(sorted(unknown)) + '.')
+    if document.get('schema', 1) != 1 or document.get('media', 'image') != 'image':
+        raise ValueError('This version supports schema 1 image workflows.')
+    name = document.get('name')
+    if not isinstance(name, str) or not 1 <= len(name.strip()) <= 100:
+        raise ValueError('A workflow name must contain 1–100 characters.')
+    api_name = document.get('api_name') or slug(name)
+    if not isinstance(api_name, str) or not SLUG.fullmatch(api_name):
+        raise ValueError('The API name may use lowercase letters, digits, dots, dashes and underscores (up to 80).')
+    summary = document.get('summary', '')
+    if not isinstance(summary, str) or len(summary) > 400:
+        raise ValueError('A summary may be at most 400 characters.')
+    nodes, links = document.get('nodes'), document.get('links', [])
+    if not isinstance(nodes, list) or not isinstance(links, list):
+        raise ValueError('A workflow needs nodes and links lists.')
+    if len(nodes) > LIMITS['nodes'] or len(links) > LIMITS['links']:
+        raise ValueError(f"Use at most {LIMITS['nodes']} components and {LIMITS['links']} links.")
+    clean, seen = [], set()
+    for node in nodes:
+        if not isinstance(node, dict) or node.keys() - {'id', 'type', 'title', 'values', 'at', 'exposed', 'overridable'}:
+            raise ValueError('Each component has id, type, title, values, at, exposed and overridable only.')
+        identifier, kind = node.get('id'), node.get('type')
+        if not isinstance(identifier, str) or not LABEL.fullmatch(identifier):
+            raise ValueError('Step labels start with a letter and use lowercase letters, digits and underscores (up to 40).')
+        if identifier in seen:
+            raise ValueError('Two components share the label ' + identifier + '.')
+        seen.add(identifier)
+        if kind not in COMPONENTS:
+            raise ValueError(f'Unknown component type for {identifier}.')
+        component, fields = COMPONENTS[kind], {field['name']: field for field in COMPONENTS[kind].get('fields', [])}
+        title = node.get('title', component['label'])
+        if not isinstance(title, str) or not 1 <= len(title.strip()) <= 60:
+            raise ValueError(f'{identifier}: a name must contain 1–60 characters.')
+        values = node.get('values', {})
+        if not isinstance(values, dict) or values.keys() - fields.keys():
+            raise ValueError(f'{identifier}: unknown settings ' + ', '.join(sorted(set(values) - set(fields))) + '.')
+        values = {name: _value(field, values.get(name, field['default'])) for name, field in fields.items()}
+        at = node.get('at', [0, 0])
+        if (not isinstance(at, list) or len(at) != 2 or any(type(one) not in (int, float) or not math.isfinite(one)
+                                                            or not -10000 <= one <= 100000 for one in at)):
+            raise ValueError(f'{identifier}: a position is two numbers.')
+        exposed = node.get('exposed', [])
+        if not isinstance(exposed, list) or len(set(exposed)) != len(exposed) or any(one not in fields for one in exposed):
+            raise ValueError(f'{identifier}: callers may only set this component\'s own fields.')
+        overridable = node.get('overridable', {})
+        if not isinstance(overridable, dict):
+            raise ValueError(f'{identifier}: overridable fields map a field to [lowest, highest].')
+        bounds = {}
+        for name, span in overridable.items():
+            field = fields.get(name)
+            if not field or not field.get('overridable') or field['kind'] != 'number':
+                raise ValueError(f'{identifier}: {name} cannot be overridden by callers.')
+            if (not isinstance(span, list) or len(span) != 2 or any(type(one) not in (int, float) or not math.isfinite(one) for one in span)
+                    or not field.get('min', -math.inf) <= span[0] <= span[1] <= field.get('max', math.inf)):
+                raise ValueError(f"{identifier}: {field['label']} bounds must lie within {field.get('min')}–{field.get('max')}, lowest first.")
+            bounds[name] = list(span)
+        if set(exposed) & set(bounds):
+            raise ValueError(f'{identifier}: a field is either set by callers or overridable within bounds, not both.')
+        clean.append({'id': identifier, 'type': kind, 'title': title.strip(), 'values': values, 'at': list(at),
+                      'exposed': list(exposed), 'overridable': bounds})
+    found = {node['id']: node for node in clean}
+    clean_links, into = [], {}
+    for link in links:
+        if (not isinstance(link, dict) or link.keys() != {'from', 'to'} or
+                any(not isinstance(end, list) or len(end) != 2 or not all(isinstance(one, str) for one in end) for end in link.values())):
+            raise ValueError('Each link is {"from": [label, output], "to": [label, input]}.')
+        (source, output), (target, entry) = link['from'], link['to']
+        if source not in found or target not in found:
+            raise ValueError('A link names a component that does not exist.')
+        out_port, in_port = _ports(found[source], 'outputs').get(output), _ports(found[target], 'inputs').get(entry)
+        if not out_port or not in_port:
+            raise ValueError(f'A link from {source} to {target} names a port that does not exist.')
+        if out_port['type'] != in_port['type']:
+            raise ValueError(f"{found[target]['title']} · {in_port['label']} takes {PORT_TYPES[in_port['type']]}, not {PORT_TYPES[out_port['type']]}.")
+        key = (target, entry)
+        if [source, output] in into.get(key, []):
+            raise ValueError('A link is listed twice.')
+        if into.get(key) and not in_port['multiple']:
+            raise ValueError(f"{found[target]['title']} · {in_port['label']} takes one source.")
+        into.setdefault(key, []).append([source, output])
+        clean_links.append({'from': [source, output], 'to': [target, entry]})
+    remaining, pending = set(found), list(clean_links)
+    while remaining:
+        free = {one for one in remaining if not any(link['to'][0] == one for link in pending)}
+        if not free:
+            raise ValueError('The links form a loop; an image cannot depend on itself.')
+        remaining -= free
+        pending = [link for link in pending if link['from'][0] not in free]
+    result = {'schema': 1, 'name': name.strip(), 'api_name': api_name, 'summary': summary, 'media': 'image',
+              'nodes': clean, 'links': clean_links}
+    if isinstance(document.get('family'), str) and document['family'] in FAMILIES:
+        result['family'] = document['family']
+    return result, problems(result, models)
+
+
+def problems(document, models=None):
+    """Run problems of a structurally valid document: missing sources, family rules, planned components."""
+    found, listed = {node['id']: node for node in document['nodes']}, []
+    def push(node, level, text):
+        listed.append({'node': node and node['id'], 'level': level, 'text': text})
+    def into(node, port):
+        return [link['from'][0] for link in document['links'] if link['to'] == [node['id'], port]]
+    if not any(node['type'] in ('output', 'compare') for node in document['nodes']):
+        push(None, 'error', 'Add an Output so the run saves something.')
+    installed = {model['id']: model for model in models or []}
+    stages = 0
+    for node in document['nodes']:
+        component = COMPONENTS[node['type']]
+        stages += bool(component.get('stage'))
+        if component['phase'] > RUNNABLE_PHASE:
+            push(node, 'error', f"{component['label']} is planned for a later phase; it cannot run yet.")
+        for port in component.get('inputs', []):
+            if port['required'] and not into(node, port['name']):
+                push(node, 'error', f"{port['label']} needs a source.")
+        if models is None:
+            continue
+        if node['type'] == 'model' and node['values']['model'] not in installed:
+            push(node, 'error', 'Choose an installed image model.')
+        if node['type'] == 'sampler':
+            source = next(iter(into(node, 'model')), None)
+            model = installed.get(found[source]['values']['model']) if source else None
+            family = FAMILIES.get(model.get('family')) if model else None
+            if not family:
+                continue
+            references = len(into(node, 'references'))
+            if references > family['references']:
+                push(node, 'error', f"{family['label']} uses at most {family['references']} reference images." if family['references']
+                     else f"{family['label']} does not use reference images here.")
+            if into(node, 'init') and not family['init']:
+                push(node, 'error', f"{family['label']} has no start-image pass here; use reference images or an SDXL model.")
+            if into(node, 'negative') and (not family['negative'] or node['values']['cfg_scale'] <= 1):
+                push(node, 'warning', 'The negative prompt has no effect at CFG 1 or with this family.')
+            sized = next(iter(into(node, 'size')), None)
+            if sized and (found[sized]['values']['width'] % family['alignment'] or found[sized]['values']['height'] % family['alignment']):
+                push(node, 'error', f"{family['label']} needs width and height in multiples of {family['alignment']}.")
+            if model.get('family') == 'sdxl' and node['values'].get('flow_shift') is not None:
+                push(node, 'error', 'Flow shift applies to flow-matching models, not SDXL.')
+            if model.get('family') != 'sdxl' and any(node['values'].get(key) is not None for key in ('clip_skip', 'shifted_timestep')):
+                push(node, 'error', 'CLIP skip and shifted timestep apply to SDXL models.')
+    if stages > LIMITS['stages']:
+        push(None, 'error', f"Use at most {LIMITS['stages']} steps.")
+    return listed
+
+
+def models_of(document):
+    """The image models a workflow uses; a caller may run it only with access to all of them."""
+    return sorted({node['values']['model'] for node in document['nodes'] if node['type'] == 'model' and node['values']['model']})
+
+
+def interface(document):
+    """What a caller of a published workflow sees: inputs it may set, overridable bounds, outputs and models."""
+    inputs, overrides = [], []
+    for node in document['nodes']:
+        fields = {field['name']: field for field in COMPONENTS[node['type']].get('fields', [])}
+        for name in node['exposed']:
+            field = fields[name]
+            inputs.append({'name': node['id'] if node['type'] == 'load_image' else node['id'] + '.' + name,
+                           'label': node['title'] + ' · ' + field['label'], 'kind': field['kind'],
+                           'default': None if node['type'] == 'load_image' else node['values'][name],
+                           **{key: field[key] for key in ('min', 'max', 'choices') if key in field}})
+        for name, span in node['overridable'].items():
+            overrides.append({'name': node['id'] + '.' + name, 'label': node['title'] + ' · ' + fields[name]['label'],
+                              'default': node['values'][name], 'min': span[0], 'max': span[1]})
+    outputs = [{'step': node['id'], 'label': node['values']['label']} for node in document['nodes'] if node['type'] in ('output', 'compare')]
+    return {'name': document['name'], 'api_name': document['api_name'], 'summary': document.get('summary', ''),
+            'models': models_of(document), 'inputs': inputs, 'overrides': overrides, 'outputs': outputs}
