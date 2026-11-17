@@ -42,6 +42,8 @@ and the rest of the run continues.
 - **Zoom** enlarges every image around the same point. Move the pointer over any image to choose
   the point. You can also focus an image and pan with the arrow keys, zoom with `+` and `-`, or
   hold Ctrl and use the mouse wheel. Above 1× the full-resolution images are loaded.
+- **Lock position** keeps the zoomed region still while the pointer moves, so you can move between
+  images without shifting it. Click an image to move the region to that point, or use the arrow keys.
 - Tick the box under an image to select it, then turn on **Selected only** to compare just those.
 - **Tile size** changes how many images fit in a row.
 - **Earlier comparisons** reopens a previous run, including one that is still running.

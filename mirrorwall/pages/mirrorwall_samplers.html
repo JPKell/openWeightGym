@@ -6,9 +6,9 @@
 {% block title %}Sampler comparison · Models · openWeightGym{% endblock %}
 {% block scripts %}
 <link rel="stylesheet" href="/static/generation.css?v=2">
-<link rel="stylesheet" href="/mirrorwall-static/samplers.css?v=3">
+<link rel="stylesheet" href="/mirrorwall-static/samplers.css?v=4">
 <script src="/mirrorwall-static/image-profiles.js?v=2" defer></script>
-<script src="/mirrorwall-static/samplers.js?v=2" defer></script>
+<script src="/mirrorwall-static/samplers.js?v=3" defer></script>
 {% endblock %}
 {% block main %}
 <div id="samplers" data-samplers="{{ samplers|join(',') }}" data-schedulers="{{ schedulers|join(',') }}" data-limit="{{ limit }}">
@@ -72,12 +72,13 @@
 {% set viewer_tools %}<div class="sc-tools">
 <label class="form-label mb-0 small" for="sc-zoom">Zoom <output id="sc-zoom-value" for="sc-zoom">1×</output></label>
 <input id="sc-zoom" type="range" class="form-range sc-zoom" min="1" max="8" step="0.5" value="1">
+<label class="form-check form-check-inline mb-0 small" title="Keep the zoomed region still while the pointer moves; click an image to move it"><input class="form-check-input" type="checkbox" id="sc-lock"><span class="form-check-label">Lock position</span></label>
 <label class="form-check form-check-inline mb-0 small"><input class="form-check-input" type="checkbox" id="sc-selected-only"><span class="form-check-label">Selected only</span></label>
 <label class="form-label mb-0 small" for="sc-size">Tile size</label>
 <select id="sc-size" class="form-select form-select-sm sc-size"><option value="small">Small</option><option value="medium" selected>Medium</option><option value="large">Large</option></select>
 </div>{% endset %}
 {% call card('Results', class_='sc-viewer', actions=viewer_tools, header_id='sc-viewer-title', attrs={'aria-labelledby': 'sc-viewer-title'}) %}
-<p class="small text-secondary" id="sc-viewer-help">Run a comparison or open an earlier one. With zoom above 1×, point at any image, or focus one and use the arrow keys: every image shows the same region. Tick the box under an image to select it for side-by-side comparison.</p>
+<p class="small text-secondary" id="sc-viewer-help">Run a comparison or open an earlier one. With zoom above 1×, point at any image, or focus one and use the arrow keys: every image shows the same region. Lock position keeps that region still; click an image to move it. Tick the box under an image to select it for side-by-side comparison.</p>
 <div id="sc-grid" class="sc-grid" data-size="medium" aria-live="off"></div>
 {% endcall %}
 </div>

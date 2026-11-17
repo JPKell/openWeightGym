@@ -162,6 +162,19 @@ def test_page_runs_a_comparison_and_zooms_every_image_to_the_same_region(compari
         assert page.locator('.sc-tile[data-state=done] img').first.get_attribute('src').endswith('/content')
         frame.focus(); page.keyboard.press('ArrowRight')
         assert page.evaluate("parseFloat(getComputedStyle(document.getElementById('sc-grid')).getPropertyValue('--sc-x'))") == pytest.approx(focus[0] + 5)
+        # Lock position: the pointer no longer moves the region; a click does.
+        page.locator('#sc-lock').check()
+        here = "['--sc-x','--sc-y'].map(name => parseFloat(getComputedStyle(document.getElementById('sc-grid')).getPropertyValue(name)))"
+        frame.scroll_into_view_if_needed()
+        box = frame.bounding_box()  # ticking the box may have scrolled the grid
+        locked = page.evaluate(here)
+        page.mouse.move(box['x'] + box['width'] * .8, box['y'] + box['height'] * .2)
+        assert page.evaluate(here) == locked
+        page.mouse.click(box['x'] + box['width'] * .5, box['y'] + box['height'] * .5)
+        assert page.evaluate(here) == [pytest.approx(50, abs=1), pytest.approx(50, abs=1)]
+        page.mouse.move(box['x'] + box['width'] * .1, box['y'] + box['height'] * .9)
+        assert page.evaluate(here) == [pytest.approx(50, abs=1), pytest.approx(50, abs=1)]
+        page.locator('#sc-lock').uncheck()
         # Select two and show only those.
         page.locator('.sc-tile').nth(0).locator('[data-pick]').check()
         page.locator('.sc-tile').nth(4).locator('[data-pick]').check()

@@ -284,11 +284,15 @@
     $('size').addEventListener('change', () => { $('grid').dataset.size = $('size').value; });
     $('selected-only').addEventListener('change', filter);
     const grid = $('grid');
-    grid.addEventListener('pointermove', event => {
+    // The pointer moves the shared focus unless Lock position is on; then only a click (or the arrow keys) moves it.
+    const point = event => {
       const frame = event.target.closest('.sc-frame'); if (!frame || zoom <= 1) return;
       const box = frame.getBoundingClientRect();
       setFocus((event.clientX - box.left) / box.width * 100, (event.clientY - box.top) / box.height * 100);
-    });
+    };
+    grid.addEventListener('pointermove', event => { if (!$('lock').checked) point(event); });
+    grid.addEventListener('click', event => { if ($('lock').checked) point(event); });
+    $('lock').addEventListener('change', () => { $('grid').dataset.locked = String($('lock').checked); });
     grid.addEventListener('wheel', event => {
       if (!event.target.closest('.sc-frame') || !event.ctrlKey) return;  // Ctrl + wheel zooms; plain scrolling still scrolls
       event.preventDefault(); setZoom(zoom + (event.deltaY < 0 ? .5 : -.5));
