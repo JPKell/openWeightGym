@@ -103,3 +103,19 @@ def test_library_check_requires_permission_and_lists_only_managed_files(tmp_path
         assert not answer.json()['ready'] and answer.json()['slots'][0]['found']['kind'] == 'missing'
         for bad in ([], {}, {'settings': []}, {'settings': {}, 'source_machine': []}):
             assert client.post(path, headers=headers, content=json.dumps(bad)).status_code == 400
+
+
+def test_files_cached_as_unknown_before_a_family_existed_are_identified_again(tmp_path):
+    """Krea 2 files indexed by an older release stayed 'unknown' until the identity version changed."""
+    from tests.test_mirrorwall_components import safetensors
+    from mirrorwall.components import IDENTITY_VERSION
+    folder = tmp_path / 'image'
+    folder.mkdir()
+    weights = safetensors(folder / 'krea2.safetensors', {'model.diffusion_model.txtfusion.projector.weight': (1, 12)})
+    index = FileIndex(None, describe=facts)
+    spots = {'image': str(folder)}
+    index.scan(spots)
+    index.kept['files'][weights]['facts']['image_identity'] = {'kind': 'unknown', 'family': None, 'variant': None,
+                                                                'label': 'unknown', 'version': IDENTITY_VERSION - 1}
+    index.scan(spots)
+    assert index.kept['files'][weights]['facts']['image_identity']['family'] == 'krea2'

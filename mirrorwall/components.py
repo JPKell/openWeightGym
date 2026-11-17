@@ -56,7 +56,7 @@ GET.update({'krea2-raw': ('realrebelai/KREA-2_GGUFs', 'BASE/Krea-2-Base-Q4_K_M.g
 SLOTS = (("diffusion", "Diffusion weights"), ("text_encoder", "Text encoder"), ("vae", "VAE"),
          ("clip_l", "CLIP L"), ("clip_g", "CLIP G"), ("upscaler", "Image upscaler"), ("tokenizer", "Tokenizer JSON"))
 FORMATS = (".gguf", ".safetensors", ".pth", ".json")
-IDENTITY_VERSION = 4  # video transformers, encoders and temporal VAEs
+IDENTITY_VERSION = 5  # Krea 2 transformers and Qwen3-VL 4B encoders (4: video parts)
 VIDEO_SLOTS=(("diffusion","Diffusion weights"),("text_encoder","Text encoder"),("vae","VAE"),
              ("high_noise_diffusion_model","High-noise diffusion weights"),("audio_vae","Audio VAE"),
              ("embeddings_connectors","Embeddings connector"),("byt5","ByT5 GlyphXL"),
