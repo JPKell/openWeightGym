@@ -84,4 +84,5 @@
  .ig-canvas .ig-roadmap { grid-template-columns: minmax(0,1fr); }
  .ig-canvas .ig-settings .row > .col-md-6 { width: 50%; }
  .ig-canvas .ig-facts { grid-template-columns: minmax(0,1fr); }
+ .ig-canvas .ig-facts-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }

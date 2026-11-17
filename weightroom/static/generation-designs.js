@@ -160,7 +160,7 @@
     $('favorite').textContent=row.favorite?'★':'☆';$('favorite').setAttribute('aria-pressed',String(row.favorite));
     document.querySelector('.ig-art-label').textContent=row.sample?'SAMPLE ARTWORK · BLACK FOREST LABS':'SIMULATED RESULT · SAMPLE ARTWORK';
     const facts=row.settings?{Model:profiles.spec(row.settings.family).label,Seed:row.settings.seed,Steps:row.settings.steps,Size:`${row.settings.width} × ${row.settings.height}`,Upscale:`${row.settings.upscale}×`,Sampler:row.settings.sampler,Scheduler:row.settings.scheduler,Prompt:row.prompt}:{Source:'Black Forest Labs · illustrative sample',Prompt:row.prompt,Settings:'Original generation settings are unavailable.'};
-    for(const [key,value] of Object.entries(facts)) {const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=key;dd.textContent=value;$('result-settings').append(dt,dd);}
+    for(const [key,value] of Object.entries(facts)) {const row=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');row.className=['Prompt','Settings','Source'].includes(key)?'ig-fact-wide':'';dt.textContent=key;dd.textContent=value;row.append(dt,dd);$('result-settings').append(row);}
     const other=results.find(one=>one.id!==row.id);$('compare').disabled=!other;
     if(other) $('compare-pane').querySelector('img').src=other.src;
   }

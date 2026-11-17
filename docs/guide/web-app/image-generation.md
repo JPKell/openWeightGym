@@ -31,7 +31,7 @@ the same ordering without retaining job history.
 
 Press **Delete** to arm **Delete image**, then press **Delete** again to confirm. Holding the
 key does not repeat deletion. Escape cancels; typing in a form or viewing a live preview never
-deletes a saved image. Image details and settings export remain below the viewer.
+deletes a saved image. Image details (model, seed, size, steps, sampler, scheduler, CFG or guidance when set, then the full prompt) and settings export remain below the viewer in every view.
 
 ## Options
 

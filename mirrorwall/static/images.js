@@ -217,6 +217,10 @@
     if (row.width) sizes[row.id] = {width: row.width, height: row.height};
     return row;
   }
+  /** Detail rows for the three-column facts grid; prompts span the whole width. */
+  function factRows(facts) {
+    return Object.entries(facts).map(([key,value])=>{const row=document.createElement('div');row.className=/prompt/i.test(key)?'ig-fact-wide':'';row.append(element('dt',key),element('dd',String(value)));return row;});
+  }
   function livePreview() {
     return $('preview').checked ? state.jobs.find(row=>row.status==='in_progress'&&row.progress?.b64_json) : null;
   }
@@ -259,9 +263,14 @@
       $('favorite').textContent=favorites.has(one.id)?'★':'☆';$('favorite').setAttribute('aria-pressed',String(favorites.has(one.id)));
       const values=one.metadata?.settings || {};
       const facts={Model:values.model || 'Unavailable',Seed:one.metadata?.seed??'Unknown',Size:one.width+' × '+one.height,
-        Steps:values.steps??'Unknown',Sampler:values.sampler||'Unknown',Prompt:values.prompt||'Not retained'};
+        Steps:values.steps??'Unknown',Sampler:values.sampler||'Unknown',Scheduler:values.scheduler||'Unknown'};
+      if(values.cfg_scale!==undefined&&values.cfg_scale!==null)facts.CFG=values.cfg_scale;
+      if(values.guidance!==undefined&&values.guidance!==null)facts.Guidance=values.guidance;
       if(values.detail_resize)facts['Detail strength']=values.strength;
-      if(changed)for(const [key,value] of Object.entries(facts)){const dt=element('dt',key),dd=element('dd',String(value));$('result-settings').append(dt,dd);}
+      if(values.upscale>1)facts.Upscale=values.upscale+'×';
+      facts.Prompt=values.prompt||'Not retained';
+      if(values.negative_prompt)facts['Negative prompt']=values.negative_prompt;
+      if(changed)$('result-settings').append(...factRows(facts));
     } else $('image-info').textContent='';
     $('thumbnails').querySelectorAll('button').forEach(node=>node.setAttribute('aria-pressed',String(!preview&&node.dataset.id===selected)));
     const before=$('compare-with').value;

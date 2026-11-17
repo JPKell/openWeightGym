@@ -565,3 +565,34 @@ def test_detail_resize_front_keeps_ownership_and_temporary_policy(canvas, monkey
                                  filename='temporary.png', temporary=True)
     refused = server.post('/mirrorwall-api/jobs', json={**asked, 'references': [temporary['id']]})
     assert refused.status_code == 400 and 'Temporary references' in refused.json()['error']['message']
+
+
+@pytest.mark.parametrize('width', [1600, 390])
+def test_image_details_list_sampler_and_scheduler_in_a_compact_grid_in_every_view(canvas, width):
+    server, *_ = canvas
+    with playwright.sync_playwright() as driver:
+        browser, page = browser_context(driver, server)
+        page.set_viewport_size({'width': width, 'height': 1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto('http://console.test/chat/images')
+        facts = page.locator('#mw-result-settings')
+        for view in ('generate', 'gallery', 'library'):
+            page.locator(f'[data-mw-view={view}]').click()
+            details = page.locator('.ig-result-details')
+            if not details.evaluate('node => node.open'):
+                details.locator('summary').click()
+            playwright.expect(facts.locator('> div')).to_have_count(7)
+            labels = facts.locator('dt').all_text_contents()
+            assert labels == ['Model', 'Seed', 'Size', 'Steps', 'Sampler', 'Scheduler', 'Prompt']
+            playwright.expect(facts.locator('> div', has_text='Sampler').locator('dd')).to_have_text('euler')
+            playwright.expect(facts.locator('> div', has_text='Scheduler').locator('dd')).to_have_text('discrete')
+            boxes = facts.locator('> div').evaluate_all('rows => rows.map(row => [row.offsetTop, row.offsetWidth])')
+            columns = 3 if width > 1000 else 2
+            assert len({top for top, _ in boxes[:columns]}) == 1 and boxes[columns][0] > boxes[0][0]  # rows of three (two when narrow)
+            prompt = facts.locator('.ig-fact-wide')
+            playwright.expect(prompt).to_contain_text('A blue landscape')
+            assert prompt.evaluate('row => row.offsetWidth') >= facts.evaluate('list => list.clientWidth') - 2
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        assert not errors
+        browser.close()
