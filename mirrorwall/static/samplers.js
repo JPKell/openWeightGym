@@ -164,7 +164,7 @@
   async function open(identifier, settings = null) {
     clearTimeout(timer);
     job = {id: identifier, status: 'in_progress', settings};
-    tiles = new Map(); $('grid').replaceChildren();
+    tiles = new Map(); $('grid').replaceChildren(); resetFilter();
     $('earlier').value = identifier;
     await refresh();
   }
@@ -197,6 +197,8 @@
     if (!tile) {  // one continuous grid, in run order: each scheduler's samplers follow the previous scheduler's
       tile = document.getElementById('sc-tile-template').content.firstElementChild.cloneNode(true);
       tile.dataset.line = line.line;
+      tile.dataset.samplerValue = line.sampler; tile.dataset.schedulerValue = line.scheduler;
+      offer('scheduler', line.scheduler); offer('sampler', line.sampler);
       tile.querySelector('[data-sampler]').textContent = line.sampler;
       tile.querySelector('[data-scheduler]').textContent = line.scheduler;
       tile.querySelector('[data-pick]').setAttribute('aria-label', `Select ${line.sampler} with ${line.scheduler}`);
@@ -253,9 +255,36 @@
   // Viewer layout is a per-browser convenience; the page works the same without storage.
   function keep(key, value) { try { localStorage.setItem('sampler-comparison:' + key, JSON.stringify(value)); } catch {} }
   function kept(key) { try { return JSON.parse(localStorage.getItem('sampler-comparison:' + key)); } catch { return null; } }
+  /** Filter: the run's own schedulers and samplers, each showing or hiding every image that used it. */
+  function offer(kind, value) {
+    const list = $(`filter-${kind}s`);
+    if ([...list.querySelectorAll('input')].some(input => input.value === value)) return;
+    const choice = document.getElementById('sc-filter-template').content.firstElementChild.cloneNode(true);
+    const input = choice.querySelector('input'); input.name = 'filter-' + kind; input.value = value;
+    choice.querySelector('.form-check-label').textContent = value;
+    list.append(choice);
+    $('filter-toggle').disabled = false;
+  }
+  const shown = kind => new Set([...$(`filter-${kind}s`).querySelectorAll('input:checked')].map(input => input.value));
+  function resetFilter() {
+    $('filter-schedulers').replaceChildren(); $('filter-samplers').replaceChildren();
+    $('filter-toggle').disabled = true; showFilter(false); $('filter-count').textContent = '';
+  }
+  function showFilter(open) {
+    $('filter').hidden = !open;
+    $('filter-toggle').setAttribute('aria-expanded', String(open));
+    $('filter-toggle').classList.toggle('active', open);
+  }
   function filter() {
-    const only = $('selected-only').checked;
-    for (const tile of tiles.values()) tile.hidden = only && !tile.hasAttribute('data-picked');
+    const only = $('selected-only').checked, schedulers = shown('scheduler'), samplers = shown('sampler');
+    let visible = 0;
+    for (const tile of tiles.values()) {
+      tile.hidden = (only && !tile.hasAttribute('data-picked')) || !schedulers.has(tile.dataset.schedulerValue) || !samplers.has(tile.dataset.samplerValue);
+      if (!tile.hidden) visible++;
+    }
+    $('filter-count').textContent = tiles.size ? `Showing ${visible} of ${tiles.size} image${tiles.size === 1 ? '' : 's'}` : '';
+    const narrowed = visible < tiles.size && !only;
+    $('filter-toggle').textContent = narrowed ? `Filter · ${visible}/${tiles.size}` : 'Filter';
   }
 
   async function control(action) {
@@ -288,7 +317,7 @@
   }
   function closeRun(identifiers) {
     if (!job || !identifiers.includes(job.id)) return;
-    clearTimeout(timer); job = null; tiles = new Map(); $('grid').replaceChildren(); count();
+    clearTimeout(timer); job = null; tiles = new Map(); $('grid').replaceChildren(); resetFilter(); count();
   }
   async function deleteRun() {
     const identifier = $('earlier').value; if (!identifier) return;
@@ -338,6 +367,14 @@
     $('size').addEventListener('input', () => setSize(Number($('size').value)));
     $('hide-settings').addEventListener('click', () => setWide($('form').hidden === false));
     $('selected-only').addEventListener('change', filter);
+    $('filter-toggle').addEventListener('click', () => showFilter($('filter').hidden));
+    $('filter').addEventListener('change', filter);
+    $('filter-reset').addEventListener('click', () => { $('filter').querySelectorAll('input').forEach(input => { input.checked = true; }); filter(); });
+    root.querySelectorAll('[data-sc-filter-all],[data-sc-filter-none]').forEach(button => button.addEventListener('click', () => {
+      const kind = button.dataset.scFilterAll || button.dataset.scFilterNone;
+      $(`filter-${kind}s`).querySelectorAll('input').forEach(input => { input.checked = Boolean(button.dataset.scFilterAll); });
+      filter();
+    }));
     const grid = $('grid');
     // The pointer moves the shared focus unless Lock position is on; then only a click (or the arrow keys) moves it.
     const point = event => {

@@ -10,6 +10,9 @@
 .sc-zoom { width: 140px; }
 .sc-size { width: 160px; }
 .sc-layout[data-wide] { grid-template-columns: minmax(0, 1fr); }
+.sc-filter { border: 1px solid var(--bs-border-color); border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; }
+.sc-filter-group { margin: 0 0 8px; padding: 0; border: 0; }
+.sc-filter-group:last-child { margin-bottom: 0; }
 .sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--sc-tile, 180px), 1fr)); gap: 10px; align-content: start; max-height: calc(100vh - 170px); overflow: auto; }
 .sc-tile { margin: 0; min-width: 0; }
 .sc-tile[hidden] { display: none; }

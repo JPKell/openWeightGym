@@ -44,6 +44,9 @@ and the rest of the run continues.
   hold Ctrl and use the mouse wheel. Above 1× the full-resolution images are loaded.
 - **Lock position** keeps the zoomed region still while the pointer moves, so you can move between
   images without shifting it. Click an image to move the region to that point, or use the arrow keys.
+- **Filter** opens a list of the schedulers and samplers used in the open run. Untick one to hide
+  every image that used it; **All**, **None** and **Show all** set the lists at once. The button
+  shows how many images remain, for example **Filter · 8/24**. Opening another run resets it.
 - Tick the box under an image to select it, then turn on **Selected only** to compare just those.
 - **Image size** sets how wide each image is, from 80 to 800 pixels; the grid fits as many per row
   as it can.
