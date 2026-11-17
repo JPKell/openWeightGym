@@ -587,6 +587,15 @@ def test_advanced_sampling_is_allowlisted_bounded_and_family_aware(image_setting
         checked_request({'model':'m','prompt':'A boat','size':'1024x1024','advanced':advanced},settings)
 
 
+def test_shared_residency_entries_choose_sampler_and_scheduler_but_keep_their_cfg(image_settings):
+    shared={**image_settings,'alone':False}
+    cfg=checked_request({'model':'m','prompt':'A boat'},shared)['cfg_scale']
+    chosen=checked_request({'model':'m','prompt':'A boat','sampler':'dpmpp2m','scheduler':'karras'},shared)
+    assert chosen['sampler']=='dpm++2m' and chosen['scheduler']=='karras'
+    with pytest.raises(ValueError,match='pins its CFG scale'):
+        checked_request({'model':'m','prompt':'A boat','cfg_scale':cfg+1},shared)
+
+
 def test_advanced_sampling_needs_an_exclusive_entry_and_excludes_other_upscaling(image_settings):
     shared={**image_settings,'alone':False}
     with pytest.raises(ValueError,match='exclusive'):

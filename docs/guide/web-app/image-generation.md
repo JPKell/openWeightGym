@@ -71,6 +71,8 @@ Choose **Resize & add detail**, select an uploaded or saved source and choose th
 that still use the earlier names `dpmpp2s_a`, `dpmpp2m` and `dpmpp2mv2` run as `dpm++2s_a`,
 `dpm++2m` and `dpm++2mv2`. An engine that does not report a requested method refuses the job;
 it no longer falls back to its default.
+Sampler and scheduler can be chosen for every model entry, including shared-residency entries;
+those keep their profile's CFG scale, which is locked on the page.
 
 API callers of an exclusive model entry can add an `advanced` object to
 `/v1/images/generations`. Shared-residency entries keep their measured profile and refuse it.

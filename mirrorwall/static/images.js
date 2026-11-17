@@ -90,7 +90,7 @@
     $('steps-help').textContent = profile.family === 'flux2-klein' ? 'Distilled guidance is fixed. Use the selected workflow’s step count.' : 'Start with the workflow default; more steps increase render time.';
     $('prompt-help').textContent = spec.textOnly ? 'Put exact text in quotes and describe its placement. This profile generates from text only.' : spec.negative ? 'Describe the subject and style. Use the negative prompt for exclusions.' : 'Describe the subject, action, style and setting. Flux does not use negative prompts.';
     $('negative').disabled = !spec.negative;
-    for (const id of ['cfg','sampler','scheduler']) $(id).disabled = !profile.exclusive;
+    $('cfg').disabled = !profile.exclusive;  // shared residency keeps its measured CFG; sampler and scheduler stay free
     $('guidance').disabled = !spec.guidance;
     $('width').step = $('height').step = SuiteImageProfiles.spec(profile.family).alignment;
     $('upscale').querySelectorAll('option').forEach(node => { node.disabled = Number(node.value) > (profile.limits?.max_upscale || (profile.upscaling ? 4 : 1)); });
@@ -119,7 +119,7 @@
         $('sweep-axis').value=draft.axis;$('sweep-values').value=draft.valuesList;
       } else { $('sweep').value='';$('sweep-enabled').checked=false; }
     }
-    if(!profile.exclusive)apply(Object.fromEntries(['cfg_scale','sampler','scheduler'].map(key=>[key,profile.defaults?.[key]??spec.defaults[key]])));
+    if(!profile.exclusive)apply({cfg_scale:profile.defaults?.cfg_scale??spec.defaults.cfg_scale});
     const guidanceOption=$('sweep-axis').querySelector('[data-sweep-guidance]'); guidanceOption.disabled=!spec.guidance;
     $('sweep-axis').querySelector('[data-sweep-cfg]').disabled=!spec.negative || !profile.exclusive;
     if ($('sweep-axis').selectedOptions[0]?.disabled) $('sweep-axis').value='seed';

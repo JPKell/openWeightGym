@@ -3,7 +3,7 @@
 {% from "navigation_parts.html" import pills, pill_button %}
 {% from "generation_design_parts.html" import settings, sweep, templates, prompt, viewer, tool_catalogue, library_actions %}
 {% block title %}Image generation · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/generation.css?v=1"><link rel="stylesheet" href="/mirrorwall-static/canvas.css?v=4"><script src="/mirrorwall-static/image-profiles.js?v=2" defer></script><script src="/mirrorwall-static/images.js?v=12" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/generation.css?v=1"><link rel="stylesheet" href="/mirrorwall-static/canvas.css?v=4"><script src="/mirrorwall-static/image-profiles.js?v=2" defer></script><script src="/mirrorwall-static/images.js?v=13" defer></script>{% endblock %}
 {% block main %}
 <div id="mirrorwall" class="ig-canvas" data-mode="studio" data-layout="canvas" data-view="generate" data-sweep="false">
 {% call page_header('Image generation',id='mw-page-header') %}<button type="button" id="mw-toolkit" class="btn btn-outline-secondary btn-sm">Toolkit</button><button type="button" id="mw-model-guide" class="btn btn-outline-secondary btn-sm">Model guide</button><button type="button" id="mw-save-preset" class="btn btn-outline-secondary btn-sm">Save workflow</button><a class="btn btn-outline-secondary btn-sm" href="/models/images/workflows">Workflows</a>{% endcall %}

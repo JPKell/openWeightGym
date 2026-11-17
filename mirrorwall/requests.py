@@ -292,9 +292,9 @@ def checked_request(asked,settings=None):
             if largest>model.limits(settings)['max_upscale']:
                 raise ValueError('Detail resize exceeds this workflow upscale limit.')
     if settings and not settings.get('alone',False):
-        ordinary=model.defaults(settings)
-        if any(result[key]!=ordinary[key] for key in ('sampler','scheduler','cfg_scale')):
-            raise ValueError('A shared-residency workflow pins its sampler, scheduler and CFG scale; edit the profile or use an exclusive model entry.')
+        # Sampler and scheduler only change the step arithmetic, not memory; CFG stays with the measured profile.
+        if result['cfg_scale']!=model.defaults(settings)['cfg_scale']:
+            raise ValueError('A shared-residency workflow pins its CFG scale; edit the profile or use an exclusive model entry.')
         if result.get('advanced'):
             raise ValueError('Advanced sampling settings need an exclusive model entry; shared-residency workflows keep their measured profile.')
     if result.get('advanced',{}).get('hires') and (result.get('detail_resize') or result.get('upscale',1)>1):
