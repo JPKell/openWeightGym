@@ -66,6 +66,13 @@ def routes(for_people, page, ask, model_api):
         return page(request, "mirrorwall_graphs.html", person, open_graph=request.query_params.get("workflow", ""),
                     from_preset=request.query_params.get("preset", ""))
 
+    async def samplers(request, person):
+        """Render the sampler comparison: one prompt through every chosen scheduler and sampler, with a synchronized-zoom viewer."""
+        if "manage-models" not in person.can:
+            return page(request, "refused.html", person, status=403, why="Your account may not manage image models.")
+        from mirrorwall.front import COMPARISON_IMAGES
+        return page(request, "mirrorwall_samplers.html", person, samplers=SAMPLERS, schedulers=SCHEDULERS, limit=COMPARISON_IMAGES)
+
     async def models(request, person):
         """Render image-only model management for authorized administrators."""
         if "manage-models" not in person.can:
@@ -148,6 +155,7 @@ def routes(for_people, page, ask, model_api):
                      (len(parts) == 2 and parts[0] == "presets" and request.method in ("GET", "DELETE")) or
                      (action in ("assets", "assets/download", "jobs", "presets", "preferences") and request.method == "POST") or
                      (len(parts) == 2 and parts[0] == "jobs" and request.method == "POST") or
+                     (len(parts) == 3 and parts[0] == "jobs" and parts[2] == "lines" and request.method == "GET") or
                      (len(parts) == 2 and parts[0] == "assets" and request.method == "DELETE") or
                      (len(parts) == 3 and parts[0] == "assets" and parts[2] in ("content", "thumbnail") and request.method == "GET"))
         if not permitted:
@@ -285,6 +293,7 @@ def routes(for_people, page, ask, model_api):
             Route("/chat/images", for_people(studio)),
             Route("/models/images", for_people(models)),
             Route("/models/images/workflows", for_people(workflows)),
+            Route("/models/images/samplers", for_people(samplers)),
             Route("/models/image-workflows", for_people(graphs)),
             Route("/mirrorwall-models", for_people(inventory)),
             Route("/mirrorwall-models", for_people(model_save), methods=["POST"]),

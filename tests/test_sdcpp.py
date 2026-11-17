@@ -587,13 +587,19 @@ def test_advanced_sampling_is_allowlisted_bounded_and_family_aware(image_setting
         checked_request({'model':'m','prompt':'A boat','size':'1024x1024','advanced':advanced},settings)
 
 
-def test_shared_residency_entries_choose_sampler_and_scheduler_but_keep_their_cfg(image_settings):
+def test_shared_residency_entries_choose_sampler_scheduler_and_cfg_within_their_measured_passes(image_settings):
     shared={**image_settings,'alone':False}
-    cfg=checked_request({'model':'m','prompt':'A boat'},shared)['cfg_scale']
     chosen=checked_request({'model':'m','prompt':'A boat','sampler':'dpmpp2m','scheduler':'karras'},shared)
     assert chosen['sampler']=='dpm++2m' and chosen['scheduler']=='karras'
-    with pytest.raises(ValueError,match='pins its CFG scale'):
-        checked_request({'model':'m','prompt':'A boat','cfg_scale':cfg+1},shared)
+    # Measured with a negative-prompt pass (CFG other than 1): any CFG, including 1, which skips that pass.
+    sdxl={**shared,'sdcpp':{**shared['sdcpp'],'family':'sdxl'}}
+    assert model.defaults(sdxl)['cfg_scale']!=1
+    for cfg in (1,3.5,9):
+        assert checked_request({'model':'m','prompt':'A boat','cfg_scale':cfg},sdxl)['cfg_scale']==cfg
+    # Measured at CFG 1: no room was measured for that pass, so the CFG stays 1.
+    assert model.defaults(shared)['cfg_scale']==1
+    with pytest.raises(ValueError,match='measured at CFG 1'):
+        checked_request({'model':'m','prompt':'A boat','cfg_scale':2},shared)
 
 
 def test_advanced_sampling_needs_an_exclusive_entry_and_excludes_other_upscaling(image_settings):

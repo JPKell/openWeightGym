@@ -312,9 +312,11 @@ def checked_request(asked,settings=None):
             if largest>model.limits(settings)['max_upscale']:
                 raise ValueError('Detail resize exceeds this workflow upscale limit.')
     if settings and not settings.get('alone',False):
-        # Sampler and scheduler only change the step arithmetic, not memory; CFG stays with the measured profile.
-        if result['cfg_scale']!=model.defaults(settings)['cfg_scale']:
-            raise ValueError('A shared-residency workflow pins its CFG scale; edit the profile or use an exclusive model entry.')
+        # Sampler, scheduler and CFG only change the step arithmetic, not memory, except that any CFG other than 1 adds a
+        # negative-prompt pass (stable-diffusion.cpp runs it when txt_cfg differs from img_cfg, which is 1 here). A profile
+        # measured at CFG 1 has no room measured for that pass; one measured with it may use any CFG.
+        if model.defaults(settings)['cfg_scale']==1 and result['cfg_scale']!=1:
+            raise ValueError('This shared-residency model was measured at CFG 1, without a negative-prompt pass; a CFG other than 1 needs an exclusive model entry.')
         if result.get('advanced'):
             raise ValueError('Advanced sampling settings need an exclusive model entry; shared-residency workflows keep their measured profile.')
     if "upscale_with" in asked:

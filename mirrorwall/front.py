@@ -17,6 +17,7 @@ from mirrorwall.requests import checked_request,MAX_REQUEST_BYTES
 from mirrorwall import graph,graph_run,stream
 
 IMAGE_PATHS=("/v1/images/generations","/v1/images/edits")
+COMPARISON_IMAGES=512
 
 
 def error(status,message):
@@ -342,15 +343,17 @@ class Front:
         if not isinstance(references,list) or len(references)>8:
             raise ValueError('Use at most eight reference images.')
         sweep=asked.get('sweep',{})
-        if not isinstance(sweep,dict) or sweep.keys()-{'seed','steps','guidance','cfg_scale','width','height'}:
+        if not isinstance(sweep,dict) or sweep.keys()-{'seed','steps','guidance','cfg_scale','width','height','sampler','scheduler'}:
             raise ValueError('Unsupported sweep field.')
-        if any(not isinstance(values,list) or not values or len(values)>32 for values in sweep.values()):
-            raise ValueError('Each sweep requires 1–32 values.')
+        if any(not isinstance(values,list) or not values or len(values)>32 or len(set(map(str,values)))!=len(values) for values in sweep.values()):
+            raise ValueError('Each sweep requires 1–32 different values.')
         checked_request(body)
         count=body.pop('n',1)
         total=count*math.prod(len(values) for values in sweep.values())
-        if total>128:
-            raise ValueError('A generation job is limited to 128 images.')
+        # A sampler comparison tries every sampler with every scheduler, so it may hold more images than other jobs.
+        most=COMPARISON_IMAGES if {'sampler','scheduler'}&sweep.keys() else 128
+        if total>most:
+            raise ValueError(f'A generation job is limited to {most} images; this one would make {total}.')
         rows=[]
         for combination in itertools.product(*sweep.values()):
             selected={**body,**dict(zip(sweep,combination))}
@@ -477,6 +480,32 @@ class Front:
             return JSONResponse({'id':batch['id'],'temporary':False},201)
         except (ValueError,KeyError,TypeError) as problem:
             return error(400,str(problem))
+
+    async def job_lines(self,request,user):
+        """Every line of one of the caller's image jobs, in order, with the settings it varied, its outcome and its image."""
+        number=request.path_params['identifier']
+        if self.store.owner(number)!=user.identity:
+            return error(404,'There is no such image job of yours.')
+        images={}
+        for identifier,metadata,width,height in self.store.db.execute(
+                "SELECT a.id,a.metadata,a.width,a.height FROM mirrorwall_assets a JOIN mirrorwall_job_assets j ON j.asset=a.id "
+                "WHERE j.job=? AND j.role='output' AND a.owner_id=?",(number,user.identity)):
+            metadata=json.loads(metadata)
+            images.setdefault(str(metadata.get('batch_line')),{'asset_id':identifier,'width':width,'height':height,'seed':metadata.get('seed')})
+        lines=[]
+        for line,body,result in self.store.db.execute('SELECT line,body,result FROM batch_lines WHERE batch=? ORDER BY line',(number,)):
+            body=json.loads(body)
+            outcome=json.loads(result) if result else None
+            failed=bool(outcome and outcome.get('status_code',200)>=400)
+            found=images.get(str(line))
+            lines.append({'line':line,**{key:body.get(key) for key in ('sampler','scheduler','seed','steps','cfg_scale','guidance','width','height')},
+                          'state':'failed' if failed else 'done' if found else 'waiting',
+                          'error':((outcome.get('body') or {}).get('error') or {}).get('message','Generation failed.') if failed else None,
+                          **(found or {})})
+        batch=self.batches.store.get(number)
+        return JSONResponse({'id':number,'status':batch['status'] if batch else 'completed','lines':lines,
+                             'progress':{'stage':'queued'} if number in self.batches.image_waiting else self.progress.get(number)},
+                            headers={'cache-control':'no-store'})
 
     async def control(self,request,user):
         """Stop/pause/resume only the caller's existing image batch."""
@@ -886,6 +915,7 @@ class Front:
                 route('/mirrorwall/assets/{identifier}',self.asset,'DELETE'),
                 route('/mirrorwall/assets/{identifier}/content',self.asset),route('/mirrorwall/assets/{identifier}/thumbnail',self.asset),
                 route('/mirrorwall/jobs',self.start,'POST'),route('/mirrorwall/jobs/{identifier}',self.control,'POST'),
+                route('/mirrorwall/jobs/{identifier}/lines',self.job_lines),
                 route('/mirrorwall/preferences',self.preferences),route('/mirrorwall/preferences',self.preferences,'POST'),route('/mirrorwall/presets',self.preset,'POST'),
                 route('/mirrorwall/workflows',self.workflows),route('/mirrorwall/presets/{identifier}',self.preset_history),
                 route('/mirrorwall/presets/{identifier}',self.remove_preset,'DELETE'),

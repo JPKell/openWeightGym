@@ -50,7 +50,7 @@ def test_route_navigation_and_ability(site):
     assert found['section'] == 'Models' and found['active'] == '/models/image-workflows'
     models = next(group for group in found['groups'] if group['name'] == 'Models')
     labels = [label for label, _ in models['links']]
-    assert labels[labels.index('Images') + 1] == 'Image workflows'
+    assert labels[labels.index('Images') + 1:labels.index('Images') + 3] == ['Sampler comparison', 'Image workflows']
     only = next(group for group in navigation('/models/image-workflows', ['manage-workflows'], False)['groups'] if group['name'] == 'Models')
     assert only['links'] == [('Image workflows', '/models/image-workflows')]
     assert 'Image workflows' not in str(navigation('/models', ['manage-models'], False))

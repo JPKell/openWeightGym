@@ -125,7 +125,7 @@ phase (control images, tiled detail, masks, face detail) can be saved but not pu
 editor does not set LoRA strengths yet; a converted simple workflow notes them on the canvas.
 A step that fails stops the run and is named in the error, for example
 `Refine: That upscaler is not installed on this node.` A shared-residency model refuses a step
-whose CFG scale differs from its profile, or that uses advanced settings; use an exclusive model
+that uses advanced settings, or a CFG other than 1 when its profile was measured at CFG 1; use an exclusive model
 entry for those steps. Image generation does not list workflows yet; run them here or through the
 API.
 

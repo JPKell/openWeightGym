@@ -90,7 +90,9 @@
     $('steps-help').textContent = profile.family === 'flux2-klein' ? 'Distilled guidance is fixed. Use the selected workflow’s step count.' : 'Start with the workflow default; more steps increase render time.';
     $('prompt-help').textContent = spec.textOnly ? 'Put exact text in quotes and describe its placement. This profile generates from text only.' : spec.negative ? 'Describe the subject and style. Use the negative prompt for exclusions.' : 'Describe the subject, action, style and setting. Flux does not use negative prompts.';
     $('negative').disabled = !spec.negative;
-    $('cfg').disabled = !profile.exclusive;  // shared residency keeps its measured CFG; sampler and scheduler stay free
+    // A shared model measured at CFG 1 has no negative-prompt pass measured, so its CFG stays 1; any other may change it.
+    const cfgLocked = !profile.exclusive && Number(profile.defaults?.cfg_scale ?? spec.defaults.cfg_scale) === 1;
+    $('cfg').disabled = cfgLocked;
     $('guidance').disabled = !spec.guidance;
     $('width').step = $('height').step = SuiteImageProfiles.spec(profile.family).alignment;
     $('upscale').querySelectorAll('option').forEach(node => { node.disabled = Number(node.value) > (profile.limits?.max_upscale || (profile.upscaling ? 4 : 1)); });
@@ -119,9 +121,9 @@
         $('sweep-axis').value=draft.axis;$('sweep-values').value=draft.valuesList;
       } else { $('sweep').value='';$('sweep-enabled').checked=false; }
     }
-    if(!profile.exclusive)apply({cfg_scale:profile.defaults?.cfg_scale??spec.defaults.cfg_scale});
+    if(cfgLocked)apply({cfg_scale:1});
     const guidanceOption=$('sweep-axis').querySelector('[data-sweep-guidance]'); guidanceOption.disabled=!spec.guidance;
-    $('sweep-axis').querySelector('[data-sweep-cfg]').disabled=!spec.negative || !profile.exclusive;
+    $('sweep-axis').querySelector('[data-sweep-cfg]').disabled=!spec.negative || cfgLocked;
     if ($('sweep-axis').selectedOptions[0]?.disabled) $('sweep-axis').value='seed';
     renderPresets();
     const saved=drafts.get(modelName + ':' + activeTool);

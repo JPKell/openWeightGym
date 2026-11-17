@@ -1,0 +1,75 @@
+{% extends "frame.html" %}
+{% from 'parts.html' import page_header, alert, card, form_section, form_actions, section_title %}
+{# Sampler comparison: one prompt through every chosen scheduler × sampler, as one ordinary image job; results in a
+   grid with a zoom that shows the same region of every image. Behaviour in samplers.js; layout in samplers.css. #}
+{% block title %}Sampler comparison · Models · openWeightGym{% endblock %}
+{% block scripts %}
+<link rel="stylesheet" href="/mirrorwall-static/samplers.css?v=2">
+<script src="/mirrorwall-static/image-profiles.js?v=2" defer></script>
+<script src="/mirrorwall-static/samplers.js?v=1" defer></script>
+{% endblock %}
+{% block main %}
+<div id="samplers" data-samplers="{{ samplers|join(',') }}" data-schedulers="{{ schedulers|join(',') }}" data-limit="{{ limit }}">
+{% call page_header('Sampler comparison', back=('/models/images', 'Images'), help='/docs/model-guides/sampler-comparison') %}
+<label class="visually-hidden" for="sc-earlier">Earlier comparisons</label>
+<select id="sc-earlier" class="form-select form-select-sm sc-earlier"><option value="">Earlier comparisons…</option></select>
+{% endcall %}
+{% call alert('danger', role='alert', attrs={'id':'sc-error','hidden':''}) %}{% endcall %}
+<p id="sc-status" class="small text-secondary" role="status" aria-live="polite">Loading image models…</p>
+<div class="sc-layout">
+<form id="sc-form" class="sc-settings" novalidate>
+{% call card('Prompt and settings', hint='Every combination uses these settings and the same seed, so only the sampler and scheduler differ.') %}
+<div class="row g-3">
+{% call form_section('Model and prompt') %}
+<div class="col-12"><label class="form-label" for="sc-model">Image model</label><select id="sc-model" name="model" class="form-select" required></select>
+<small class="form-hint" id="sc-model-note"></small></div>
+<div class="col-12"><label class="form-label" for="sc-prompt">Prompt</label><textarea id="sc-prompt" name="prompt" class="form-control" rows="4" maxlength="24000" required></textarea></div>
+<div class="col-12" id="sc-negative-wrap"><label class="form-label" for="sc-negative">Negative prompt</label><textarea id="sc-negative" name="negative_prompt" class="form-control" rows="2" maxlength="24000"></textarea></div>
+{% endcall %}
+{% call form_section('Settings') %}
+<div class="col-6"><label class="form-label" for="sc-width">Width</label><input id="sc-width" name="width" type="number" class="form-control" min="256" step="16" value="1024" required></div>
+<div class="col-6"><label class="form-label" for="sc-height">Height</label><input id="sc-height" name="height" type="number" class="form-control" min="256" step="16" value="1024" required></div>
+<div class="col-6"><label class="form-label" for="sc-steps">Steps</label><input id="sc-steps" name="steps" type="number" class="form-control" min="1" step="1" required></div>
+<div class="col-6" id="sc-cfg-wrap"><label class="form-label" for="sc-cfg">CFG scale</label><input id="sc-cfg" name="cfg_scale" type="number" class="form-control" min="0" max="30" step="0.1" required></div>
+<div class="col-6" id="sc-guidance-wrap" hidden><label class="form-label" for="sc-guidance">Distilled guidance</label><input id="sc-guidance" name="guidance" type="number" class="form-control" min="0" max="20" step="0.1"></div>
+<div class="col-6"><label class="form-label" for="sc-seed">Seed</label><div class="input-group"><input id="sc-seed" name="seed" type="number" class="form-control" min="0" max="2147483647" step="1" required><button class="btn btn-outline-secondary" type="button" id="sc-new-seed" aria-label="Choose a new random seed">New</button></div></div>
+<div class="col-6"><label class="form-label" for="sc-n">Images per combination</label><input id="sc-n" name="n" type="number" class="form-control" min="1" max="4" step="1" value="1" required>
+<small class="form-hint">More than one adds the next seeds.</small></div>
+<div class="col-12"><small class="form-hint" id="sc-cfg-note" hidden></small></div>
+{% endcall %}
+</div>
+{% endcall %}
+{% for kind, title in (('scheduler', 'Schedulers'), ('sampler', 'Samplers')) %}
+{% set choice_actions %}<button type="button" class="btn btn-sm btn-outline-secondary" data-sc-all="{{ kind }}">All</button><button type="button" class="btn btn-sm btn-outline-secondary" data-sc-none="{{ kind }}">None</button>{% endset %}
+{% call card(title, hint=('Each scheduler is tried with every sampler.' if kind == 'scheduler' else 'Untick the ones you do not want.'), actions=choice_actions) %}
+<fieldset class="sc-choices" id="sc-{{ kind }}s"><legend class="visually-hidden">{{ title }} to try</legend>
+{% for value in (schedulers if kind == 'scheduler' else samplers) %}<label class="form-check sc-choice"><input class="form-check-input" type="checkbox" name="{{ kind }}" value="{{ value }}" checked><span class="form-check-label">{{ value }}</span></label>{% endfor %}
+</fieldset>
+{% endcall %}
+{% endfor %}
+{% call card() %}
+{% call form_actions(class_='border-0 pt-0 mt-0') %}
+<button class="btn btn-primary" type="submit" id="sc-run">Run comparison</button>
+<button class="btn btn-outline-secondary" type="button" id="sc-pause" hidden>Pause</button>
+<button class="btn btn-outline-danger" type="button" id="sc-stop" hidden>Stop</button>
+<span class="small text-secondary" id="sc-count" aria-live="polite"></span>
+{% endcall %}
+{% endcall %}
+</form>
+{% set viewer_tools %}<div class="sc-tools">
+<label class="form-label mb-0 small" for="sc-zoom">Zoom <output id="sc-zoom-value" for="sc-zoom">1×</output></label>
+<input id="sc-zoom" type="range" class="form-range sc-zoom" min="1" max="8" step="0.5" value="1">
+<label class="form-check form-check-inline mb-0 small"><input class="form-check-input" type="checkbox" id="sc-selected-only"><span class="form-check-label">Selected only</span></label>
+<label class="form-label mb-0 small" for="sc-size">Tile size</label>
+<select id="sc-size" class="form-select form-select-sm sc-size"><option value="small">Small</option><option value="medium" selected>Medium</option><option value="large">Large</option></select>
+</div>{% endset %}
+{% call card('Results', class_='sc-viewer', actions=viewer_tools, header_id='sc-viewer-title', attrs={'aria-labelledby': 'sc-viewer-title'}) %}
+<p class="small text-secondary" id="sc-viewer-help">Run a comparison or open an earlier one. With zoom above 1×, point at any image, or focus one and use the arrow keys: every image shows the same region. Tick the box under an image to select it for side-by-side comparison.</p>
+<div id="sc-grid" class="sc-grid" data-size="medium" aria-live="off"></div>
+{% endcall %}
+</div>
+</div>
+<template id="sc-group-template"><section class="sc-group">{{ section_title('', level=3, class_='sc-group-title', attrs={'data-title': ''}, wrapper_class='mb-2') }}<div class="sc-tiles" data-tiles></div></section></template>
+<template id="sc-tile-template"><figure class="sc-tile" data-state="waiting"><div class="sc-frame" tabindex="0" role="img"><img alt="" hidden draggable="false"><span class="sc-placeholder" data-placeholder>Waiting</span></div>
+<figcaption><label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-pick><span class="form-check-label"><strong data-sampler></strong> · <span data-scheduler></span></span></label><span class="small text-secondary d-block" data-detail></span></figcaption></figure></template>
+{% endblock %}
