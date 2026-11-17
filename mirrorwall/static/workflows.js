@@ -127,7 +127,11 @@
     const draft=drafts.get(key()) || baseline();
     $('workflow-fields').disabled=!selected || saving || loading;
     field('name').value=draft.name; field('name').maxLength=100; field('shared').checked=draft.published;
-    keys.forEach(name=>field(name).value=draft.settings[name] ?? '');
+    keys.forEach(name=>{
+      const input=field(name), value=String(draft.settings[name] ?? '');  // keep saved values a list no longer offers, e.g. dpmpp2m
+      if(input.tagName==='SELECT' && value && ![...input.options].some(option=>option.value===value)) input.add(new Option(value,value));
+      input.value=value;
+    });
     field('negative_prompt').value=draft.settings.negative_prompt || '';
     toggle('guidance',rules.guidance); toggle('cfg_scale',!video && rules.negative); toggle('strength',rules.strength && p.limits?.max_references!==0);
     toggle('reference_megapixels',!video && p.limits?.max_references!==0); toggle('upscale',Boolean(p.upscaling));

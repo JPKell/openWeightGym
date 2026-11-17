@@ -33,7 +33,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse,StreamingResponse
 from starlette.routing import Route
 
-from mirrorwall.requests import checked_request,MAX_REQUEST_BYTES
+from mirrorwall.requests import checked_request,native_extensions,MAX_REQUEST_BYTES
 from mirrorwall.telemetry import Meter,envelope
 
 Image.MAX_IMAGE_PIXELS=33554432
@@ -254,6 +254,7 @@ class Native:
                     await self.load_video_recipe()
                     return
                 if answer.status_code==200 and answer.json().get("data"):
+                    await self.read_capabilities()
                     return
             except httpx.HTTPError:
                 pass
@@ -336,9 +337,20 @@ class Native:
             self.model_catalog=None
         self.model_files.clear()
 
+    async def read_capabilities(self):
+        """Record the loaded server's sampler, scheduler and upscaler names; older builds may not report them."""
+        try:
+            answer=await self.client.get('/sdcpp/v1/capabilities')
+            self.capabilities=answer.json() if answer.status_code==200 else {}
+        except (httpx.HTTPError,ValueError):
+            self.capabilities={}
+
     async def generate(self,payload):
         """Yield progress/previews and the final image; never return before cancellation settles."""
         await self.start()
+        unsupported=unsupported_by_runtime(payload,self.capabilities)
+        if unsupported:
+            raise RuntimeError("This image runtime does not support "+unsupported+"; update the engine or choose another.")
         payload={**payload,'lora':[{**one,'path':self.lora_paths[one['path']]} for one in payload.get('lora',[])]}
         video=self.job['settings']['sdcpp'].get('mode')=='vid_gen'
         answer=await self.client.post("/sdcpp/v1/vid_gen" if video else "/sdcpp/v1/img_gen",json=payload)
@@ -470,11 +482,29 @@ class ReferenceCache:
         self.bytes+=len(value)
 
 
+def unsupported_by_runtime(payload,capabilities):
+    """Name the first requested sampler, scheduler or hires upscaler the native server did not list, if any."""
+    sample=payload.get('sample_params',{})
+    for kind,value,listed in (('sampler',sample.get('sample_method'),capabilities.get('samplers')),
+                              ('scheduler',sample.get('scheduler'),capabilities.get('schedulers')),
+                              ('hires upscaler',payload.get('hires',{}).get('upscaler'),
+                               [one.get('name') for one in capabilities.get('upscalers') or []] or None)):
+        if value and isinstance(listed,list) and value not in listed:
+            return f"the {kind} {value}"
+    features=capabilities.get('features') or {}
+    for feature,used,label in (('hires','hires' in payload,'a hires pass'),('vae_tiling','vae_tiling_params' in payload,'VAE tiling'),
+                               ('cache',payload.get('cache_mode','disabled')!='disabled','step caching')):
+        if used and features.get(feature) is False:
+            return label
+    return None
+
+
 async def workflow(job,asked,native,cache=None,owner=None):
     """Prepare immutable inputs once, generate a bounded image batch, then upscale outputs."""
     settings=job["settings"]
     options=settings["sdcpp"]
     resolved=checked_request(asked,settings)
+    extra_sample,extra_guidance,extra_top=native_extensions(resolved)
     start=time.monotonic()
     seed=resolved["seed"] if resolved["seed"]>=0 else secrets.randbelow(2**31-1)
     prepared=[]
@@ -522,7 +552,8 @@ async def workflow(job,asked,native,cache=None,owner=None):
                 "preview":"proj" if resolved.get("partial_images",0) or resolved.get('live_previews') else "none",
                 "preview_interval":options.get("preview_interval",1),
                 "sample_params":{"sample_steps":resolved["steps"],"sample_method":resolved["sampler"],"scheduler":resolved["scheduler"],
-                    "guidance":{"txt_cfg":resolved["cfg_scale"],"distilled_guidance":resolved["guidance"]}}}
+                    **extra_sample,"guidance":{"txt_cfg":resolved["cfg_scale"],"distilled_guidance":resolved["guidance"],**extra_guidance}},
+                **extra_top}
             if prepared:
                 if options["family"]=="sdxl":
                     payload.update(init_image=prepared[0],strength=resolved["strength"])

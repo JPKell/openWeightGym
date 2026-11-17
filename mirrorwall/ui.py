@@ -66,7 +66,8 @@ def routes(for_people, page, ask, model_api):
         from mirrorwall.video import FAMILIES, defaults, limits
         profiles={family:{'label':family,'defaults':defaults({'sdcpp':{'family':family}}),'limits':limits({})} for family in FAMILIES}
         return page(request, "mirrorwall_models.html", person, studio_manage=True,
-                    media_kind='video' if video else 'image',video_profiles=profiles if video else {})
+                    media_kind='video' if video else 'image',video_profiles=profiles if video else {},
+                    samplers=SAMPLERS,schedulers=SCHEDULERS)
 
     async def videos(request,person):
         """Render the private video Canvas with capability-filtered model and input controls."""

@@ -69,13 +69,122 @@ def encoded_image(value):
     return value
 
 
+def _number(value,label,lo,hi,integer=False):
+    if (type(value) is not int if integer else type(value) not in (int,float)) or not math.isfinite(value) or not lo<=value<=hi:
+        raise ValueError(f"{label} must be {'an integer' if integer else 'a number'} from {lo} to {hi}.")
+    return value
+
+
+def checked_advanced(value,result,settings,maximum):
+    """Validate the allowlisted native sampling extensions; families decide which ones apply."""
+    if not isinstance(value,dict):
+        raise ValueError("advanced must be an object.")
+    unknown=value.keys()-{"eta","flow_shift","shifted_timestep","img_cfg","slg","custom_sigmas","clip_skip","vae_tiling",
+                          "cache_mode","cache_option","hires"}
+    if unknown:
+        raise ValueError("Unsupported advanced settings: "+", ".join(sorted(unknown)))
+    family=(settings or {}).get("sdcpp",{}).get("family")
+    sdxl=family=="sdxl"
+    checked={}
+    if "eta" in value:
+        checked["eta"]=_number(value["eta"],"Eta",0,2)
+    if "flow_shift" in value:
+        if sdxl:
+            raise ValueError("Flow shift applies to flow-matching models, not SDXL.")
+        checked["flow_shift"]=_number(value["flow_shift"],"Flow shift",0,100)
+    if "shifted_timestep" in value:
+        if family and not sdxl:
+            raise ValueError("Shifted timestep applies to SDXL models.")
+        checked["shifted_timestep"]=_number(value["shifted_timestep"],"Shifted timestep",0,1000,True)
+    if "img_cfg" in value:
+        checked["img_cfg"]=_number(value["img_cfg"],"Image CFG scale",0,30)
+    if "clip_skip" in value:
+        if family and not sdxl:
+            raise ValueError("CLIP skip applies to SDXL models.")
+        checked["clip_skip"]=_number(value["clip_skip"],"CLIP skip",1,12,True)
+    if "slg" in value:
+        slg=value["slg"]
+        if sdxl:
+            raise ValueError("Skip-layer guidance applies to DiT models, not SDXL.")
+        if not isinstance(slg,dict) or slg.keys()-{"scale","layer_start","layer_end","layers"}:
+            raise ValueError("slg takes scale, layer_start, layer_end and layers.")
+        checked["slg"]={"scale":_number(slg.get("scale",0),"Skip-layer guidance scale",0,10),
+                        "layer_start":_number(slg.get("layer_start",.01),"Skip-layer start",0,1),
+                        "layer_end":_number(slg.get("layer_end",.2),"Skip-layer end",0,1)}
+        if checked["slg"]["layer_start"]>=checked["slg"]["layer_end"]:
+            raise ValueError("Skip-layer start must be before its end.")
+        if "layers" in slg:
+            layers=slg["layers"]
+            if not isinstance(layers,list) or not 1<=len(layers)<=16 or any(type(one) is not int or not 0<=one<=99 for one in layers):
+                raise ValueError("Skip layers must list 1–16 layer numbers from 0 to 99.")
+            checked["slg"]["layers"]=layers
+    if "custom_sigmas" in value:
+        sigmas=value["custom_sigmas"]
+        if (not isinstance(sigmas,list) or len(sigmas)!=result["steps"]+1
+                or any(type(one) not in (int,float) or not math.isfinite(one) or not 0<=one<=1000 for one in sigmas)
+                or any(later>earlier for earlier,later in zip(sigmas,sigmas[1:]))):
+            raise ValueError("Custom sigmas must list steps + 1 non-negative values from high to low.")
+        checked["custom_sigmas"]=[float(one) for one in sigmas]
+    if "vae_tiling" in value:
+        if type(value["vae_tiling"]) is not bool:
+            raise ValueError("vae_tiling must be true or false.")
+        checked["vae_tiling"]=value["vae_tiling"]
+    if "cache_option" in value and "cache_mode" not in value:
+        raise ValueError("cache_option needs a cache_mode.")
+    if "cache_mode" in value:
+        mode=value["cache_mode"]
+        if mode not in model.CACHE_MODES:
+            raise ValueError("cache_mode must be one of: "+", ".join(model.CACHE_MODES)+".")
+        if family and mode not in (model.UNET_CACHES if sdxl else model.DIT_CACHES):
+            raise ValueError(f"The {mode} cache does not apply to this model family.")
+        checked["cache_mode"]=mode
+        option=value.get("cache_option","")
+        if not isinstance(option,str) or not re.fullmatch(r"(?:[a-z_]+=-?[0-9.]+(?:,[a-z_]+=-?[0-9.]+){0,7})?",option):
+            raise ValueError("cache_option must be comma-separated name=number pairs.")
+        if option:
+            checked["cache_option"]=option
+    if "hires" in value:
+        hires=value["hires"]
+        if not isinstance(hires,dict) or hires.keys()-{"upscaler","scale","steps","denoising_strength"}:
+            raise ValueError("hires takes upscaler, scale, steps and denoising_strength.")
+        upscaler=hires.get("upscaler","Latent")
+        if upscaler not in model.HIRES_UPSCALERS:
+            raise ValueError("hires upscaler must be one of: "+", ".join(model.HIRES_UPSCALERS)+".")
+        scale=_number(hires.get("scale",2),"Hires scale",1,4)
+        width,height=round(result["width"]*scale/16)*16,round(result["height"]*scale/16)*16
+        if width>maximum["max_width"] or height>maximum["max_height"] or width*height>maximum["max_pixels"]:
+            raise ValueError("The hires pass would exceed this workflow's size limits.")
+        checked["hires"]={"upscaler":upscaler,"target_width":width,"target_height":height,
+                          "steps":_number(hires.get("steps",result["steps"]),"Hires steps",1,maximum["max_steps"],True),
+                          "denoising_strength":_number(hires.get("denoising_strength",.45),"Hires denoising strength",0,1)}
+    return checked
+
+
+def native_extensions(resolved):
+    """Native img_gen fields for a checked request's advanced settings."""
+    advanced=resolved.get("advanced") or {}
+    sample={key:advanced[key] for key in ("eta","flow_shift","shifted_timestep","custom_sigmas") if key in advanced}
+    guidance={key:advanced[key] for key in ("img_cfg","slg") if key in advanced}
+    top={}
+    if "clip_skip" in advanced:
+        top["clip_skip"]=advanced["clip_skip"]
+    if advanced.get("vae_tiling"):
+        top["vae_tiling_params"]={"enabled":True}
+    if "cache_mode" in advanced:
+        top.update(cache_mode=advanced["cache_mode"],cache_option=advanced.get("cache_option",""))
+    if "hires" in advanced:
+        top["hires"]={"enabled":True,**advanced["hires"]}
+    return sample,guidance,top
+
+
 def checked_request(asked,settings=None):
     """Normalize supported OpenAI fields and explicit openWeightGym image extensions."""
     if not isinstance(asked,dict):
         raise ValueError("Image request must be an object.")
     allowed={"model","prompt","negative_prompt","n","size","width","height","steps","seed","guidance","cfg_scale",
              "sampler","scheduler","references","image","mask","strength","loras","upscale","stream","partial_images",
-             "response_format","output_format","user","quality","background","moderation","metadata","live_previews","reference_megapixels","detail_resize"}
+             "response_format","output_format","user","quality","background","moderation","metadata","live_previews","reference_megapixels","detail_resize",
+             "advanced"}
     unknown=asked.keys()-allowed
     if unknown:
         raise ValueError("Unsupported image settings: "+", ".join(sorted(unknown)))
@@ -108,8 +217,11 @@ def checked_request(asked,settings=None):
         if type(value) not in (int,float) or not math.isfinite(value) or not lo<=value<=hi:
             raise ValueError(f"Invalid {key}.")
         result[key]=value
+    result["sampler"]=model.native_sampler(result["sampler"])
     if result["sampler"] not in model.SAMPLERS or result["scheduler"] not in model.SCHEDULERS:
         raise ValueError("Unsupported sampler or scheduler.")
+    if "advanced" in asked:
+        result["advanced"]=checked_advanced(asked["advanced"],result,settings,maximum)
     if type(result.get("stream",False)) is not bool:
         raise ValueError("stream must be true or false.")
     if type(result.get("partial_images",0)) is not int or not 0<=result.get("partial_images",0)<=3:
@@ -183,6 +295,10 @@ def checked_request(asked,settings=None):
         ordinary=model.defaults(settings)
         if any(result[key]!=ordinary[key] for key in ('sampler','scheduler','cfg_scale')):
             raise ValueError('A shared-residency workflow pins its sampler, scheduler and CFG scale; edit the profile or use an exclusive model entry.')
+        if result.get('advanced'):
+            raise ValueError('Advanced sampling settings need an exclusive model entry; shared-residency workflows keep their measured profile.')
+    if result.get('advanced',{}).get('hires') and (result.get('detail_resize') or result.get('upscale',1)>1):
+        raise ValueError('Use the hires pass or Upscale / Resize & add detail, not both.')
     loras=result.get("loras",{})
     if not isinstance(loras,dict) or len(loras)>16:
         raise ValueError("LoRAs must be named configured adapters and strengths.")

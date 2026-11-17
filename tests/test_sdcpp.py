@@ -543,3 +543,79 @@ def test_render_export_drops_inherited_reference_color_profile_and_exif():
     assert result.info
     with Image.open(io.BytesIO(png_bytes(result))) as exported:
         assert not exported.info and exported.getpixel((0,0))==(0,0,255)
+
+
+def test_every_native_sampler_and_scheduler_is_accepted_and_earlier_names_map_to_native(image_settings):
+    from mirrorwall import graph
+    from mirrorwall.runtime import unsupported_by_runtime
+    assert graph.NATIVE_SAMPLERS==model.SAMPLERS and len(model.SAMPLERS)==21 and len(model.SCHEDULERS)==16
+    for sampler in model.SAMPLERS:
+        assert checked_request({'model':'flux2-dev','prompt':'A boat','sampler':sampler},image_settings)['sampler']==sampler
+    for scheduler in model.SCHEDULERS:
+        checked_request({'model':'flux2-dev','prompt':'A boat','scheduler':scheduler},image_settings)
+    # Earlier saved names reached the native server unchanged and silently became its default sampler.
+    assert checked_request({'model':'flux2-dev','prompt':'A boat','sampler':'dpmpp2m'},image_settings)['sampler']=='dpm++2m'
+    settings={**image_settings,'sdcpp':{**image_settings['sdcpp'],'defaults':{'sampler':'dpmpp2s_a'}}}
+    assert model.defaults(settings)['sampler']=='dpm++2s_a'
+    with pytest.raises(ValueError,match='sampler'):
+        checked_request({'model':'flux2-dev','prompt':'A boat','sampler':'dpm++3m'},image_settings)
+    capabilities={'samplers':['euler','dpm++2m'],'schedulers':['discrete'],'upscalers':[{'name':'Latent'}],'features':{'hires':True,'cache':False}}
+    ask=lambda **extra:{'sample_params':{'sample_method':'euler','scheduler':'discrete'},**extra}
+    assert unsupported_by_runtime(ask(),capabilities) is None
+    assert unsupported_by_runtime({'sample_params':{'sample_method':'lms','scheduler':'discrete'}},capabilities)=='the sampler lms'
+    assert unsupported_by_runtime(ask(hires={'upscaler':'Lanczos'}),capabilities)=='the hires upscaler Lanczos'
+    assert unsupported_by_runtime(ask(cache_mode='easycache'),capabilities)=='step caching'
+    assert unsupported_by_runtime(ask(cache_mode='disabled'),capabilities) is None
+    assert unsupported_by_runtime(ask(),{}) is None  # older builds report nothing; the request validator still applies
+
+
+@pytest.mark.parametrize('family,advanced,message',[
+    ('flux2-dev',{'flow_shift':101},'Flow shift'),('sdxl',{'flow_shift':3},'flow-matching'),
+    ('flux2-dev',{'clip_skip':2},'SDXL'),('sdxl',{'clip_skip':2.5},'integer'),('flux2-dev',{'shifted_timestep':500},'SDXL'),
+    ('flux2-dev',{'eta':float('nan')},'Eta'),('flux2-dev',{'img_cfg':-1},'Image CFG'),
+    ('flux2-dev',{'custom_sigmas':[1,0.5,0]},'steps \\+ 1'),('flux2-dev',{'custom_sigmas':[0.1]+[1]*28},'high to low'),
+    ('flux2-dev',{'cache_mode':'ucache'},'does not apply'),('sdxl',{'cache_mode':'easycache'},'does not apply'),
+    ('flux2-dev',{'cache_option':'threshold=1'},'cache_mode'),('flux2-dev',{'cache_mode':'easycache','cache_option':'x; rm'},'name=number'),
+    ('sdxl',{'slg':{'scale':2}},'DiT'),('flux2-dev',{'slg':{'layer_start':.5,'layer_end':.2}},'before'),
+    ('flux2-dev',{'slg':{'layers':list(range(17))}},'1–16'),('flux2-dev',{'hires':{'scale':4}},'size limits'),
+    ('flux2-dev',{'hires':{'upscaler':'Model'}},'upscaler'),('flux2-dev',{'hires':{'denoise':.4}},'takes'),
+    ('flux2-dev',{'backend':'cpu'},'Unsupported advanced'),('flux2-dev',[],'object'),
+])
+def test_advanced_sampling_is_allowlisted_bounded_and_family_aware(image_settings,family,advanced,message):
+    settings={**image_settings,'sdcpp':{**image_settings['sdcpp'],'family':family}}
+    with pytest.raises(ValueError,match=message):
+        checked_request({'model':'m','prompt':'A boat','size':'1024x1024','advanced':advanced},settings)
+
+
+def test_advanced_sampling_needs_an_exclusive_entry_and_excludes_other_upscaling(image_settings):
+    shared={**image_settings,'alone':False}
+    with pytest.raises(ValueError,match='exclusive'):
+        checked_request({'model':'m','prompt':'A boat','advanced':{'eta':.5}},shared)
+    checked_request({'model':'m','prompt':'A boat','advanced':{}},shared)
+    with pytest.raises(ValueError,match='not both'):
+        checked_request({'model':'m','prompt':'A boat','size':'512x512','upscale':2,'advanced':{'hires':{}}},
+                        {**image_settings,'sdcpp':{**image_settings['sdcpp'],'upscaler':image_settings['sdcpp']['components']['vae']}})
+
+
+def test_advanced_sampling_reaches_the_native_request(image_settings):
+    native=FakeNative();job=private_job(image_settings)
+    advanced={'eta':.4,'flow_shift':3.5,'img_cfg':2,'custom_sigmas':[1,.75,.5,.25,0],'vae_tiling':True,
+              'cache_mode':'easycache','cache_option':'threshold=0.2','slg':{'scale':2.5,'layers':[7,8,9]},
+              'hires':{'upscaler':'Latent (bicubic)','scale':1.5,'steps':6,'denoising_strength':.4}}
+    with TestClient(create_app(job,native)) as client:
+        headers={'authorization':'Bearer '+job['token']}
+        response=client.post('/v1/images/generations',headers=headers,json={
+            'model':'flux2-dev','prompt':'A red boat','size':'512x512','steps':4,'sampler':'dpmpp2m','scheduler':'karras','advanced':advanced})
+        assert response.status_code==200,response.text
+        payload=native.payloads[0]
+        sample=payload['sample_params']
+        assert sample['sample_method']=='dpm++2m' and sample['scheduler']=='karras' and sample['sample_steps']==4
+        assert sample['eta']==.4 and sample['flow_shift']==3.5 and sample['custom_sigmas']==[1,.75,.5,.25,0]
+        assert sample['guidance']['img_cfg']==2 and sample['guidance']['txt_cfg']==1
+        assert sample['guidance']['slg']=={'scale':2.5,'layer_start':.01,'layer_end':.2,'layers':[7,8,9]}
+        assert payload['vae_tiling_params']=={'enabled':True}
+        assert payload['cache_mode']=='easycache' and payload['cache_option']=='threshold=0.2'
+        assert payload['hires']=={'enabled':True,'upscaler':'Latent (bicubic)','target_width':768,'target_height':768,'steps':6,'denoising_strength':.4}
+        assert 'clip_skip' not in payload and 'shifted_timestep' not in sample
+        client.post('/v1/images/generations',headers=headers,json={'model':'flux2-dev','prompt':'Plain','size':'256x256'})
+        assert native.payloads[1]['cache_mode']=='disabled' and 'hires' not in native.payloads[1]

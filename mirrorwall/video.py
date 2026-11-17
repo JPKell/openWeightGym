@@ -140,6 +140,7 @@ def checked_request(asked, settings=None, *, capabilities=None, account_limits=N
             number(result[key],key,lo,hi)
     if 'high_noise_steps' in result:
         number(result['high_noise_steps'],'high_noise_steps',1,maximum['max_steps'],integer=True)
+    result['sampler']=model.native_sampler(result['sampler'])
     if result['sampler'] not in model.SAMPLERS or result['scheduler'] not in model.SCHEDULERS:
         raise ValueError('Unsupported video sampler or scheduler.')
     if not isinstance(result['negative_prompt'],str) or len(result['negative_prompt'])>24000:
@@ -259,7 +260,7 @@ def check_profile(name, settings, cards):
 
 def native_payload(resolved, settings):
     """Translate normalized public fields into an allowlisted native video request."""
-    sample={'sample_steps':resolved['steps'],'sample_method':resolved['sampler'].replace('dpmpp','dpm++'),
+    sample={'sample_steps':resolved['steps'],'sample_method':model.native_sampler(resolved['sampler']),
             'scheduler':resolved['scheduler'],'guidance':{'txt_cfg':resolved['guidance']}}
     if 'flow_shift' in resolved:
         sample['flow_shift']=resolved['flow_shift']

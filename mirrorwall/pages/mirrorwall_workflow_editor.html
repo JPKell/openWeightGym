@@ -14,8 +14,8 @@
 {% endcall %}
 {% call form_section('Sampling') %}
 {{ field('workflow-steps','Steps','number',min=1,max=200) }}{{ field('workflow-seed','Seed · −1 is random','number',min=-1,max=2147483647) }}
-{{ select('workflow-sampler','Sampler',['euler','euler_a','heun','dpm2','dpmpp2s_a','dpmpp2m','dpmpp2mv2','lcm','ipndm','ipndm_v']) }}
-{{ select('workflow-scheduler','Scheduler',['flux2','discrete','karras','exponential','ays','simple','smoothstep','sgm_uniform','flux']) }}
+{{ select('workflow-sampler','Sampler',samplers) }}
+{{ select('workflow-scheduler','Scheduler',schedulers) }}
 {{ field('workflow-guidance','Guidance','number',min=0,max=20,step=0.1) }}{{ field('workflow-cfg_scale','CFG scale','number',min=0,max=30,step=0.1) }}
 {% endcall %}
 {% call form_section('Reference images') %}

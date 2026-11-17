@@ -5,14 +5,14 @@ Images, masks, text and settings pass between steps; latents never leave a nativ
 (see docs/advanced-workflow-plan.md).
 """
 
-# Every sampler and scheduler of the pinned stable-diffusion.cpp revision, by native name.
-NATIVE_SAMPLERS = ('euler', 'euler_a', 'heun', 'dpm2', 'dpm++2s_a', 'dpm++2m', 'dpm++2mv2', 'ipndm', 'ipndm_v',
-                   'lcm', 'ddim_trailing', 'tcd', 'res_multistep', 'res_2s', 'er_sde', 'euler_cfg_pp',
-                   'euler_a_cfg_pp', 'euler_ge', 'dpm++2m_sde', 'dpm++2m_sde_bt', 'lms')
-NATIVE_SCHEDULERS = ('discrete', 'karras', 'exponential', 'ays', 'gits', 'sgm_uniform', 'simple', 'smoothstep',
-                     'kl_optimal', 'lcm', 'bong_tangent', 'ltx2', 'logit_normal', 'flux2', 'flux', 'beta')
-CACHE_MODES = ('off', 'ucache', 'easycache', 'dbcache', 'taylorseer', 'cache-dit', 'spectrum')
-HIRES_UPSCALERS = ('Latent', 'Latent (bicubic)', 'Lanczos', 'Model upscaler')
+from mirrorwall import model as _model
+
+# Every sampler and scheduler of the pinned stable-diffusion.cpp revision, by native name;
+# the request validator and the editor share them.
+NATIVE_SAMPLERS = _model.SAMPLERS
+NATIVE_SCHEDULERS = _model.SCHEDULERS
+CACHE_MODES = ('off',) + _model.CACHE_MODES
+HIRES_UPSCALERS = _model.HIRES_UPSCALERS  # model upscaling is the separate Upscale step
 
 PORT_TYPES = {
     'text': 'Text', 'model': 'Model', 'image': 'Image', 'mask': 'Mask',
@@ -60,14 +60,16 @@ SAMPLER_FIELDS = [
     _field('guidance', 'Distilled guidance', 'number', 4, min=0, max=20, step=0.1, family='guidance', overridable=True),
     _field('strength', 'Strength (denoise)', 'number', 0.35, min=0, max=1, step=0.01, needs='init', overridable=True),
     _field('flow_shift', 'Flow shift', 'number', None, min=0, max=100, step=0.1, advanced=True, overridable=True),
-    _field('eta', 'Eta', 'number', None, min=0, max=1, step=0.01, advanced=True),
-    _field('clip_skip', 'CLIP skip', 'number', None, min=1, max=12, step=1, advanced=True),
+    _field('eta', 'Eta', 'number', None, min=0, max=2, step=0.01, advanced=True),
+    _field('img_cfg', 'Image CFG scale', 'number', None, min=0, max=30, step=0.1, advanced=True),
+    _field('shifted_timestep', 'Shifted timestep (SDXL)', 'number', None, min=0, max=1000, step=1, advanced=True),
+    _field('clip_skip', 'CLIP skip (SDXL)', 'number', None, min=1, max=12, step=1, advanced=True),
     _field('cache_mode', 'Step cache', 'choice', 'off', choices=list(CACHE_MODES), advanced=True),
     _field('vae_tiling', 'VAE tiling', 'toggle', False, advanced=True),
     _field('hires', 'Hires pass', 'toggle', False, advanced=True),
     _field('hires_upscaler', 'Hires upscaler', 'choice', 'Latent', choices=list(HIRES_UPSCALERS), needs='hires', advanced=True),
     _field('hires_scale', 'Hires scale', 'number', 1.5, min=1, max=4, step=0.05, needs='hires', advanced=True, overridable=True),
-    _field('hires_steps', 'Hires steps', 'number', 14, min=1, max=100, step=1, needs='hires', advanced=True, overridable=True),
+    _field('hires_steps', 'Hires steps', 'number', 14, min=1, max=200, step=1, needs='hires', advanced=True, overridable=True),
     _field('hires_denoise', 'Hires denoise', 'number', 0.38, min=0, max=1, step=0.01, needs='hires', advanced=True, overridable=True),
 ]
 
@@ -289,3 +291,4 @@ def catalogue():
     """Everything the editor needs, as one JSON-ready object."""
     return {'components': COMPONENTS, 'order': list(COMPONENTS), 'port_types': PORT_TYPES, 'families': FAMILIES, 'defaults': DEFAULTS,
             'samplers': list(NATIVE_SAMPLERS), 'schedulers': list(NATIVE_SCHEDULERS), 'limits': LIMITS}
+

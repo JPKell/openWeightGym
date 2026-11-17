@@ -63,6 +63,35 @@ and the error reports how many succeeded.
 
 Choose **Resize & add detail**, select an uploaded or saved source and choose the final size. This needs an exclusive SDXL source-image workflow. Enlargement requires the configured AI upscaler; its failure stops the job. The original source remains available. Review changed fine details before using the new image.
 
+## Samplers and advanced sampling {#sampling}
+
+**Sampler** and **Scheduler** list every method of the installed native engine: 21 samplers
+(Euler, DPM++ 2M, DPM++ 2M SDE, ER-SDE, LCM, TCD, res_multistep and others) and 16 schedulers
+(discrete, Karras, exponential, simple, SGM uniform, beta, Flux and others). Saved workflows
+that still use the earlier names `dpmpp2s_a`, `dpmpp2m` and `dpmpp2mv2` run as `dpm++2s_a`,
+`dpm++2m` and `dpm++2mv2`. An engine that does not report a requested method refuses the job;
+it no longer falls back to its default.
+
+API callers of an exclusive model entry can add an `advanced` object to
+`/v1/images/generations`. Shared-residency entries keep their measured profile and refuse it.
+
+| Field | Range | Applies to |
+|---|---|---|
+| `eta` | 0–2 | Ancestral and SDE samplers |
+| `flow_shift` | 0–100 | Flow-matching families (Flux, Qwen, Krea, MOSS); not SDXL |
+| `shifted_timestep`, `clip_skip` | 0–1000; 1–12 (integers) | SDXL only |
+| `img_cfg` | 0–30 | Image guidance for reference editing |
+| `slg` | `scale` 0–10, `layer_start` < `layer_end` (0–1), optional `layers` (1–16 numbers) | DiT families; not SDXL |
+| `custom_sigmas` | `steps` + 1 values, from high to low | Replaces the scheduler's noise levels |
+| `vae_tiling` | true/false | Lower decode memory for large images |
+| `cache_mode`, `cache_option` | `ucache`/`spectrum` for SDXL; `easycache`, `dbcache`, `taylorseer`, `cache-dit`, `spectrum` for the others; options such as `threshold=0.2` | Faster steps with some loss of detail |
+| `hires` | `upscaler` (Latent variants, Lanczos, Nearest), `scale` 1–4, `steps`, `denoising_strength` 0–1 | A second pass at the larger size within the model's limits; not combined with Upscale or Resize & add detail |
+
+```json
+{"model": "sdxl-photo", "prompt": "A lighthouse at dusk", "steps": 28, "sampler": "dpm++2m", "scheduler": "karras",
+ "advanced": {"hires": {"scale": 1.5, "steps": 14, "denoising_strength": 0.38}, "vae_tiling": true}}
+```
+
 ## Limits and troubleshooting
 
 Reference count, preparation size and output choices depend on the selected workflow. A reference marked **Too small** needs a suitable upscaler or a larger source. A **Not used** reference is outside that workflow's supported inputs. **Generate** stays disabled while inputs are incompatible.

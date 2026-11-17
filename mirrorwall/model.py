@@ -9,8 +9,23 @@ NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}")
 OUR_FLAGS = frozenset()
 FAMILIES = ("flux2-klein", "flux2-dev", "sdxl", "qwen-image", "qwen-image-2.1", "moss-image", "krea2")
 SPLITS = ("single", "components", "layer", "row")
-SAMPLERS = ("euler", "euler_a", "heun", "dpm2", "dpmpp2s_a", "dpmpp2m", "dpmpp2mv2", "lcm", "ipndm", "ipndm_v")
-SCHEDULERS = ("flux2", "discrete", "karras", "exponential", "ays", "simple", "smoothstep", "sgm_uniform", "flux")
+# Native stable-diffusion.cpp names (it silently falls back to its default for unknown names).
+SAMPLERS = ("euler", "euler_a", "heun", "dpm2", "dpm++2s_a", "dpm++2m", "dpm++2mv2", "ipndm", "ipndm_v", "lcm",
+            "ddim_trailing", "tcd", "res_multistep", "res_2s", "er_sde", "euler_cfg_pp", "euler_a_cfg_pp", "euler_ge",
+            "dpm++2m_sde", "dpm++2m_sde_bt", "lms")
+SCHEDULERS = ("discrete", "karras", "exponential", "ays", "gits", "sgm_uniform", "simple", "smoothstep", "kl_optimal",
+              "lcm", "bong_tangent", "ltx2", "logit_normal", "flux2", "flux", "beta")
+SAMPLER_ALIASES = {"dpmpp2s_a": "dpm++2s_a", "dpmpp2m": "dpm++2m", "dpmpp2mv2": "dpm++2mv2"}  # earlier saved names
+CACHE_MODES = ("easycache", "ucache", "dbcache", "taylorseer", "cache-dit", "spectrum")
+UNET_CACHES = ("ucache", "spectrum")  # SDXL is a UNet; the others are DiT block caches
+DIT_CACHES = ("easycache", "dbcache", "taylorseer", "cache-dit", "spectrum")
+HIRES_UPSCALERS = ("Latent", "Latent (nearest)", "Latent (nearest-exact)", "Latent (antialiased)", "Latent (bicubic)",
+                   "Latent (bicubic antialiased)", "Lanczos", "Nearest")
+
+
+def native_sampler(name):
+    """Map earlier saved sampler names to the native spelling; other values pass through for validation."""
+    return SAMPLER_ALIASES.get(name, name) if isinstance(name, str) else name
 
 
 def path(value, label):
@@ -37,7 +52,8 @@ def defaults(settings):
     return {"width":1024,"height":1024,"steps":50 if qwen or moss else 28 if dev or sdxl else 20 if krea else 6,
             "guidance":4.0 if dev else 1.0,"cfg_scale":6.0 if qwen21 else 4.0 if qwen else 3.0 if moss else 3.5 if krea else 7.0 if sdxl else 1.0,
             "sampler":"euler","scheduler":"flux" if qwen21 else "discrete" if sdxl or qwen or moss or krea else "flux2",
-            "seed":-1,"n":1,"upscale":1,**options.get("defaults",{})}
+            "seed":-1,"n":1,"upscale":1,**options.get("defaults",{}),
+            **({"sampler":native_sampler(options["defaults"]["sampler"])} if "sampler" in options.get("defaults",{}) else {})}
 
 
 def limits(settings):
