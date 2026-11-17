@@ -305,7 +305,7 @@ def test_private_image_runtime_streams_previews_and_resolved_seeds(image_setting
 
 
 @pytest.mark.parametrize('family,cfg,scheduler,alignment',[
-    ('qwen-image',4,'discrete',16),('qwen-image-2.1',6,'flux',32),('moss-image',3,'discrete',16)])
+    ('qwen-image',4,'discrete',16),('qwen-image-2.1',6,'flux',32),('moss-image',3,'discrete',16),('krea2',3.5,'discrete',16)])
 def test_text_image_generation_keeps_native_sampling_negative_prompt_and_family_geometry(image_settings,family,cfg,scheduler,alignment):
     from copy import deepcopy
     settings=deepcopy(image_settings)
@@ -333,7 +333,7 @@ def test_text_image_generation_keeps_native_sampling_negative_prompt_and_family_
         assert native.payloads[0]['negative_prompt']=='blur'
         assert native.payloads[0]['sample_params']['scheduler']==scheduler
         assert native.payloads[0]['sample_params']['guidance']['txt_cfg']==cfg
-        assert native.payloads[0]['sample_params']['sample_steps']==50
+        assert native.payloads[0]['sample_params']['sample_steps']==(20 if family=='krea2' else 50)
         assert 'ref_images' not in native.payloads[0]
     with pytest.raises(ValueError,match='reference'):
         checked_request({'model':'qwen','prompt':'Edit','references':['eA==']},settings)

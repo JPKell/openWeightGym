@@ -75,7 +75,7 @@
       const button=template('model-option'); button.dataset.model=m.id; button.setAttribute('aria-pressed',String(m===selected));
       if(m.node) button.dataset.node=m.node;
       text(button,'[data-name]',m.id); text(button,'[data-detail]',[Profiles.spec(m.image_workflow?.family).label,m.node].filter(Boolean).join(' · '));
-      text(button,'.model-monogram',m.image_workflow?.family==='moss-image'?'M':m.image_workflow?.family?.startsWith('qwen')?'Q':m.image_workflow?.family==='sdxl'?'SD':'F');
+      text(button,'.model-monogram',m.image_workflow?.family==='moss-image'?'M':m.image_workflow?.family==='krea2'?'K':m.image_workflow?.family?.startsWith('qwen')?'Q':m.image_workflow?.family==='sdxl'?'SD':'F');
       const count=library.presets.filter(row=>row.model_id && m.model_id?row.model_id===m.model_id:row.model===m.id).length;
       text(button,'[data-count]',count); button.onclick=()=>select(m); button.disabled=saving || loading;
       $('model-list').append(button);

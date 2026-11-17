@@ -26,6 +26,8 @@ LABELS.update({'qwen-image':'Qwen Image (original / 2512)', 'qwen-image-2.1':'Qw
 LABELS.update({'moss-image': 'MOSS-Image (Base / SFT)', 'moss-image-base': 'MOSS-Image Base',
                'moss-image-sft': 'MOSS-Image SFT', 'qwen3.5-9b': 'Qwen3.5 9B text encoder',
                'qwen3.5-tokenizer': 'Qwen3.5 tokenizer (JSON)'})
+LABELS.update({'krea2': 'Krea 2 (Raw / Turbo)', 'krea2-raw': 'Krea 2 Raw', 'krea2-turbo': 'Krea 2 Turbo',
+               'qwen3-vl-4b': 'Qwen3-VL 4B text encoder'})
 # Where to get each missing part: a repository and file the Hugging Face page can bring down.
 GET = {"klein-4b": ("leejet/FLUX.2-klein-4B-GGUF", "flux-2-klein-4b-Q8_0.gguf"),
        "klein-9b": ("leejet/FLUX.2-klein-9B-GGUF", "flux-2-klein-9b-Q4_0.gguf"),
@@ -47,6 +49,10 @@ GET.update({'moss-image-base': ('leejet/MOSS-Image-Base-GGUF', 'MOSS-Image-Base-
             'moss-image-sft': ('leejet/MOSS-Image-SFT-GGUF', 'MOSS-Image-SFT-Q4_K.gguf'),
             'qwen3.5-9b': ('unsloth/Qwen3.5-9B-GGUF', 'Qwen3.5-9B-Q4_K_M.gguf'),
             'qwen3.5-tokenizer': ('OpenMOSS-Team/MOSS-Image-Base', 'tokenizer/tokenizer.json')})
+GET.update({'krea2-raw': ('realrebelai/KREA-2_GGUFs', 'BASE/Krea-2-Base-Q4_K_M.gguf'),
+            'krea2-turbo': ('realrebelai/KREA-2_GGUFs', 'TURBO/Krea-2-Turbo-Q4_K_M.gguf'),
+            'qwen3-vl-4b': ('Qwen/Qwen3-VL-4B-Instruct-GGUF', 'Qwen3VL-4B-Instruct-Q4_K_M.gguf'),
+            'wan2.1-vae': ('Comfy-Org/Wan_2.1_ComfyUI_repackaged', 'split_files/vae/wan_2.1_vae.safetensors')})
 SLOTS = (("diffusion", "Diffusion weights"), ("text_encoder", "Text encoder"), ("vae", "VAE"),
          ("clip_l", "CLIP L"), ("clip_g", "CLIP G"), ("upscaler", "Image upscaler"), ("tokenizer", "Tokenizer JSON"))
 FORMATS = (".gguf", ".safetensors", ".pth", ".json")
@@ -96,6 +102,8 @@ def classify(shapes):
             and flat.get('text_embedder.proj.weight') == (3072, 4096)
             and any(name.startswith('layers.') for name in flat)):
         return 'diffusion', 'moss-image', 'moss-image'
+    if 'txtfusion.projector.weight' in flat or 'text_fusion.projector.weight' in flat:
+        return 'diffusion', 'krea2', 'krea2'  # Raw and Turbo share one architecture
     if 'txt_in.text_norm.weight' in flat:
         return 'diffusion','qwen-image-2.1','qwen-image-2.1'
     if 'transformer_blocks.0.img_mod.1.weight' in flat and flat.get('img_in.weight',(0,0))[1] == 64:
@@ -132,8 +140,8 @@ def classify(shapes):
         if vocabulary==152064 and width==3584:
             vision=any(name.startswith(('model.visual.','visual.','model.language_model.','language_model.')) for name in names)
             return 'text_encoder',None,'qwen2.5-vl-7b' if vision else 'qwen2.5-7b'
-        if width==4096 and any(name.startswith(('model.visual.','visual.','model.language_model.','language_model.')) for name in names):
-            return 'text_encoder',None,'qwen3-vl-8b'
+        if width in (2560,4096) and any(name.startswith(('model.visual.','visual.','model.language_model.','language_model.')) for name in names):
+            return 'text_encoder',None,'qwen3-vl-4b' if width==2560 else 'qwen3-vl-8b'
         if vocabulary in (151936, 151669):
             return "text_encoder", None, {2560: "qwen3-4b", 4096: "qwen3-8b"}.get(width, f"qwen-{width}")
         if vocabulary == 131072 and width == 5120:
@@ -226,12 +234,14 @@ def _identified(path, modified, size):
         if file.suffix.lower() == '.json':
             return identify_tokenizer(file)
         kind, family, variant = classify(shapes_of(file))
-        if file.suffix.lower()=='.gguf' and kind=='text_encoder' and variant in ('qwen2.5-7b','qwen3-8b','llm-5120'):
+        if file.suffix.lower()=='.gguf' and kind=='text_encoder' and variant in ('qwen2.5-7b','qwen3-4b','qwen3-8b','llm-5120'):
             architecture=read_metadata(str(file)).get('general.architecture')
             if variant=='qwen2.5-7b' and architecture=='qwen2vl':
                 variant='qwen2.5-vl-7b'
             elif variant=='qwen3-8b' and architecture=='qwen3vl':
                 variant='qwen3-vl-8b'
+            elif variant=='qwen3-4b' and architecture=='qwen3vl':
+                variant='qwen3-vl-4b'
             elif variant=='llm-5120' and architecture=='qwen3vl':
                 variant='qwen3-vl-32b'
     except (OSError, ValueError, KeyError, IndexError, TypeError, struct.error):
@@ -323,6 +333,10 @@ def needs(family, variant):
                 'vae': (True, 'vae', 'flux2-vae', 'MOSS-Image uses the Flux 2 VAE (32 latent channels).'),
                 'tokenizer': (True, 'tokenizer', 'qwen3.5-tokenizer', 'Supply the external tokenizer/tokenizer.json from MOSS-Image; the embedded Qwen vocabulary is incompatible.'),
                 'clip_l': None, 'clip_g': None, 'upscaler': upscaler}
+    if family == 'krea2':
+        return {'text_encoder': (True, 'text_encoder', 'qwen3-vl-4b', 'Krea 2 uses Qwen3-VL 4B, not the text-only Qwen3 4B used by Flux 2 klein.'),
+                'vae': (True, 'vae', 'wan2.1-vae', 'Krea 2 decodes with the Wan 2.1 VAE (16 latent channels); the Comfy Krea 2 bundle ships it as qwen_image_vae.'),
+                'clip_l': None, 'clip_g': None, 'upscaler': upscaler}
     if family in ('qwen-image','qwen-image-2.1'):
         encoder='qwen3-vl-8b' if family=='qwen-image-2.1' else 'qwen2.5-vl-7b'
         vae='qwen-image-2.1-vae' if family=='qwen-image-2.1' else 'qwen-image-vae'
@@ -379,9 +393,9 @@ def check(settings, folder, roots=None, *, inventory=None):
         expected_kind, expected = (rule[1], rule[2]) if rule else (None, None)
         get = GET.get(expected or ("upscaler" if slot == "upscaler" else ""))
         if slot == "diffusion" and family in ("flux1", "sd1",'qwen-image-layered'):
-            entry["status"], entry["message"] = "wrong", found["label"] + ": Mirror Wall runs Flux 2 klein, Flux 2 Dev and SDXL, plus Qwen Image and MOSS-Image text-to-image profiles."
+            entry["status"], entry["message"] = "wrong", found["label"] + ": Mirror Wall runs Flux 2 klein, Flux 2 Dev and SDXL, plus Qwen Image, MOSS-Image and Krea 2 text-to-image profiles."
         elif slot == "diffusion" and found and found["kind"] == "diffusion" and not variant:
-            entry["status"], entry["message"] = "wrong", "Diffusion weights of an unrecognized size; Mirror Wall knows Flux 2 klein 4B and 9B, Flux 2 Dev, SDXL, Qwen Image, Qwen Image 2.1 and MOSS-Image."
+            entry["status"], entry["message"] = "wrong", "Diffusion weights of an unrecognized size; Mirror Wall knows Flux 2 klein 4B and 9B, Flux 2 Dev, SDXL, Qwen Image, Qwen Image 2.1, MOSS-Image and Krea 2."
         elif found and found["kind"] in ("missing", "unreadable"):
             entry["status"], entry["message"] = "wrong", found["label"] + (": copy the file to this node from Files, or correct the path." if found["kind"] == "missing" else ".")
         elif found and rule is None:
@@ -410,9 +424,9 @@ def check(settings, folder, roots=None, *, inventory=None):
                       "message": found["label"] if fits else (found or {}).get("label", "Not a LoRA") + (f"; this model is {LABELS.get(variant, variant)}." if found and found["kind"] == "lora" else ".")})
         ready &= fits
     from mirrorwall.video import FAMILIES
-    detected = family if family in (*FAMILIES,"flux2-klein", "flux2-dev", "sdxl",'qwen-image','qwen-image-2.1','moss-image') else None
+    detected = family if family in (*FAMILIES,"flux2-klein", "flux2-dev", "sdxl",'qwen-image','qwen-image-2.1','moss-image','krea2') else None
     if detected and options.get("family") and options["family"] != detected:
         ready = False
     return {"detected_family": detected, "variant": variant, "variant_label": LABELS.get(variant, ""), "family_matches": not detected or options.get("family") == detected,
             "slots": slots, "loras": loras, "ready": bool(ready and diffusion and detected), "folder": str(folder or ""),
-            "get_diffusion": [] if video else [{"label": LABELS[key], "repository": GET[key][0], "file": GET[key][1]} for key in ("klein-4b", "klein-9b", "dev", "checkpoint",'qwen-image','qwen-image-2.1','moss-image-base','moss-image-sft')]}
+            "get_diffusion": [] if video else [{"label": LABELS[key], "repository": GET[key][0], "file": GET[key][1]} for key in ("klein-4b", "klein-9b", "dev", "checkpoint",'qwen-image','qwen-image-2.1','moss-image-base','moss-image-sft','krea2-raw','krea2-turbo')]}

@@ -30,6 +30,14 @@ Start with 1024 × 1024, 50 Euler steps, the discrete scheduler and CFG 3. Dimen
 
 See the [native setup guide](https://github.com/leejet/stable-diffusion.cpp/blob/95ff76230889898e1bf40058ba272a3699b50dc6/docs/moss_image.md) and [MOSS inference recommendations](https://github.com/OpenMOSS/MOSS-Image/blob/main/USERGUIDE.md).
 
+## Krea 2
+
+Choose **Krea 2 (Raw / Turbo)** for either variant; both share one architecture, so the checklist cannot tell them apart. Supply the diffusion weights, the **Qwen3-VL 4B** text encoder and the **Wan 2.1 VAE**. Comfy's `Comfy-Org/Krea-2` bundle ships that VAE as `vae/qwen_image_vae.safetensors`, and its `text_encoders/qwen3vl_4b_*` files fit. GGUF weights are in `realrebelai/KREA-2_GGUFs` (`BASE/` for Raw, `TURBO/` for Turbo) and `Qwen/Qwen3-VL-4B-Instruct-GGUF`. The text-only **Qwen3 4B** encoder used by Flux 2 klein does not fit.
+
+Raw starts at 1024 × 1024, 20 Euler steps, the discrete scheduler and CFG 3.5. Turbo starts at 8 steps and CFG 1, where negative prompts have no effect. The setup dialog offers both suggestions; save a Turbo model's workflow with its own defaults. Turbo's native 2048 × 2048 output (4.2 megapixels) exceeds the default **Pixel budget** of 2,097,152; raise it in the model's limits to use that size. Dimensions must be multiples of 16. These profiles generate from text; set **Reference images** to 0. Reference editing needs a community editing LoRA and is not supported yet.
+
+See the [native setup guide](https://github.com/leejet/stable-diffusion.cpp/blob/95ff76230889898e1bf40058ba272a3699b50dc6/docs/krea2.md).
+
 ## Limits and troubleshooting
 
 Parts from different model families are not interchangeable. Read the checklist's reason when a component is missing or incompatible. An upscaler is needed when a workflow must enlarge a reference. The editor's drafts remain in page memory across switches; reloading loses unsaved edits. Saving configuration does not establish image quality or memory fit on a node.

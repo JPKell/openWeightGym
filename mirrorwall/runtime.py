@@ -158,10 +158,10 @@ class Native:
             if self.job.get("qualification_log"):
                 with Path(self.job["qualification_log"]).open("a") as record:
                     record.write(text)
-            if re.search(r"(?:flux|qwen|moss|diffusion|dit|unet|wan(?!_vae)|ltxav|hunyuan_video(?!_vae)|minimax_h3(?!_audio_vae|_vae)).*graph-cut layer split:.*segments",text,re.I):
+            if re.search(r"(?:flux|qwen|moss|krea2|diffusion|dit|unet|wan(?!_vae)|ltxav|hunyuan_video(?!_vae)|minimax_h3(?!_audio_vae|_vae)).*graph-cut layer split:.*segments",text,re.I):
                 if match:=re.search(r"CUDA\s*([0-9]+)",text,re.I):
                     self.split_devices.add(int(match[1]))
-            if re.search(r"(?:flux|qwen|moss|diffusion|dit|unet|wan(?!_vae)|ltxav|hunyuan_video(?!_vae)|minimax_h3(?!_audio_vae|_vae)).*row split: [1-9][0-9]* tensors .*split across 2 devices",text,re.I):
+            if re.search(r"(?:flux|qwen|moss|krea2|diffusion|dit|unet|wan(?!_vae)|ltxav|hunyuan_video(?!_vae)|minimax_h3(?!_audio_vae|_vae)).*row split: [1-9][0-9]* tensors .*split across 2 devices",text,re.I):
                 self.row_split=True
             clean=re.sub(r'\x1b\[[0-9;]*m','',text).strip()
             clean=re.sub(r' --- [^\r\n]+:\d+$','',clean)

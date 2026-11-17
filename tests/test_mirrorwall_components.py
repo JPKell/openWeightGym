@@ -132,6 +132,29 @@ def test_moss_requires_its_qwen35_encoder_external_tokenizer_and_flux2_vae(libra
     assert not wrong['ready'] and next(row for row in wrong['slots'] if row['slot'] == 'tokenizer')['status'] == 'wrong'
 
 
+@pytest.mark.parametrize('format', ['gguf', 'safetensors'])
+def test_krea2_needs_qwen3_vl_4b_and_the_wan_vae(library, format):
+    folder = library['folder']
+    if format == 'gguf':  # community GGUF and Qwen's own encoder, as published
+        weights = gguf(folder / 'krea2.gguf', {'txtfusion.projector.weight': (12,), 'first.weight': (6144, 64)}, {'general.architecture': 'krea2'})
+        encoder = gguf(folder / 'qwen3vl-4b.gguf', {'token_embd.weight': (151936, 2560)}, {'general.architecture': 'qwen3vl'})
+    else:  # Comfy-Org/Krea-2 bundle names; diffusers checkpoints use text_fusion
+        weights = safetensors(folder / 'krea2.safetensors', {'text_fusion.projector.weight': (1, 12), 'transformer_blocks.0.attn.to_q.weight': (6144, 6144)})
+        encoder = safetensors(folder / 'qwen3vl_4b.safetensors', {'model.embed_tokens.weight': (151936, 2560), 'model.visual.patch_embed.proj.weight': (1024, 3, 2, 16, 16)})
+    vae = safetensors(folder / 'qwen_image_vae.safetensors', {'decoder.conv1.weight': (384, 16, 3, 3, 3), 'encoder.conv1.weight': (96, 3, 3, 3, 3)})
+    assert identify(weights)['family'] == 'krea2'
+    assert identify(encoder)['variant'] == 'qwen3-vl-4b' and identify(library['qwen4'])['variant'] == 'qwen3-4b'
+    found = check(draft(weights, 'krea2', text_encoder=encoder, vae=vae), folder)
+    assert found['ready'] and found['detected_family'] == 'krea2'
+    wrong = check(draft(weights, 'krea2', text_encoder=library['qwen4'], vae=library['vae']), folder)
+    slots = {row['slot']: row for row in wrong['slots']}
+    assert not wrong['ready'] and slots['text_encoder']['status'] == slots['vae']['status'] == 'wrong'
+    assert slots['text_encoder']['candidates'] == [encoder] and slots['vae']['candidates'] == [vae]
+    assert slots['text_encoder']['get']['repository'] == 'Qwen/Qwen3-VL-4B-Instruct-GGUF'
+    assert {one['repository'] for one in found['get_diffusion'] if one['label'].startswith('Krea 2')} == {'realrebelai/KREA-2_GGUFs'}
+    assert not check(draft(weights, 'qwen-image', text_encoder=encoder, vae=vae), folder)['ready']
+
+
 @pytest.mark.parametrize('content', ['[]', '{"model":[]}', '{"model":{},"added_tokens":[null]}', '{broken'])
 def test_malformed_tokenizer_json_is_reported_without_breaking_the_library(tmp_path, content):
     tokenizer = tmp_path / 'tokenizer.json'

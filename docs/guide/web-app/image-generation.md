@@ -45,6 +45,8 @@ deletes a saved image. Image details and settings export remain below the viewer
 
 **MOSS-Image Base / SFT** offers CFG, negative prompts and text layout controls. For its required components and starting settings, see [MOSS-Image setup](/docs/model-guides/image-models#moss-image).
 
+**Krea 2 Raw / Turbo** offers CFG and negative prompts; Turbo runs at CFG 1, where negative prompts have no effect. See [Krea 2 setup](/docs/model-guides/image-models#krea-2).
+
 ## Library downloads and deletion
 
 Tick the checkboxes on image thumbnails to select several images, or use **Select all shown**.
