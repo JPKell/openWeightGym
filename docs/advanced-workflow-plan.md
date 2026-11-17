@@ -9,7 +9,7 @@ Let authorized users set up multi-step image (and later video) workflows on a vi
 similar in power to ComfyUI but without hand-wiring every input to every output. Then let
 people and API clients call those workflows like a model:
 
-- A visual graph of components (prompts, models, samplers, refiners, upscalers, masks, outputs).
+- A visual graph of components (prompts, models, samplers, refine passes, upscalers, masks, outputs).
 - Connections chosen from the source: each output lists the compatible destinations, and the
   user ticks one or more. Wires are drawn automatically; dragging wires is optional.
 - Several components of one kind in a graph: several samplers, models, LoRA stacks and outputs.
@@ -281,7 +281,7 @@ used ComfyUI workflows and need native qualification before they become defaults
 |---|---|---|---|
 | 1 | **Quick draft** (any family) | Exposed inputs, family defaults | Prompt, Model, Seed, Size → Sampler → Output |
 | 2 | **SDXL two-pass hires** | Hires pass inside one Sampler | Sampler (28 steps; hires ×1.5, 14 steps, denoise 0.38) → Upscale 2× (ESRGAN) → Output |
-| 3 | **SDXL base → refiner** | Two models, image-to-image hand-off | Base Sampler (SDXL base, 28 steps) → Refiner Sampler (SDXL refiner, strength 0.25, 12 steps) → Output; one Prompt and Seed fan out to both |
+| 3 | **SDXL two-model refine** | Two models, image-to-image hand-off | Base Sampler (SDXL checkpoint, 28 steps) → Refine Sampler (a second SDXL checkpoint, strength 0.25, 14 steps) → Output; one Prompt and Seed fan out to both. The pinned sd.cpp has no SDXL refiner support, so the second pass uses an ordinary SDXL checkpoint |
 | 4 | **Sampler shoot-out** | Fan-out to several samplers, Compare | One Prompt + Seed + Model → 4 Samplers (euler/simple, dpm++2m/karras, res_multistep/beta, er_sde/kl_optimal) → Compare → Output each |
 | 5 | **Family comparison** | Multiple models, shared seed | Prompt → Klein 4B, Krea 2 Turbo, Qwen Image Samplers → Compare |
 | 6 | **Krea Turbo draft → SDXL detail** | Cheap composition, detailed finish | Krea Turbo Sampler (8 steps, CFG 1) → Upscale to 2048 → SDXL Sampler (strength 0.3) → Output |
@@ -309,7 +309,7 @@ Each sample carries a Note node explaining what to change first and why.
   5. Guidance: CFG, distilled guidance, image CFG, skip-layer guidance; why distilled and turbo
      models use CFG 1 and ignore negatives.
   6. Flow shift, custom sigmas, step caching (ucache/easycache/…) and their quality trade-offs.
-  7. Hires pass vs Upscale vs refiner pass; choosing upscalers.
+  7. Hires pass vs Upscale vs a second refine pass; choosing upscalers.
   8. Masks, inpainting and compositing.
   9. LoRAs: strengths, step-reduction LoRAs, family compatibility.
   10. Seeds, sweeps, comparisons and reproducibility.

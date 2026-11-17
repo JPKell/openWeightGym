@@ -1,0 +1,38 @@
+{% from 'parts.html' import page_header, section_title, alert %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+{% from 'workflow_editor_parts.html' import toolbar, palette, surface, inspector, problems, run_panel, templates %}
+{% from 'icons.html' import icon %}
+<!doctype html>
+<html lang="en" data-bs-theme="light" data-site-theme="slate">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Image workflows · Three editors · openWeightGym</title><style>{{ css|safe }}</style><script>{{ theme_javascript|safe }}</script></head>
+<body>
+<div hidden>{{ icons_svg|safe }}</div>
+<div hidden><form data-theme-form><div data-theme-options></div><select name="mode" aria-label="Appearance"><option value="light">Light</option><option value="dark">Dark</option></select></form></div>
+<a class="visually-hidden-focusable" href="#workspace">Skip to the workflow editor</a>
+<header class="iw-topbar"><a href="#workspace" class="iw-brand">{{ icon('barbell') }} <strong>weightRoom</strong><span class="text-secondary">/ Models / Image workflows</span></a><div class="d-flex gap-2 align-items-center"><span class="wf-overline iw-demo-label">INTERACTIVE DESIGN PREVIEW</span><button class="btn btn-sm btn-outline-secondary" id="theme" type="button">Dark mode</button></div></header>
+<main class="iw-page">
+<section class="iw-review" aria-label="Design comparison">
+{% call pills('Design proposals',buttons=true,class_='iw-designs mb-0') %}{{ pill_button('01 / Node canvas',true,attrs={'data-design':'canvas'}) }}{{ pill_button('02 / Stage lanes',attrs={'data-design':'lanes'}) }}{{ pill_button('03 / Split studio',attrs={'data-design':'split'}) }}{% endcall %}<p id="design-note" class="small text-secondary mb-0"></p>
+</section>
+<div id="workspace" data-layout="canvas">
+{% call page_header('Image workflows',pretitle='MODELS / IMAGE WORKFLOWS') %}<label class="visually-hidden" for="workflow-choice">Workflow</label><select id="workflow-choice" class="form-select form-select-sm iw-choice"></select><button class="btn btn-outline-secondary btn-sm" id="new-workflow" type="button">New workflow</button><button class="btn btn-outline-secondary btn-sm" id="duplicate-workflow" type="button">Duplicate</button><button class="btn btn-primary btn-sm" id="save-workflow" type="button">Save version</button>{% endcall %}
+<div class="iw-meta"><div class="iw-name"><label class="form-label" for="workflow-name">Workflow name <small class="text-secondary">API model name: <code id="api-name"></code></small></label><input id="workflow-name" class="form-control" maxlength="100"></div><div class="iw-summary"><label class="form-label" for="workflow-summary">Summary</label><input id="workflow-summary" class="form-control" maxlength="240"></div><div class="iw-badges"><span class="badge bg-blue-lt" id="workflow-version"></span><label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="workflow-published"><span class="form-check-label">Published</span></label></div></div>
+<div id="feedback" hidden>{{ alert('info',attrs={'id':'feedback-text','aria-live':'polite'}) }}</div>
+<div class="wf-editor iw-editor" id="editor" data-wf-layout="canvas">
+<div class="iw-toolbar">{{ toolbar() }}</div>
+<div class="iw-palette">{{ palette() }}</div>
+<div class="iw-surface">{{ surface() }}</div>
+<div class="iw-inspector">{{ inspector() }}</div>
+<div class="iw-problems">{{ problems() }}</div>
+<div class="iw-run">{{ run_panel() }}</div>
+</div>
+<footer class="iw-footer"><span>Browser-local simulation · sample models and placeholder images · no GPU work, API calls or server changes</span><button type="button" id="reset" class="btn btn-link btn-sm p-0">Reset preview</button></footer>
+</div>
+</main>
+{{ templates() }}
+<script id="workflow-catalogue" type="application/json">{{ catalogue|tojson }}</script>
+<script id="workflow-samples" type="application/json">{{ samples|tojson }}</script>
+<script id="workflow-models" type="application/json">{{ models|tojson }}</script>
+<script id="workflow-assets" type="application/json">{{ assets|tojson }}</script>
+<script>{{ graph_javascript|safe }}</script><script>{{ editor_javascript|safe }}</script><script>{{ javascript|safe }}</script>
+</body></html>

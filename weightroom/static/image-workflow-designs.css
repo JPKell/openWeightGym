@@ -1,0 +1,53 @@
+/* Three arrangements of the shared workflow editor for review. */
+body { background: var(--bs-body-bg); }
+.iw-page { max-width: 1880px; margin: auto; padding: 22px 32px 14px; }
+.iw-topbar { padding: 15px 32px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--bs-border-color); }
+.iw-brand { display: flex; align-items: center; gap: 10px; color: var(--bs-body-color); text-decoration: none; font-size: 15px; }
+.iw-brand .suite-icon { width: 24px; height: 24px; }
+.iw-review { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-bottom: 18px; margin-bottom: 20px; border-bottom: 1px solid var(--bs-border-color); }
+.iw-review p { max-width: 520px; text-align: right; }
+.iw-choice { width: auto; max-width: 320px; }
+.iw-meta { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.4fr) auto; gap: 12px 16px; align-items: end; margin-bottom: 14px; }
+.iw-badges { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.iw-editor { display: grid; gap: 16px; }
+.iw-footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--bs-border-color); font-size: 12px; color: var(--bs-secondary-color); }
+
+/* 01 Node canvas: palette | canvas | inspector, with problems and the test run below. */
+[data-layout=canvas] .iw-editor { grid-template-columns: 210px minmax(0,1fr) 380px;
+  grid-template-areas: 'toolbar toolbar toolbar' 'palette surface inspector' 'palette problems inspector' 'run run run'; }
+.iw-toolbar { grid-area: toolbar; } .iw-palette { grid-area: palette; } .iw-surface { grid-area: surface; min-width: 0; }
+.iw-inspector { grid-area: inspector; } .iw-problems { grid-area: problems; } .iw-run { grid-area: run; }
+.iw-run > .wf-run, .iw-palette > .wf-palette { padding: 14px; border: 1px solid var(--bs-border-color); border-radius: 8px; background: var(--bs-body-bg); }
+.iw-inspector { max-height: 86vh; overflow: auto; }
+
+/* 02 Stage lanes: palette as a strip above full-width lanes; inspector beside, run below. */
+[data-layout=lanes] .iw-editor { grid-template-columns: minmax(0,1fr) 380px;
+  grid-template-areas: 'toolbar toolbar' 'palette palette' 'surface inspector' 'problems inspector' 'run run'; }
+[data-layout=lanes] [data-wf-palette] { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+[data-layout=lanes] .wf-palette-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0; }
+[data-layout=lanes] .wf-palette-item small { display: none; }
+[data-layout=lanes] .wf-palette > .section-heading, [data-layout=lanes] .wf-palette > p { display: none; }
+
+/* 03 Split studio: compact canvas and inspector above a wide test run. */
+[data-layout=split] .iw-editor { grid-template-columns: 190px minmax(0,1fr) 340px;
+  grid-template-areas: 'toolbar toolbar toolbar' 'palette surface inspector' 'run run inspector' 'problems problems inspector'; }
+[data-layout=split] .wf-surface { max-height: 46vh; min-height: 320px; }
+[data-layout=split] .wf-results { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+
+@media (max-width: 1200px) {
+  [data-layout] .iw-editor { grid-template-columns: minmax(0,1fr) 340px; grid-template-areas: 'toolbar toolbar' 'palette palette' 'surface inspector' 'problems inspector' 'run run'; }
+  .iw-palette [data-wf-palette] { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  .iw-palette .wf-palette-group { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+  .iw-palette .wf-palette-item small { display: none; }
+}
+@media (max-width: 800px) {
+  .iw-page { padding: 16px 12px; } .iw-topbar { padding: 12px; } .iw-brand > .text-secondary, .iw-demo-label { display: none; }
+  .iw-review { flex-direction: column; align-items: stretch; gap: 10px; } .iw-review p { text-align: left; }
+  .iw-designs { width: 100%; } .iw-designs .nav-link { flex: 1; padding: 8px 4px; font-size: 11px; }
+  .iw-meta { grid-template-columns: minmax(0,1fr); }
+  [data-layout] .iw-editor { grid-template-columns: minmax(0,1fr); grid-template-areas: 'toolbar' 'problems' 'surface' 'inspector' 'palette' 'run'; }
+  .iw-inspector { max-height: none; }
+  .iw-choice { width: 100%; max-width: 100%; min-width: 0; }
+  .page-actions:has(.iw-choice) { min-width: 0; max-width: 100%; }
+  .iw-footer { flex-direction: column; }
+}

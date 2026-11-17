@@ -1,0 +1,65 @@
+{# Image workflow editor: toolbar, palette, canvas/lanes surface, Outline, inspector, problems, test run and API example.
+   Behavior lives in workflow-editor.js and workflow-graph.js; layout in workflow-editor.css. #}
+{% from 'parts.html' import section_title %}
+{% from 'navigation_parts.html' import pills, pill_button %}
+
+{% macro toolbar() %}
+<div class="wf-toolbar">
+{% call pills('Editor view',buttons=true,class_='mb-0 gap-1') %}{{ pill_button('Canvas',true,attrs={'data-wf-view':'canvas'}) }}{{ pill_button('Outline',attrs={'data-wf-view':'outline'}) }}{% endcall %}
+<div class="d-flex gap-1 align-items-center" data-wf-zoom-controls><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-zoom="out" aria-label="Zoom out">−</button><span class="small text-secondary wf-zoom-level" data-wf-zoom-level aria-live="polite">100%</span><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-zoom="in" aria-label="Zoom in">+</button><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-zoom="fit">Fit</button><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-tidy>Tidy layout</button></div>
+<div class="d-flex gap-1"><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-undo disabled aria-keyshortcuts="Control+Z">Undo</button><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-redo disabled aria-keyshortcuts="Control+Shift+Z">Redo</button></div>
+<span class="wf-status small" data-wf-status role="status" aria-live="polite"></span>
+</div>
+{% endmacro %}
+
+{% macro palette() %}
+<nav class="wf-palette" aria-label="Components">{{ section_title('Add a component',level=3,wrapper_class='mb-2') }}<p class="small text-secondary mb-2">New components connect to the obvious sources automatically.</p><div data-wf-palette></div></nav>
+{% endmacro %}
+
+{% macro surface() %}
+<div class="wf-surface" data-wf-surface tabindex="-1">
+<div class="wf-sizer" data-wf-sizer><div class="wf-nodes" data-wf-nodes role="group" aria-label="Workflow components. Select one to edit; Alt and an arrow key moves it."><svg class="wf-links" data-wf-links aria-hidden="true"></svg></div></div>
+</div>
+<ol class="wf-outline" data-wf-outline aria-label="Workflow components in run order" hidden></ol>
+{% endmacro %}
+
+{% macro inspector() %}
+<aside class="wf-inspector" aria-label="Component settings" data-wf-inspector></aside>
+{% endmacro %}
+
+{% macro problems() %}
+<div class="wf-problems" data-wf-problems aria-live="polite"></div>
+{% endmacro %}
+
+{# Exposed inputs, per-step progress, results and the matching API call. #}
+{% macro run_panel() %}
+<section class="wf-run" aria-labelledby="wf-run-title" data-wf-run>
+{{ section_title('Test run',id='wf-run-title',level=3,wrapper_class='mb-2') }}
+<p class="small text-secondary">Callers set only the fields marked “Callers set this” or “Callers may override”.</p>
+<form data-wf-run-form novalidate><div class="wf-run-inputs" data-wf-run-inputs></div>
+<div class="d-flex flex-wrap gap-2 align-items-center mt-3"><button class="btn btn-primary btn-sm" type="submit" data-wf-run-button>Run test</button><button class="btn btn-outline-secondary btn-sm" type="button" data-wf-run-stop hidden>Stop</button><span class="small text-secondary" data-wf-run-plan></span></div></form>
+<ol class="wf-stages" data-wf-stages aria-label="Run progress"></ol>
+<div class="wf-results" data-wf-results aria-label="Run outputs"></div>
+<details class="wf-api" data-wf-api><summary>Call this workflow from the API</summary>
+{% call pills('API example language',buttons=true,class_='mb-2 mt-2 gap-1') %}{{ pill_button('curl',true,attrs={'data-wf-api-language':'curl'}) }}{{ pill_button('Python',attrs={'data-wf-api-language':'python'}) }}{% endcall %}
+<pre class="wf-code"><code data-wf-api-code></code></pre><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-api-copy>Copy</button>
+<p class="small text-secondary mt-2 mb-0">The response’s <code>data</code> lists every Output, labelled. Add <code>@version</code> to the model name to pin this version.</p></details>
+</section>
+{% endmacro %}
+
+{% macro templates() %}
+<template id="wf-node-template"><article class="wf-node" tabindex="0" role="group"><div class="wf-node-head" data-drag><span class="wf-node-title" data-title></span><span class="wf-node-kind" data-kind></span></div><div class="wf-node-meta"><code data-label></code><span class="badge bg-yellow-lt" data-phase hidden></span><span class="wf-issues" data-issues hidden></span></div><p class="wf-node-summary" data-summary></p><div class="wf-ports" data-ports></div></article></template>
+<template id="wf-outline-template"><li><button type="button" class="wf-outline-item" data-node><span class="wf-outline-head"><strong data-title></strong> <span class="text-secondary small" data-kind></span> <span class="wf-issues" data-issues></span></span><span class="small d-block" data-summary></span><span class="small text-secondary d-block" data-from></span><span class="small text-secondary d-block" data-to></span></button></li></template>
+<template id="wf-inspector-empty-template"><div class="wf-inspector-empty"><p class="mb-1"><strong>Select a component</strong></p><p class="small text-secondary mb-0">Its settings appear here, with Use from for each input and Send to for each output. Add components from the palette; they connect to the obvious sources.</p></div></template>
+<template id="wf-inspector-template"><div class="wf-inspector-body">
+<span class="wf-overline" data-kind></span><p class="small text-secondary mt-1" data-help></p>
+<div class="wf-fields"><div class="wf-field"><label class="form-label" for="wf-node-title">Name</label><input id="wf-node-title" class="form-control" data-node-title maxlength="60"></div><div class="wf-field"><label class="form-label" for="wf-node-label">Step label <small class="text-secondary">used by API overrides</small></label><input id="wf-node-label" class="form-control font-monospace" data-node-label maxlength="40"></div></div>
+<div class="wf-fields" data-fields></div>
+<details class="wf-advanced" data-advanced><summary>Advanced sampling</summary><div class="wf-fields" data-advanced-fields></div></details>
+<section class="wf-connections" data-inputs-section><span class="wf-overline">USE FROM</span><div data-inputs></div></section>
+<section class="wf-connections" data-outputs-section><span class="wf-overline">SEND TO</span><div data-outputs></div></section>
+<div class="wf-node-actions"><label class="visually-hidden" for="wf-add-after-type">Component to add after this one</label><select id="wf-add-after-type" class="form-select form-select-sm" data-add-after-type></select><button type="button" class="btn btn-sm btn-outline-primary" data-add-after>Add after</button><button type="button" class="btn btn-sm btn-outline-secondary" data-duplicate>Duplicate</button><button type="button" class="btn btn-sm btn-outline-danger" data-remove>Remove</button></div>
+</div></template>
+<template id="wf-use-from-template"><div class="wf-use-from"><label class="form-label"></label><select class="form-select form-select-sm"></select><div class="wf-chips" data-chips></div><small class="text-secondary" data-auto hidden>Connected automatically; change it here.</small></div></template>
+<template id="wf-send-to-template"><fieldset class="wf-send-to"><legend class="form-label" data-output></legend><div data-destinations></div></fieldset></template>
+{% endmacro %}

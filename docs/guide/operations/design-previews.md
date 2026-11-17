@@ -23,6 +23,12 @@ and open `build/video-designs/index.html`. Each tab offers Canvas, Desk and Revi
 browser-local sample actions, light/dark appearance and failure states. Sample artwork is
 illustrative; it is not a generated video. The selected live layout is Canvas on both pages.
 
+For Image workflows, run `.venv/bin/python scripts/preview-image-workflow-designs.py` and open
+`build/image-workflow-designs/index.html`. Node canvas, Stage lanes and Split studio share one
+editor: Send to and Use from connect steps, Add after inserts a step, and the test run returns
+placeholder pictures with a matching API example. Samples are read-only; duplicate one to edit.
+Narrow screens start in Outline. Nothing is generated and no service is contacted.
+
 ## Related
 
 [Find your way](/docs/getting-started/navigation), [My account](/docs/web-app/my-account).
