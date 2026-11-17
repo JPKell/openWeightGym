@@ -17,7 +17,7 @@ Models are installed separately under **Models → Images** with
 
 ## Do it
 
-1. Open **Models → Image workflows**. Choose a sample from the chooser, or **New workflow**,
+1. Open **Models → Image workflows**, under the **Image setup** heading. Choose a sample from the chooser, or **New workflow**,
    which starts with a prompt, model, seed, size, sampler and output, already connected.
    To start from a simple per-model workflow, open it under **Models → Images** and choose
    **Open as advanced**; the simple workflow is unchanged.

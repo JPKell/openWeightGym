@@ -17,7 +17,7 @@ at least one installed image model. A comparison is an ordinary image job. It sh
 
 ## Do it
 
-1. Open **Models → Sampler comparison**.
+1. Open **Models → Sampler comparison**, under the **Image setup** heading.
 2. Choose the image model and enter the prompt, plus a negative prompt if the model supports one.
 3. Set the width, height, steps, CFG scale (or distilled guidance for Flux-style models) and seed.
    **Images per combination** above 1 adds the next seeds, so each combination gets the same

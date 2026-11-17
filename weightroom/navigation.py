@@ -13,7 +13,8 @@ NAV_SECTIONS = {
         ('Desktop apps', ('/voice/desktop',)),
     ),
     'Models': (
-        ('Catalogue', ('/models', '/models/images', '/models/images/samplers', '/models/image-workflows', '/models/video', '/models/audio', '/cloud-apis')),
+        ('Catalogue', ('/models', '/models/images', '/models/video', '/models/audio', '/cloud-apis')),
+        ('Image setup', ('/models/images/samplers', '/models/image-workflows')),
         ('Routing & capacity', ('/roles', '/dry-fit')),
         ('Files & provenance', ('/files', '/fingerprints')),
         ('Downloads', ('/hub', '/civitai')),

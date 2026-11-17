@@ -5,8 +5,8 @@ import pytest
 from test_weightroom import desk, sign_in  # noqa: F401
 from weightroom.navigation import navigation
 
-MODEL_LINKS = ['Models', 'Images', 'Sampler comparison', 'Video', 'Audio', 'Cloud APIs', 'Roles', 'Dry fit', 'Files', 'Fingerprints', 'Hugging Face', 'Civitai']
-MODEL_HEADINGS = {'/models':'Catalogue', '/roles':'Routing & capacity', '/files':'Files & provenance', '/hub':'Downloads'}
+MODEL_LINKS = ['Models', 'Images', 'Video', 'Audio', 'Cloud APIs', 'Sampler comparison', 'Roles', 'Dry fit', 'Files', 'Fingerprints', 'Hugging Face', 'Civitai']
+MODEL_HEADINGS = {'/models':'Catalogue', '/models/images/samplers':'Image setup', '/roles':'Routing & capacity', '/files':'Files & provenance', '/hub':'Downloads'}
 
 
 def test_node_measurements_are_under_run_benchmarks():
@@ -59,7 +59,7 @@ def test_desktop_and_mobile_render_the_same_menus(desk):
             playwright.expect(sidebar.locator('a[aria-current="page"]')).to_have_count(1)
             if section == 'Models':
                 # A superuser also manages workflows.
-                assert links == MODEL_LINKS[:3] + ['Image workflows'] + MODEL_LINKS[3:]
+                assert links == MODEL_LINKS[:6] + ['Image workflows'] + MODEL_LINKS[6:]
                 assert sidebar.locator('.section-label').all_text_contents() == list(MODEL_HEADINGS.values())
                 assert sidebar.locator('.section-label').last.evaluate('el=>el.nextElementSibling.getAttribute("href")') == '/hub'
             page.set_viewport_size({'width':390, 'height':844})

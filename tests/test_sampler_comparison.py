@@ -34,7 +34,8 @@ def test_each_scheduler_tries_every_sampler_with_one_seed_and_a_larger_limit():
 def test_navigation_lists_the_page_beside_images_for_model_managers():
     found = navigation('/models/images/samplers', ['manage-models'], False)
     labels = [label for label, _ in next(group for group in found['groups'] if group['name'] == 'Models')['links']]
-    assert labels[labels.index('Images') + 1] == 'Sampler comparison' and found['active'] == '/models/images/samplers'
+    assert found['active'] == '/models/images/samplers' and found['headings']['/models/images/samplers'] == 'Image setup'
+    assert labels.index('Sampler comparison') == labels.index('Audio') + 1  # after the catalogue, under its own heading
     assert 'Sampler comparison' not in str(navigation('/models', [], False))
 
 
