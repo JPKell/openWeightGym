@@ -175,6 +175,23 @@ def test_page_runs_a_comparison_and_zooms_every_image_to_the_same_region(compari
         page.mouse.move(box['x'] + box['width'] * .1, box['y'] + box['height'] * .9)
         assert page.evaluate(here) == [pytest.approx(50, abs=1), pytest.approx(50, abs=1)]
         page.locator('#sc-lock').uncheck()
+        # Image size and full-width results.
+        page.locator('#sc-size').fill('400')
+        expect(page.locator('#sc-size-value')).to_have_text('400 px')
+        assert page.locator('.sc-tile').first.bounding_box()['width'] >= 400 or width < 600
+        before = page.locator('#sc-grid').bounding_box()['width']
+        page.locator('#sc-hide-settings').click()
+        expect(page.locator('#sc-form')).to_be_hidden()
+        expect(page.locator('#sc-hide-settings')).to_have_text('Show settings')
+        if width > 1000:
+            assert page.locator('#sc-grid').bounding_box()['width'] > before + 300
+        page.reload()
+        expect(page.locator('#sc-form')).to_be_hidden()
+        expect(page.locator('#sc-size-value')).to_have_text('400 px')
+        page.locator('#sc-hide-settings').click()
+        expect(page.locator('#sc-form')).to_be_visible()
+        page.locator('#sc-earlier').select_option(index=1)
+        expect(page.locator('.sc-tile')).to_have_count(6)
         # Select two and show only those.
         page.locator('.sc-tile').nth(0).locator('[data-pick]').check()
         page.locator('.sc-tile').nth(4).locator('[data-pick]').check()

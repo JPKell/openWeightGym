@@ -8,10 +8,9 @@
 .sc-viewer { position: sticky; top: 12px; min-width: 0; }
 .sc-tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
 .sc-zoom { width: 140px; }
-.sc-size { width: auto; }
+.sc-size { width: 160px; }
+.sc-layout[data-wide] { grid-template-columns: minmax(0, 1fr); }
 .sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--sc-tile, 180px), 1fr)); gap: 10px; align-content: start; max-height: calc(100vh - 170px); overflow: auto; }
-.sc-grid[data-size=small] { --sc-tile: 130px; }
-.sc-grid[data-size=large] { --sc-tile: 300px; }
 .sc-tile { margin: 0; min-width: 0; }
 .sc-tile[hidden] { display: none; }
 .sc-frame { position: relative; overflow: hidden; aspect-ratio: var(--sc-aspect, 1); border: 1px solid var(--bs-border-color); border-radius: 6px; background: var(--bs-tertiary-bg); cursor: crosshair; }

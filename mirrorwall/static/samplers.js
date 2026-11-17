@@ -233,6 +233,22 @@
     focus = {x: Math.min(100, Math.max(0, x)), y: Math.min(100, Math.max(0, y))};
     $('grid').style.setProperty('--sc-x', focus.x + '%'); $('grid').style.setProperty('--sc-y', focus.y + '%');
   }
+  /** Image size: the smallest tile width; the grid fits as many per row as it can. */
+  function setSize(pixels) {
+    $('size').value = pixels; $('size-value').textContent = pixels + ' px';
+    $('grid').style.setProperty('--sc-tile', pixels + 'px');
+    keep('size', pixels);
+  }
+  /** Hide settings gives the results the whole width; the settings and their drafts stay as they were. */
+  function setWide(wide) {
+    $('form').hidden = wide; $('layout').toggleAttribute('data-wide', wide);
+    $('hide-settings').textContent = wide ? 'Show settings' : 'Hide settings';
+    $('hide-settings').setAttribute('aria-pressed', String(wide));
+    keep('wide', wide);
+  }
+  // Viewer layout is a per-browser convenience; the page works the same without storage.
+  function keep(key, value) { try { localStorage.setItem('sampler-comparison:' + key, JSON.stringify(value)); } catch {} }
+  function kept(key) { try { return JSON.parse(localStorage.getItem('sampler-comparison:' + key)); } catch { return null; } }
   function filter() {
     const only = $('selected-only').checked;
     for (const tile of tiles.values()) tile.hidden = only && !tile.hasAttribute('data-picked');
@@ -281,7 +297,8 @@
     $('pause').addEventListener('click', () => control(job?.status === 'paused' ? 'resume' : 'pause'));
     $('stop').addEventListener('click', () => control('cancel'));
     $('zoom').addEventListener('input', () => setZoom(Number($('zoom').value)));
-    $('size').addEventListener('change', () => { $('grid').dataset.size = $('size').value; });
+    $('size').addEventListener('input', () => setSize(Number($('size').value)));
+    $('hide-settings').addEventListener('click', () => setWide($('form').hidden === false));
     $('selected-only').addEventListener('change', filter);
     const grid = $('grid');
     // The pointer moves the shared focus unless Lock position is on; then only a click (or the arrow keys) moves it.
@@ -314,6 +331,9 @@
 
   async function start() {
     wire();
+    const size = Number(kept('size'));
+    setSize(size >= 80 && size <= 800 ? size : 180);
+    setWide(kept('wide') === true);
     $('seed').value = randomSeed();
     try {
       const state = await api('state');

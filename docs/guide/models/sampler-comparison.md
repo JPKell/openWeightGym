@@ -45,7 +45,10 @@ and the rest of the run continues.
 - **Lock position** keeps the zoomed region still while the pointer moves, so you can move between
   images without shifting it. Click an image to move the region to that point, or use the arrow keys.
 - Tick the box under an image to select it, then turn on **Selected only** to compare just those.
-- **Tile size** changes how many images fit in a row.
+- **Image size** sets how wide each image is, from 80 to 800 pixels; the grid fits as many per row
+  as it can.
+- **Hide settings** gives the results the full page width. **Show settings** brings them back
+  unchanged. This browser remembers both choices.
 - **Earlier comparisons** reopens a previous run, including one that is still running.
 
 ## Limits
