@@ -225,3 +225,52 @@ def test_add_a_model_needs_a_compute_node_and_asks_for_every_ticked_one_together
     # The Embedding model box (llama.cpp's --embedding) stays ticked when the add is refused.
     embedder = browser.post('/models', data={**chosen, 'embedding':'yes', 'node':'compute', 'shown_node':'compute'})
     assert re.search(r'<input id="model-embedding" name="embedding" value="yes" type="checkbox"[^>]* checked>', embedder.text)
+
+
+@pytest.mark.parametrize('width',[1440,390])
+def test_image_add_searches_parts_lists_language_encoders_and_names_suggestion_nodes(desk,width):
+    server, _, _ = desk
+    sign_in(server,'jordan')
+    encoder='/models/llm/Qwen3-4B.gguf'
+    place=lambda name,folder,tier: {'name':name,'folder':folder,'tier':tier,'free':10*SPARE}
+    inventory={'nodes':[
+        {'name':'compute','answering':True,'places':[place('image','/cache/image','cache')],
+         'files':[{'path':'/cache/image/klein.safetensors','size':100,'place':'image','tier':'cache','facts':{'what':'image'}},
+                  {'path':'/cache/image/flux2-vae.safetensors','size':100,'place':'image','tier':'cache','facts':{'what':'image'}},
+                  {'path':encoder,'size':100,'place':'image','tier':'cache','facts':{'what':'model','architecture':'qwen3'}}]},
+        {'name':'rig','answering':True,'places':[place('image','/cache/image','cache')],
+         'files':[{'path':encoder,'size':100,'place':'image','tier':'cache','facts':{'what':'model','architecture':'qwen3'}}]}]}
+    def capture(route,path):
+        base=path.partition('?')[0]
+        value=None
+        if base=='/model-files': value=inventory
+        if base=='/mirrorwall-models' and route.request.method=='GET':
+            value={'models':[],'cards':['CUDA0'],'nodes':[{'name':'compute','state':'ready'},{'name':'rig','state':'ready'}],
+                   'engines':{'engines':[{'id':'sdcpp','available':True}]}}
+        if base=='/mirrorwall-models/check':
+            value={'ready':False,'loras':[],'get_diffusion':[],'slots':[{'slot':'text_encoder','need':'required','status':'missing',
+                'message':'Needed: the Qwen3 4B text encoder.','candidates':[encoder],
+                'choices':[{'path':encoder,'machine':'rig','tier':'cache'}]}]}
+        if value is not None:
+            route.fulfill(content_type='application/json',body=json.dumps(value)); return True
+    with playwright.sync_playwright() as driver:
+        browser,page=browser_context(driver,server,capture=capture)
+        page.set_viewport_size({'width':width,'height':1100})
+        errors=[]; page.on('pageerror',lambda error: errors.append(str(error)))
+        page.goto('http://console.test/models/images?new=1')
+        playwright.expect(page.locator('#mw-text_encoder option')).to_have_count(5)
+        playwright.expect(page.locator('#mw-vae option')).to_have_count(3)
+        search=page.get_by_role('searchbox',name='Search Text encoder',exact=True)
+        search.fill('rig qwen')
+        visible=page.locator('#mw-text_encoder').evaluate('el => [...el.options].filter(one => !one.hidden).map(one => one.textContent)')
+        assert visible==['No file','rig · llm · Qwen3-4B.gguf']
+        search.press('Enter')
+        playwright.expect(page.locator('#mw-text_encoder option:checked')).to_have_attribute('data-machine','rig')
+        page.locator('#mw-text_encoder').select_option('')
+        search.fill('')
+        page.get_by_role('button',name='Use Qwen3-4B.gguf on rig',exact=True).click()
+        playwright.expect(page.locator('#mw-text_encoder option:checked')).to_have_attribute('data-machine','rig')
+        playwright.expect(page.locator('#mw-text_encoder')).to_have_value(encoder)
+        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        assert not errors
+        browser.close()

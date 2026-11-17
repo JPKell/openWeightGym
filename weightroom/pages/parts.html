@@ -35,6 +35,10 @@
 {% macro credential_input(id, name, label, status=none, maxlength=8192) %}
 <label for="{{ id }}" class="form-label">{{ label }}</label><input id="{{ id }}" name="{{ name }}" type="password" class="form-control" autocomplete="new-password" maxlength="{{ maxlength }}">{% if status is not none %}{{ credential_state(status) }}{% endif %}
 {% endmacro %}
+{# A search field that narrows the options of a long native select; the select keeps its ID, name, value and events (console.js). #}
+{% macro option_search(select_id, label) -%}
+<input type="search" class="form-control form-control-sm mb-1" data-filter-options="{{ select_id }}" aria-controls="{{ select_id }}" aria-label="Search {{ label }}" placeholder="Search {{ label|lower }}…" autocomplete="off">
+{%- endmacro %}
 {% macro credential_forms(entries, status, base, program, title='Credentials', available=true, key='') %}
 {% call card(title, open=false, key=key or program ~ ':credentials') %}
 <p class="small text-secondary">Saved credentials are never shown. Leave a field blank to keep its current value.</p>

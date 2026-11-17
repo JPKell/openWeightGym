@@ -72,6 +72,33 @@ window.suiteNodeLabel = name => name === 'front' ? 'Control node' : name;
     event.preventDefault(); event.stopImmediatePropagation();
   }, true);
   document.addEventListener('input', event => reset(event.target.closest('form')));
+  /** Hide the options of a select that do not contain every word typed in its search field; the chosen option stays. */
+  function filterOptions(input) {
+    const select = document.getElementById(input.dataset.filterOptions);
+    if (!select) return;
+    const words = input.value.toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    for (const option of select.options) {
+      const text = (option.textContent + ' ' + option.title).toLocaleLowerCase();
+      option.hidden = Boolean(option.value) && !option.selected && !words.every(word => text.includes(word));
+    }
+  }
+  window.suiteFilterOptions = root => (root || document).querySelectorAll('[data-filter-options]').forEach(filterOptions);
+  document.addEventListener('input', event => { if (event.target.matches?.('[data-filter-options]')) filterOptions(event.target); });
+  document.addEventListener('keydown', event => {
+    const input = event.target.closest?.('[data-filter-options]');
+    if (!input || !['Enter', 'ArrowDown'].includes(event.key)) return;
+    const select = document.getElementById(input.dataset.filterOptions);
+    if (!select) return;
+    event.preventDefault();
+    if (event.key === 'ArrowDown') { select.focus(); return; }
+    const first = [...select.options].find(option => option.value && !option.hidden && !option.disabled);
+    if (first && !first.selected) {
+      first.selected = true;
+      select.dispatchEvent(new Event('input', {bubbles: true}));
+      select.dispatchEvent(new Event('change', {bubbles: true}));
+    }
+    filterOptions(input);
+  });
   document.addEventListener('change', event => reset(event.target.closest('form')));
   document.addEventListener('suite:actionsChanged', event => reset(event.detail?.form));
   document.addEventListener('keydown', event => {

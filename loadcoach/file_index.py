@@ -33,6 +33,17 @@ NODE_INDEX = "files-index.json"  # LoadCoach's data folder, on each node
 FRONT_INDEX = "front-files-index.json"  # turnstile's data folder: on one machine it may be LoadCoach's as well
 
 
+def encoder_candidate(path: Path, facts: dict) -> bool:
+    """Any language model GGUF may serve as an image or video text encoder."""
+    return facts.get('what') == 'model' and path.suffix.lower() == '.gguf' and 'classifier' not in path.parts
+
+
+def encoder_identity(path: Path) -> dict:
+    """The image check's header identity for a language model, read from its tensor shapes."""
+    from mirrorwall.components import identify, IDENTITY_VERSION
+    return {**identify(str(path)), 'version': IDENTITY_VERSION}
+
+
 def describe(path: Path) -> dict:
     """What a model, image or audio file says about itself, read without loading it."""
     from loadcoach.gguf import facts, read_metadata
@@ -46,6 +57,8 @@ def describe(path: Path) -> dict:
     if image_asset(path):
         return image_facts(path)
     result = facts(read_metadata(str(path)))
+    if encoder_candidate(path, result):
+        result['image_identity'] = encoder_identity(path)
     if 'classifier' in path.parts and result.get('what') == 'model':
         from loadcoach.classifier_sources import source_facts
         result = {**result, **source_facts(path)}
@@ -130,6 +143,8 @@ class FileIndex:
         if (before and before.get("place") == place and before.get("size") == seen.st_size
                 and before.get("mtime") == seen.st_mtime and ("facts" in before or "unreadable" in before)
                 and not needs_image_identity):
+            if encoder_candidate(file, facts) and facts.get('image_identity', {}).get('version') != IDENTITY_VERSION:
+                return {**before, 'facts': {**facts, 'image_identity': encoder_identity(file)}}  # tensor shapes only; other facts stay
             return before
         entry = {"path": str(file), "place": place, "tier": tier_of(place), "size": seen.st_size, "mtime": seen.st_mtime,
                  "modified": datetime.fromtimestamp(seen.st_mtime).isoformat(timespec="seconds")}

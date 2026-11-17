@@ -1963,7 +1963,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 """Match installation's source preference for paths present on several nodes."""
                 files = [(node, file) for node in nodes if node.get('answering') for file in node.get('files', [])
                          if not file.get('moving') and (file.get('facts', {}).get('what') == 'image'
-                                                     or file.get('facts', {}).get('image_component'))]
+                                                     or file.get('facts', {}).get('image_component')
+                                                     or (file.get('facts', {}).get('image_identity') or {}).get('kind') == 'text_encoder')]
                 return sorted(files, key=lambda pair: (pair[0]['name'] != source, pair[1].get('tier') == 'storage'))
             # Upgrade older indexes once; unchanged language/audio file descriptions stay cached.
             from mirrorwall.components import IDENTITY_VERSION
@@ -1976,6 +1977,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                     inventory.setdefault(file['path'], {**identity, 'path':file['path']})
             from mirrorwall.components import check
             checked = check(asked['settings'], '', inventory=list(inventory.values()))
+            # Name the node of each suggestion: a copy on the source node needs no transfer, so others are offered only without one.
+            places = {}
+            for node, file in image_files():
+                places.setdefault(file['path'], {}).setdefault(node['name'], file.get('tier', ''))
+            for slot in checked['slots']:
+                slot['choices'] = [{'path': path, 'machine': machine, 'tier': tier} for path in slot.get('candidates', [])
+                                   for machine, tier in (((source, places[path][source]),) if source in places.get(path, {})
+                                                         else places.get(path, {}).items())]
         except (ValueError, TypeError, AttributeError, KeyError) as problem:
             return error(400, str(problem))
         return JSONResponse(checked, headers={'cache-control':'no-store'})

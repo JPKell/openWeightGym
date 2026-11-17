@@ -90,6 +90,9 @@ class FrontFiles:
         if 'classifier' in path.parts and description.get('what') == 'model':
             from loadcoach.classifier_sources import source_facts
             description = {**description, **source_facts(path)}
+        from loadcoach.file_index import encoder_candidate, encoder_identity
+        if encoder_candidate(path, description):
+            description['image_identity'] = encoder_identity(path)
         return description, metadata
 
     def inventory(self, refresh=False):

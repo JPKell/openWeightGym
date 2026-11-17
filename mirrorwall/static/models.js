@@ -23,6 +23,16 @@
     option.title=path; option.dataset.machine=machine; option.dataset.tier=tier;
     return option;
   }
+  /** Select `path` on `machine`; another node's copy only stands in when this one is not listed, unless `add` lists it. */
+  function pick(select, path, machine, add = false) {
+    const options = [...select.options].filter(option => option.value === path);
+    let option = options.find(one => one.dataset.machine === machine && one.dataset.tier !== 'storage') || options.find(one => one.dataset.machine === machine);
+    if (!option && add) { option = fileOption(path, machine); select.add(option); }
+    option ||= options[0];
+    if (option) option.selected = true;
+    window.suiteFilterOptions?.(select.closest('form'));
+  }
+  const choose = (input, path, machine) => pick(input, path, machine || activeNode());
   async function api(body, path = '', target = body ? activeNode() : '') {
     const query = target ? '?node=' + encodeURIComponent(target) : '';
     const response = await fetch((video?'/video-models':'/mirrorwall-models') + path + query, {method: body ? 'POST' : 'GET', cache: 'no-store', headers: body ? {'content-type':'application/json'} : {}, body: body ? JSON.stringify(body) : undefined});
@@ -93,9 +103,11 @@
       says.append(line);
       if (slot.why && slot.status !== 'ok') says.append(element('span', ' ' + slot.why, 'text-secondary'));
       const actions = element('div', undefined, 'd-flex flex-wrap gap-1 mt-1');
-      for (const path of slot.candidates || []) {
-        const use = element('button', 'Use ' + path.split('/').pop(), 'btn btn-outline-success btn-sm'); use.type = 'button'; use.title = path;
-        use.onclick = () => { input.value = path; recheck(0); }; actions.append(use);
+      for (const one of slot.choices || (slot.candidates || []).map(path => ({path}))) {
+        const where = one.machine ? ' on ' + suiteNodeLabel(one.machine) : '';
+        const use = element('button', 'Use ' + one.path.split('/').pop() + where, 'btn btn-outline-success btn-sm'); use.type = 'button';
+        use.title = (one.machine ? one.machine + ' · ' : '') + one.path + (one.tier === 'storage' ? ' (storage)' : '');
+        use.onclick = () => { choose(input, one.path, one.machine); recheck(0); }; actions.append(use);
       }
       if (slot.get) {
         const get = element('a', 'Get ' + slot.get.file.split('/').pop() + ' from ' + slot.get.repository, 'btn btn-outline-secondary btn-sm');
@@ -130,6 +142,7 @@
   }
   function fill(model) {
     selected = model; const profile = model?.sdcpp || {};
+    $('model-form').querySelectorAll('[data-filter-options]').forEach(search => { search.value = ''; }); window.suiteFilterOptions?.($('model-form'));
     $('cards').textContent = 'Enabled: ' + ((nodeCardsByNode[activeNode()] || nodeCards).join(', ') || 'none');
     const runtime=(enginesByNode[activeNode()]?.engines || []).find(one=>one.id==='sdcpp');
     $('runtime').hidden=Boolean(runtime?.available);
@@ -138,12 +151,7 @@
     $('model-form').querySelector('section[aria-label="Hardware"] .scope-badge').textContent=model?'This node':'Selected nodes';
     $('heading').textContent = model ? model.name : 'Add ' + (video ? 'video' : 'image') + ' model';
     $('model-form').querySelector('[type=submit]').textContent = model ? 'Save model' : 'Add model';
-    const choose = (name, value) => {
-      if (!value) { $(name).value=''; return; }
-      let option=[...$(name).options].find(option=>option.value===value && option.dataset.machine===activeNode());
-      if(!option) { option=fileOption(value); $(name).add(option); }
-      option.selected=true;
-    };
+    const choose = (name, value) => value ? pick($(name), value, activeNode(), true) : $(name).value='';
     $('name').value = model?.name || ''; $('name').readOnly = Boolean(model); choose('diffusion', model?.flags?.model);
     for (const name of components) choose(name, profile.components?.[name]);
     $('family').value = profile.family || (video?'wan2.1':'flux2-klein'); $('split').value = profile.split_mode || 'single';
@@ -196,11 +204,15 @@
     const response = await fetch('/model-files', {cache:'no-store'});
     const found = await response.json();
     if (!response.ok) throw new Error(found.error?.message || 'Model files could not be listed.');
-    const choices = found.nodes.flatMap(source => source.files.filter(file => (file.facts?.what === 'image' || file.facts?.image_component) && !file.moving).map(file => ({...file, machine:source.name})));
+    const listed = found.nodes.flatMap(source => source.files.filter(file => !file.moving).map(file => ({...file, machine:source.name})));
+    const image = file => file.facts?.what === 'image' || file.facts?.image_component;
+    // Any language model can be a text encoder, so that list keeps every model file; the check says whether it fits.
+    const encoder = file => image(file) || file.facts?.what === 'model' || file.facts?.image_identity?.kind === 'text_encoder';
     SLOTS.forEach(name => {
       $(name).replaceChildren(new Option(name === 'diffusion' ? 'Choose diffusion weights' : 'No file', ''));
-      choices.forEach(file => $(name).add(fileOption(file.path,file.machine,file.tier)));
+      listed.filter(name === 'text_encoder' ? encoder : image).forEach(file => $(name).add(fileOption(file.path,file.machine,file.tier)));
     });
+    window.suiteFilterOptions?.($('model-form'));
   }
   function renderLoras() {
     const values = JSON.parse($('loras').value || '{}');

@@ -119,3 +119,50 @@ def test_files_cached_as_unknown_before_a_family_existed_are_identified_again(tm
                                                                 'label': 'unknown', 'version': IDENTITY_VERSION - 1}
     index.scan(spots)
     assert index.kept['files'][weights]['facts']['image_identity']['family'] == 'krea2'
+
+
+def test_language_models_already_indexed_gain_a_text_encoder_identity_without_a_full_reread(tmp_path):
+    from test_mirrorwall_components import gguf
+    folder = tmp_path / 'llm'
+    folder.mkdir()
+    encoder = gguf(folder / 'Qwen3-4B.gguf', {'token_embd.weight': (151936, 2560)}, {'general.architecture': 'qwen3'})
+    read = []
+    def describe(file):
+        read.append(file.name)
+        return {'what': 'model', 'architecture': 'qwen3'}
+    index = FileIndex(None, describe=describe)
+    spots = {'llm': str(folder)}
+    index.scan(spots)
+    index.scan(spots)
+    assert read == ['Qwen3-4B.gguf']
+    identity = index.kept['files'][encoder]['facts']['image_identity']
+    assert (identity['kind'], identity['variant']) == ('text_encoder', 'qwen3-4b')
+    assert index.kept['files'][encoder]['facts']['architecture'] == 'qwen3'
+
+
+def test_library_check_offers_language_models_as_encoders_and_names_their_node(tmp_path):
+    from test_mirrorwall_components import gguf
+    storage = tmp_path / 'storage'
+    (storage / 'image').mkdir(parents=True)
+    (storage / 'llm').mkdir()
+    weights = gguf(storage / 'image' / 'klein-4b.gguf', {'model.diffusion_model.img_in.weight': (3072, 128),
+                                                         'model.diffusion_model.double_blocks.0.img_attn.proj.weight': (3072, 3072)})
+    encoder = gguf(storage / 'llm' / 'Qwen3-4B.gguf', {'token_embd.weight': (151936, 2560)},
+                   {'general.architecture': 'qwen3', 'tokenizer.ggml.model': 'gpt2'})
+    users = Users(str(tmp_path / 'accounts.db'), {'manager': Group(can=frozenset({'manage-models'}))})
+    users.add('manager', 'manager')
+    headers = {'authorization': 'Bearer ' + users.new_key('manager')}
+    settings = Settings(compute='unreachable', data=str(tmp_path), models_storage_folder=str(storage))
+    wire = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(503)))
+    with TestClient(build_app(settings, wire, users=users)) as client:
+        answer = client.post('/turnstile/models/image-check', headers=headers, json={
+            'source_machine': 'front', 'settings': {'flags': {'model': weights}, 'sdcpp': {'family': 'flux2-klein'}}})
+        assert answer.status_code == 200, answer.text
+        slot = next(one for one in answer.json()['slots'] if one['slot'] == 'text_encoder')
+        assert slot['candidates'] == [encoder]
+        assert slot['choices'] == [{'path': encoder, 'machine': 'front', 'tier': 'storage'}]
+        answer = client.post('/turnstile/models/image-check', headers=headers, json={
+            'source_machine': 'front', 'settings': {'flags': {'model': weights},
+                                                    'sdcpp': {'family': 'flux2-klein', 'components': {'text_encoder': encoder}}}})
+        slot = next(one for one in answer.json()['slots'] if one['slot'] == 'text_encoder')
+        assert slot['status'] == 'ok', slot
