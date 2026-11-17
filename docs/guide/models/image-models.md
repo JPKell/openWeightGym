@@ -52,15 +52,27 @@ separate from model management.
   inputs, overridable bounds and outputs. Drafts and history stay with workflow managers.
 - Each Upscale step names an installed upscaler file (ESRGAN family, for example
   `4x-UltraSharp.pth`) and a factor; chain several to enlarge in stages, or feed one image to
-  several into a Compare to choose between them. A Sampler's hires pass can use a latent method
-  or an installed upscaler file. A file no node has is a run problem.
+  several into a Compare to choose between them. A Sampler's hires pass uses a latent method. A
+  file no node has is a run problem.
+- A Control image step needs a model entry with a [ControlNet](#controlnet); Tiled detail needs an SDXL model.
 - The shipped samples are read-only templates; save a copy to change one.
 - Removing a workflow keeps the images and job records it produced.
 
 Build and publish them under **Models → Image workflows**; see
 [Image workflows](/docs/model-guides/image-workflows). **Open as advanced** in a simple workflow's
-actions converts a copy into a one-sampler graph. Running workflows and `workflow:<name>` API
-calls arrive with workflow execution.
+actions converts a copy into a one-sampler graph. Test-run workflows there, or call a published
+one through the API as `workflow:<name>`.
+
+## ControlNet {#controlnet}
+
+An SDXL model entry can load an optional **ControlNet** so image workflows can guide composition
+with a control image. Choose the ControlNet file in the component checklist; it must be an SDXL
+ControlNet (an SD 1.x one is refused), in the original or diffusers layout. The checklist offers
+`diffusers/controlnet-canny-sdxl-1.0` for edge guidance. A ControlNet stays loaded beside the model
+and adds its weights to the memory used, so only an exclusive entry (**Keep GPUs to itself**) may have one.
+Make a separate exclusive entry for the same checkpoint when you also want a shared one. An entry
+loads one ControlNet, so match the workflow's control kind to it: a canny ControlNet for edges, a
+depth one for depth maps.
 
 ## Limits and troubleshooting
 

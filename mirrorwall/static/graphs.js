@@ -28,7 +28,7 @@
   /** Read the library; unsaved drafts and edited saved workflows stay as they are. */
   async function load(prefer = null) {
     library = await api('graphs');
-    models = (library.models || []).map(one => ({id: one.id, label: one.id, family: one.family}));
+    models = (library.models || []).map(one => ({id: one.id, label: one.id, family: one.family, control: Boolean(one.control)}));
     const kept = new Map(entries.filter(one => one.dirty || one.kind === 'draft').map(one => [one.key, one]));
     const next = library.workflows.map(row => {
       const before = kept.get('saved:' + row.id);

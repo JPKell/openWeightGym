@@ -227,7 +227,7 @@ window.SuiteWorkflowGraph = (() => {
       const definition = spec(catalogue, node.type);
       if (labels.has(node.id)) push(node, 'error', 'Two components share the label ' + node.id + '.');
       labels.add(node.id);
-      if (definition.phase > 4) push(node, 'warning', `${definition.label} is planned for Phase ${definition.phase}; it cannot run yet.`);
+      if (definition.phase > (catalogue.runnable_phase ?? 4)) push(node, 'warning', `${definition.label} is planned for Phase ${definition.phase}; it cannot run yet.`);
       for (const input of definition.inputs || []) {
         if (input.required && !linksInto(graph, node.id, input.name).length) push(node, 'error', `${input.label} needs a source.`);
       }
@@ -236,9 +236,16 @@ window.SuiteWorkflowGraph = (() => {
       const wanted = node.type === 'upscale' ? node.values.upscaler : node.type === 'sampler' && node.values.hires ? node.values.hires_upscaler : '';
       if (upscalers && wanted && !latent.includes(wanted) && !upscalers.some(one => one.id === wanted)) push(node, 'error', 'That upscaler is not installed on any node.');
       if (node.type === 'sampler' && node.values.hires && !latent.includes(node.values.hires_upscaler)) push(node, 'error', 'A hires pass with an upscaler file cannot run yet; choose a latent method or add an Upscale step.');
+      if (node.type === 'tiled_detail') {
+        const model = modelOf(graph, node.id, models), family = model && catalogue.families[model.family];
+        if (family && !family.init) push(node, 'error', `${family.label} has no image-to-image pass here; tiled detail needs an SDXL model.`);
+        else if (family && node.values.tile % family.alignment) push(node, 'error', `${family.label} needs a tile size in multiples of ${family.alignment}.`);
+        if (node.values.overlap * 2 >= node.values.tile) push(node, 'error', 'The overlap must be less than half the tile size.');
+      }
       if (node.type === 'sampler') {
         const model = modelOf(graph, node.id, models), family = model && catalogue.families[model.family];
         if (!family) continue;
+        if (linksInto(graph, node.id, 'control').length && !model.control) push(node, 'error', 'This model has no ControlNet. Add one to an exclusive SDXL model entry under Models → Images, or remove the control image.');
         const references = linksInto(graph, node.id, 'references').length;
         if (references > family.references) push(node, 'error', family.references ? `${family.label} uses at most ${family.references} reference images.` : `${family.label} does not use reference images here.`);
         if (linksInto(graph, node.id, 'init').length && !family.init) push(node, 'error', `${family.label} has no start-image pass here; use reference images or an SDXL model.`);

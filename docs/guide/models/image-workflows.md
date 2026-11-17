@@ -78,6 +78,32 @@ between them, as the *Upscaler comparison* sample does. A hires pass uses a late
 that names an upscaler file is listed as a problem until hires upscaler files can run. A file no
 node has is also a problem to fix before publishing.
 
+## Structure from a control image
+
+A **Control image** step guides a Sampler's composition with the ControlNet its model loads. Feed
+it an image and link its output to the Sampler's **Control image** input. **Edges** finds the edges
+in any photo or drawing; the runtime detects them. **Depth** and **Pose** use the image as given,
+so supply a ready-made depth map or pose skeleton: this app does not estimate depth or pose. Match
+the kind to the ControlNet, for example **Edges** with a canny ControlNet. **Control strength**
+(0.6–0.8 is a good start) sets how closely the result follows the structure. The control image is
+fitted to the Sampler's size by cropping its centre.
+
+Only an exclusive SDXL model entry with a **ControlNet** component can take a control image; add
+one under **Models → Images** (see [Image models](/docs/model-guides/image-models#controlnet)).
+Other models show the problem *This model has no ControlNet*. The *Structure-guided generation*
+sample uses edges at strength 0.7.
+
+## Tiled detail
+
+A **Tiled detail** step adds detail to a large image, typically one an Upscale step enlarged. It
+splits the image into tiles of at most **Tile size** pixels a side, sharing at least **Overlap**
+pixels with their neighbours. Each tile then goes through a low-strength image-to-image pass (0.2–0.35 keeps
+the composition), and the tiles are blended back with a gradual fade across each overlap so no
+seams show. Each tile is one image request on an SDXL model with the step's steps, sampler,
+scheduler and CFG; a linked Seed gives every tile the same seed. One step makes at most 64 tiles
+per image; raise the tile size for larger images. The *Tiled 4× upscale* sample enlarges 2×, adds
+detail in nine 1024-pixel tiles, then enlarges 2× again.
+
 ## Versions and publishing
 
 - Each save is a new version. Saving fails when someone else saved first; reload and save again.
@@ -121,7 +147,7 @@ with images). The run panel's **Call this workflow from the API** shows the exac
 A workflow holds at most 64 components, 128 links and 32 steps, and one call runs at most 128
 steps in all (steps × `n`). Unsaved changes stay in page
 memory when you switch workflows, but reloading the page loses them. Steps marked with a later
-phase (control images, tiled detail, masks, face detail) can be saved but not published. The
+phase (masks, composite, face detail) can be saved but not published. The
 editor does not set LoRA strengths yet; a converted simple workflow notes them on the canvas.
 A step that fails stops the run and is named in the error, for example
 `Refine: That upscaler is not installed on this node.` A shared-residency model refuses a step

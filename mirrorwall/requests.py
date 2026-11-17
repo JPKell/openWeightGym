@@ -177,6 +177,23 @@ def native_extensions(resolved):
     return sample,guidance,top
 
 
+def checked_control(asked,result,settings=None):
+    """A ControlNet control image: base64 image, strength 0–2 and whether the runtime finds its edges first."""
+    value=asked["control"]
+    if not isinstance(value,dict) or value.keys()-{"image","strength","edges"} or "image" not in value:
+        raise ValueError("control takes image, strength and edges.")
+    strength=value.get("strength",.9)
+    if type(strength) not in (int,float) or not math.isfinite(strength) or not 0<=strength<=2:
+        raise ValueError("control.strength must be 0–2.")
+    if type(value.get("edges",False)) is not bool:
+        raise ValueError("control.edges must be true or false.")
+    if "upscale_with" in asked or "detail_resize" in asked or "mask" in asked:
+        raise ValueError("A control image cannot be combined with upscale_with, detail_resize or a mask.")
+    if settings and not settings["sdcpp"].get("components",{}).get("control_net"):
+        raise ValueError("This model has no ControlNet; add one to an exclusive SDXL model entry under Models → Images.")
+    return {"image":encoded_image(value["image"]),"strength":strength,"edges":value.get("edges",False)}
+
+
 def checked_upscale_with(asked,result):
     """An upscale-only request: one source image enlarged by a named installed upscaler file, then resized to the factor."""
     value=asked["upscale_with"]
@@ -202,7 +219,7 @@ def checked_request(asked,settings=None):
     allowed={"model","prompt","negative_prompt","n","size","width","height","steps","seed","guidance","cfg_scale",
              "sampler","scheduler","references","image","mask","strength","loras","upscale","stream","partial_images",
              "response_format","output_format","user","quality","background","moderation","metadata","live_previews","reference_megapixels","detail_resize",
-             "advanced","upscale_with"}
+             "advanced","upscale_with","control"}
     unknown=asked.keys()-allowed
     if unknown:
         raise ValueError("Unsupported image settings: "+", ".join(sorted(unknown)))
@@ -249,7 +266,12 @@ def checked_request(asked,settings=None):
     if type(result.get('live_previews',False)) is not bool:
         raise ValueError('live_previews must be true or false.')
     reference_mp=result.get('reference_megapixels',(settings or {}).get('sdcpp',{}).get('reference_megapixels',1))
-    if type(reference_mp) not in (int,float) or not math.isfinite(reference_mp) or not .1<=reference_mp<=(settings or {}).get('sdcpp',{}).get('reference_megapixels',4):
+    most_mp=(settings or {}).get('sdcpp',{}).get('reference_megapixels',4)
+    if settings and settings['sdcpp']['family']=='sdxl':
+        # An SDXL start image is encoded at the output size whatever it is prepared at, so preparing it at that size
+        # (a refine or tile pass) costs no more memory than the output itself, which max_pixels already bounds.
+        most_mp=max(most_mp,result['width']*result['height']/1_000_000)
+    if type(reference_mp) not in (int,float) or not math.isfinite(reference_mp) or not .1<=reference_mp<=most_mp:
         raise ValueError('Reference size exceeds the workflow reference-size limit.')
     result['reference_megapixels']=reference_mp
     if result.get("response_format","b64_json")!="b64_json" or result.get("output_format","png")!="png":
@@ -321,6 +343,8 @@ def checked_request(asked,settings=None):
             raise ValueError('Advanced sampling settings need an exclusive model entry; shared-residency workflows keep their measured profile.')
     if "upscale_with" in asked:
         result["upscale_with"]=checked_upscale_with(asked,result)
+    if "control" in asked:
+        result["control"]=checked_control(asked,result,settings)
     if result.get('advanced',{}).get('hires') and (result.get('detail_resize') or result.get('upscale',1)>1):
         raise ValueError('Use the hires pass or Upscale / Resize & add detail, not both.')
     loras=result.get("loras",{})

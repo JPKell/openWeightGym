@@ -19,7 +19,8 @@ ENCODER = {"klein-4b": "qwen3-4b", "klein-9b": "qwen3-8b", "dev": "mistral-small
 LABELS = {"klein-4b": "Flux 2 klein 4B", "klein-9b": "Flux 2 klein 9B", "dev": "Flux 2 Dev", "checkpoint": "SDXL checkpoint (UNet, CLIP and VAE in one file)",
           "unet": "SDXL UNet only", "qwen3-4b": "Qwen3 4B text encoder", "qwen3-8b": "Qwen3 8B text encoder",
           "mistral-small-24b": "Mistral Small 3.x 24B text encoder", "flux2-vae": "Flux 2 VAE (32 latent channels)",
-          "sdxl-vae": "SD/SDXL VAE (4 latent channels)", "clip_l": "CLIP L text encoder", "clip_g": "CLIP G text encoder"}
+          "sdxl-vae": "SD/SDXL VAE (4 latent channels)", "clip_l": "CLIP L text encoder", "clip_g": "CLIP G text encoder",
+          "sdxl-controlnet": "SDXL ControlNet", "sd1-controlnet": "SD 1.x ControlNet"}
 LABELS.update({'qwen-image':'Qwen Image (original / 2512)', 'qwen-image-2.1':'Qwen Image 2.1',
                'qwen2.5-vl-7b':'Qwen2.5-VL 7B text encoder','qwen3-vl-8b':'Qwen3-VL 8B text encoder',
                'qwen-image-vae':'Qwen Image VAE (16 latent channels)', 'qwen-image-2.1-vae':'Qwen Image 2.1 VAE (64 latent channels)'})
@@ -38,7 +39,8 @@ GET = {"klein-4b": ("leejet/FLUX.2-klein-4B-GGUF", "flux-2-klein-4b-Q8_0.gguf"),
        "flux2-vae": ("Comfy-Org/Flux-2-Dev", "split_files/vae/flux2-vae.safetensors"),
        "sdxl-vae": ("madebyollin/sdxl-vae-fp16-fix", "sdxl_vae.safetensors"),
        "checkpoint": ("stabilityai/stable-diffusion-xl-base-1.0", "sd_xl_base_1.0.safetensors"),
-       "upscaler": ("Kim2091/UltraSharp", "4x-UltraSharp.pth")}
+       "upscaler": ("Kim2091/UltraSharp", "4x-UltraSharp.pth"),
+       "sdxl-controlnet": ("diffusers/controlnet-canny-sdxl-1.0", "diffusion_pytorch_model.fp16.safetensors")}
 GET.update({'qwen-image':('QuantStack/Qwen-Image-GGUF','Qwen_Image-Q4_K_M.gguf'),
             'qwen-image-2.1':('leejet/Qwen-Image-2.1-GGUF','qwen_image_2.1-Q4_K.gguf'),
             'qwen2.5-vl-7b':('mradermacher/Qwen2.5-VL-7B-Instruct-GGUF','Qwen2.5-VL-7B-Instruct.Q8_0.gguf'),
@@ -54,9 +56,10 @@ GET.update({'krea2-raw': ('realrebelai/KREA-2_GGUFs', 'BASE/Krea-2-Base-Q4_K_M.g
             'qwen3-vl-4b': ('Qwen/Qwen3-VL-4B-Instruct-GGUF', 'Qwen3VL-4B-Instruct-Q4_K_M.gguf'),
             'wan2.1-vae': ('Comfy-Org/Wan_2.1_ComfyUI_repackaged', 'split_files/vae/wan_2.1_vae.safetensors')})
 SLOTS = (("diffusion", "Diffusion weights"), ("text_encoder", "Text encoder"), ("vae", "VAE"),
-         ("clip_l", "CLIP L"), ("clip_g", "CLIP G"), ("upscaler", "Image upscaler"), ("tokenizer", "Tokenizer JSON"))
+         ("clip_l", "CLIP L"), ("clip_g", "CLIP G"), ("upscaler", "Image upscaler"), ("tokenizer", "Tokenizer JSON"),
+         ("control_net", "ControlNet"))
 FORMATS = (".gguf", ".safetensors", ".pth", ".json")
-IDENTITY_VERSION = 5  # Krea 2 transformers and Qwen3-VL 4B encoders (4: video parts)
+IDENTITY_VERSION = 6  # ControlNets (5: Krea 2 transformers and Qwen3-VL 4B encoders; 4: video parts)
 VIDEO_SLOTS=(("diffusion","Diffusion weights"),("text_encoder","Text encoder"),("vae","VAE"),
              ("high_noise_diffusion_model","High-noise diffusion weights"),("audio_vae","Audio VAE"),
              ("embeddings_connectors","Embeddings connector"),("byt5","ByT5 GlyphXL"),
@@ -116,6 +119,10 @@ def classify(shapes):
             return "diffusion", "flux1", None  # 64 input channels: Flux 1, which Mirror Wall does not run
         variant = FLUX2.get(width)
         return "diffusion", "flux2-dev" if variant == "dev" else "flux2-klein" if variant else "flux2", variant
+    if any(name.startswith(("controlnet_cond_embedding.", "control_model.input_hint_block.", "input_hint_block.")) for name in names):
+        # A ControlNet copies the UNet's encoder, so check it before the UNet: SDXL ones carry its extra embedding.
+        sdxl = any(name.startswith(("add_embedding.", "control_model.label_emb.", "label_emb.")) for name in names)
+        return "controlnet", None, "sdxl-controlnet" if sdxl else "sd1-controlnet"
     if "label_emb.0.0.weight" in flat or "add_embedding.linear_1.weight" in flat:
         # sd.cpp's GGUF converter names SDXL's two CLIPs cond_stage_model and
         # cond_stage_model.1; safetensors checkpoints use conditioner.embedders.
@@ -347,11 +354,13 @@ def needs(family, variant):
         return {"text_encoder": (True, "text_encoder", ENCODER[variant], f"{LABELS[variant]} reads prompts with the {LABELS[ENCODER[variant]]}."),
                 "vae": (True, "vae", "flux2-vae", "Every Flux 2 model decodes images with the Flux 2 VAE."),
                 "clip_l": None, "clip_g": None, "upscaler": upscaler}
+    control = (False, "controlnet", "sdxl-controlnet", "Optional: lets image workflows guide composition with a control image. "
+               "Only an exclusive model entry may load one, since it adds memory.")
     if family == "sdxl" and variant == "checkpoint":
-        return {"text_encoder": None, "clip_l": None, "clip_g": None, "upscaler": upscaler,
+        return {"text_encoder": None, "clip_l": None, "clip_g": None, "upscaler": upscaler, "control_net": control,
                 "vae": (False, "vae", "sdxl-vae", "The checkpoint has its own VAE; the fp16-fix VAE avoids black or noisy images at half precision.")}
     if family == "sdxl":
-        return {"text_encoder": None, "upscaler": upscaler,
+        return {"text_encoder": None, "upscaler": upscaler, "control_net": control,
                 "vae": (True, "vae", "sdxl-vae", "A UNet-only file has no VAE of its own."),
                 "clip_l": (True, "clip_l", "clip_l", "A UNet-only file has no text encoders of its own."),
                 "clip_g": (True, "clip_g", "clip_g", "A UNet-only file has no text encoders of its own.")}

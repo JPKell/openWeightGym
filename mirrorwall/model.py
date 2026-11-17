@@ -98,8 +98,15 @@ def check_model(name,settings,cards):
     required={"vae","text_encoder"} if options["family"]!="sdxl" else set()
     if options['family']=='moss-image':
         required.add('tokenizer')
-    if not isinstance(components,dict) or not required<=components.keys() or components.keys()-{"vae","text_encoder","clip_l","clip_g","tokenizer"}:
+    if not isinstance(components,dict) or not required<=components.keys() or components.keys()-{"vae","text_encoder","clip_l","clip_g","tokenizer","control_net"}:
         raise ValueError("Flux 2, Qwen Image, MOSS-Image and Krea 2 require explicit VAE and text-encoder components; MOSS-Image also requires its tokenizer JSON.")
+    if "control_net" in components:
+        # A ControlNet is loaded beside the UNet for the life of the native server and adds its weights to the
+        # measured memory, so only an exclusive entry, which is admitted alone, may carry one.
+        if options["family"]!="sdxl":
+            raise ValueError("A ControlNet component applies to SDXL models.")
+        if not settings.get("alone",False):
+            raise ValueError("A ControlNet adds memory a shared-residency profile was not measured with; use an exclusive model entry.")
     for key,value in components.items():
         path(value,key)
     for key in ("upscaler","preparation_python"):

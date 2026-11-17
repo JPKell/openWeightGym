@@ -146,7 +146,7 @@ def order(document):
         into.setdefault(link['to'][0], set()).add(link['from'][0])
     document_nodes = {node['id']: node for node in document['nodes']}
     def model_of(node):
-        if node['type'] != 'sampler':
+        if node['type'] not in ('sampler', 'tiled_detail'):
             return None
         source = next((link['from'][0] for link in document['links'] if link['to'] == [node['id'], 'model']), None)
         return document_nodes[source]['values']['model'] if source else None
@@ -158,8 +158,8 @@ def order(document):
             raise RunError('The links form a loop.')
         chosen = (next((node for node in ready if not graph.COMPONENTS[node['type']].get('stage')), None)
                   or next((node for node in ready if current and model_of(node) == current), None)
-                  or next((node for node in ready if node['type'] != 'sampler'), None) or ready[0])
-        if chosen['type'] == 'sampler':
+                  or next((node for node in ready if node['type'] not in ('sampler', 'tiled_detail')), None) or ready[0])
+        if chosen['type'] in ('sampler', 'tiled_detail'):
             current = model_of(chosen)
         done.add(chosen['id'])
         result.append(chosen)
@@ -173,7 +173,7 @@ def plan(document):
     loads, last = 0, None
     nodes = {node['id']: node for node in document['nodes']}
     for node in steps:
-        if node['type'] == 'sampler':
+        if node['type'] in ('sampler', 'tiled_detail'):
             source = next((link['from'][0] for link in document['links'] if link['to'] == [node['id'], 'model']), None)
             model = nodes[source]['values']['model'] if source else None
             loads += model != last
@@ -224,6 +224,38 @@ def resized(image, mode, width, height):
         left, top = max(0, (image.width - size[0]) // 2), max(0, (image.height - size[1]) // 2)
         return image.crop((left, top, left + min(size[0], image.width), top + min(size[1], image.height)))
     return ImageOps.pad(image, size, Image.Resampling.LANCZOS, color=(0, 0, 0))
+
+
+def tiles(width, height, tile, overlap, alignment=16):
+    """Tile boxes (left, top, right, bottom) covering an image: aligned tiles of at most `tile` pixels a side, neighbours
+    sharing at least `overlap` pixels, the last row and column flush with the far edges."""
+    def spans(length):
+        size = min(int(tile), length // alignment * alignment)
+        if size < 256:
+            raise RunError('Tiled detail needs an image at least 256 pixels on each side.')
+        if size >= length:
+            return [(0, size)]
+        stride = size - int(overlap)
+        starts = list(range(0, length - size, stride)) + [length - size]
+        return [(start, start + size) for start in sorted(set(starts))]
+    return [(left, top, right, bottom) for top, bottom in spans(height) for left, right in spans(width)]
+
+
+def blend(base, pieces, overlap):
+    """Paste processed tiles in order over `base`; each fades in across `overlap` pixels where it meets tiles already pasted."""
+    from PIL import ImageChops
+    result = base.copy()
+    for (left, top, right, bottom), piece in pieces:
+        size = (right - left, bottom - top)
+        if piece.size != size:
+            piece = piece.resize(size, Image.Resampling.LANCZOS)
+        def ramp(length, fade):
+            return [min(255, round(255 * (index + 1) / (fade + 1))) if index < fade else 255 for index in range(length)]
+        across = Image.new('L', (size[0], 1)); across.putdata(ramp(size[0], int(overlap) if left else 0))
+        down = Image.new('L', (1, size[1])); down.putdata(ramp(size[1], int(overlap) if top else 0))
+        mask = ImageChops.multiply(across.resize(size), down.resize(size))
+        result.paste(piece.convert(result.mode), (left, top), mask)
+    return result
 
 
 def _advanced(values):
@@ -291,11 +323,63 @@ async def run(document, count, images, *, models, upscalers, send, image_of=None
                 made[(label, 'size')] = (int(values['width']), int(values['height']))
             elif kind == 'load_image':
                 made[(label, 'image')] = loaded.get(label)
+            elif kind == 'control_image':
+                source = value(node, 'image')
+                made[(label, 'control')] = {'image': source, 'strength': values['strength'], 'edges': values['kind'] == 'edges'}
             elif kind == 'resize':
                 source = value(node, 'image')
                 made[(label, 'image')] = await asyncio.to_thread(resized, source, values['mode'], values['width'], values['height'])
                 origin[label] = origin.get(sources(node, 'image')[0][0])
                 seeds[label] = seeds.get(sources(node, 'image')[0][0])
+            elif kind == 'tiled_detail':
+                finished += 1
+                yield {'type': 'workflow.step', 'step': label, 'title': node['title'], 'item': item, 'state': 'started', 'index': finished, 'total': total}
+                model = value(node, 'model')
+                family = family_of.get(model)
+                if family is None:
+                    raise RunError(f"{node['title']}: the model {model} is not available to you.")
+                if not family['init']:
+                    raise RunError(f"{node['title']}: {family['label']} has no image-to-image pass; use an SDXL model.")
+                prompt = value(node, 'prompt')
+                if not prompt or not prompt.strip():
+                    raise RunError(f"{node['title']} needs a prompt.")
+                image = value(node, 'image')
+                boxes = tiles(image.width, image.height, values['tile'], values['overlap'], family['alignment'])
+                if len(boxes) > graph.MAX_TILES:
+                    raise RunError(f"{node['title']}: a {image.width}×{image.height} image needs {len(boxes)} tiles of this size; "
+                                   f"at most {graph.MAX_TILES} are allowed, so raise the tile size.")
+                seed = value(node, 'seed')
+                common = {'model': model, 'prompt': prompt, 'n': 1, 'stream': True, 'steps': int(values['steps']),
+                          'sampler': values['sampler'], 'scheduler': values['scheduler'], 'cfg_scale': values['cfg_scale'],
+                          'strength': values['strength'], 'seed': seed if seed is not None else (base_seed + item) % (2**31)}
+                negative = value(node, 'negative')
+                if negative and family['negative']:
+                    common['negative_prompt'] = negative
+                pieces, where = [], None
+                for number, box in enumerate(boxes, 1):
+                    width, height = box[2] - box[0], box[3] - box[1]
+                    piece = await asyncio.to_thread(lambda: encode(image.crop(box)))
+                    body = {**common, 'size': f'{width}x{height}', 'references': [piece], 'reference_megapixels': max(.1, width * height / 1_000_000)}
+                    result = None
+                    async for event in send('/v1/images/edits', body):
+                        if event.get('type') == 'error' or 'error' in event:
+                            message = (event.get('error') or {}).get('message') if isinstance(event.get('error'), dict) else event.get('error')
+                            raise RunError(f"{node['title']}, tile {number} of {len(boxes)}: {message or 'the step failed.'}")
+                        if event.get('type') in ('image_generation.completed', 'image_edit.completed'):
+                            result = event
+                    if not result:
+                        raise RunError(f"{node['title']}, tile {number} of {len(boxes)}: the step ended without an image.")
+                    pieces.append((box, await asyncio.to_thread(decode, result['b64_json'])))
+                    where = result.get('node') or where
+                    yield {'type': 'workflow.progress', 'step': label, 'item': item, 'stage': 'tiles', 'tile': number, 'tiles': len(boxes)}
+                made[(label, 'image')] = await asyncio.to_thread(blend, image, pieces, values['overlap'])
+                settings[label] = {**{key: one for key, one in common.items() if key not in ('stream', 'n')},
+                                   'tile': int(values['tile']), 'overlap': int(values['overlap']), 'tiles': len(boxes)}
+                origin[label] = (model, where)
+                seeds[label] = seeds.get(sources(node, 'image')[0][0])
+                yield {'type': 'workflow.step', 'step': label, 'title': node['title'], 'item': item, 'state': 'completed',
+                       'index': finished, 'total': total, 'seed': common['seed'], 'node': where, 'tiles': len(boxes),
+                       'width': made[(label, 'image')].width, 'height': made[(label, 'image')].height}
             elif kind in ('sampler', 'upscale'):
                 finished += 1
                 yield {'type': 'workflow.step', 'step': label, 'title': node['title'], 'item': item, 'state': 'started', 'index': finished, 'total': total}
@@ -338,6 +422,9 @@ async def run(document, count, images, *, models, upscalers, send, image_of=None
                         # References are prepared at no more than the smallest one's size, so none needs an AI enlargement.
                         body['references'] = [encode(one) for one in references]
                         body['reference_megapixels'] = max(.1, min(1, *(one.width * one.height / 1_000_000 for one in references)) // .01 * .01)
+                    control = value(node, 'control')
+                    if control is not None:
+                        body['control'] = {'image': encode(control['image']), 'strength': control['strength'], 'edges': control['edges']}
                     advanced = _advanced(values)
                     if advanced:
                         body['advanced'] = advanced
@@ -354,7 +441,9 @@ async def run(document, count, images, *, models, upscalers, send, image_of=None
                     if previous[1] and where is not None and previous[1] in where:
                         body['node'] = previous[1]  # keep the image on the node that made it
                     path = '/v1/images/edits'
-                settings[label] = {key: value for key, value in body.items() if key not in ('image', 'references', 'stream', 'n')}
+                settings[label] = {key: value for key, value in body.items() if key not in ('image', 'references', 'stream', 'n', 'control')}
+                if 'control' in body:
+                    settings[label]['control'] = {key: one for key, one in body['control'].items() if key != 'image'}
                 result = None
                 async for event in send(path, body):
                     if event.get('type') == 'error' or 'error' in event:

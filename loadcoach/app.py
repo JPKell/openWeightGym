@@ -359,6 +359,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                                      'limits':image_limits(library.get(name)),'split_mode':options.get('split_mode','single'),
                                      'reference_megapixels':options.get('reference_megapixels',1),
                                      'upscaling':bool(options.get('upscaler')),
+                                     'control':bool(options.get('components',{}).get('control_net')),
                                      'references':'image-to-image' if options['family']=='sdxl' else 'conditioning',
                                      'loras':{key:{'scale':entry.get('scale',1)} for key,entry in options.get('loras',{}).items()}}
         if marks['capabilities'].get('audio'):

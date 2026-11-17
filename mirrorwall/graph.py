@@ -61,6 +61,8 @@ def _port(name, label, kind, required=False, multiple=False):
     return {'name': name, 'label': label, 'type': kind, 'required': required, 'multiple': multiple}
 
 
+MAX_TILES = 64  # requests one Tiled detail step may make per run item
+
 SAMPLER_FIELDS = [
     _field('steps', 'Steps', 'number', 28, min=1, max=200, step=1, overridable=True),
     _field('sampler', 'Sampler', 'choice', 'euler', choices=list(NATIVE_SAMPLERS), overridable=True),
@@ -131,17 +133,21 @@ COMPONENTS = {
                'help': 'Plain geometry, for example to match a model\'s size before a refine pass.'},
     'control_image': {'label': 'Control image', 'group': 'Structure', 'phase': 5,
                       'inputs': [_port('image', 'Image', 'image', True)], 'outputs': [_port('control', 'Control', 'control')],
-                      'fields': [_field('kind', 'Kind', 'choice', 'depth', choices=['depth', 'edges', 'pose']),
+                      'fields': [_field('kind', 'Kind', 'choice', 'edges', choices=['edges', 'depth', 'pose']),
                                  _field('strength', 'Control strength', 'number', 0.7, min=0, max=2, step=0.05, overridable=True)],
-                      'help': 'Guides composition from an image\'s depth, edges or pose.'},
+                      'help': 'Guides composition with the model\'s ControlNet. Edges are found in any photo; for depth or pose, '
+                              'give a ready-made depth map or pose skeleton. Match the kind to the ControlNet the model loads.'},
     'tiled_detail': {'label': 'Tiled detail', 'group': 'Refine', 'phase': 5, 'stage': True,
                      'inputs': [_port('model', 'Model', 'model', True), _port('prompt', 'Prompt', 'text', True),
+                                _port('negative', 'Negative prompt', 'text'), _port('seed', 'Seed', 'seed'),
                                 _port('image', 'Image', 'image', True)],
                      'outputs': [_port('image', 'Image', 'image')],
                      'fields': [_field('strength', 'Strength', 'number', 0.3, min=0, max=1, step=0.01, overridable=True),
                                 _field('tile', 'Tile size', 'number', 1024, min=512, max=2048, step=64),
-                                _field('overlap', 'Overlap', 'number', 64, min=16, max=256, step=16)],
-                     'help': 'Adds detail to a large image tile by tile and blends the seams.'},
+                                _field('overlap', 'Overlap', 'number', 64, min=16, max=256, step=16),
+                                *[dict(field) for field in SAMPLER_FIELDS[:4]]],
+                     'help': 'Adds detail to a large image tile by tile, each a low-strength image-to-image pass, and blends the seams. '
+                             f'At most {MAX_TILES} tiles; a larger tile size makes fewer.'},
     'mask': {'label': 'Mask', 'group': 'Masks', 'phase': 7,
              'inputs': [_port('image', 'Image', 'image', True)], 'outputs': [_port('mask', 'Mask', 'mask')],
              'fields': [_field('invert', 'Invert', 'toggle', False), _field('feather', 'Feather', 'number', 8, min=0, max=128, step=1)],
@@ -292,20 +298,21 @@ SAMPLES = [
             _node('out', 'output', [720, 160], label='Final')],
            [('prompt.text', 'base.prompt'), ('model.model', 'base.model'), ('seed.seed', 'base.seed'),
             ('size.size', 'base.size'), ('base.image', 'out.image')]),
-    _graph('Structure-guided generation', 'Depth from a photo guides a new image (Phase 5).', 'sdxl',
+    _graph('Structure-guided generation', 'Edges found in a photo guide a new image; needs an SDXL model entry with a ControlNet.', 'sdxl',
            [*_inputs(model='sdxl-base'), _node('source', 'load_image', [380, 420], 'Structure source'),
-            _node('control', 'control_image', [380, 560], kind='depth', strength=0.7),
+            _node('control', 'control_image', [380, 560], kind='edges', strength=0.7),
             _sampler('base', 'sdxl', [720, 160], 'Base'), _node('out', 'output', [1040, 160], label='Final')],
            [('prompt.text', 'base.prompt'), ('model.model', 'base.model'), ('seed.seed', 'base.seed'), ('size.size', 'base.size'),
-            ('source.image', 'control.image'), ('control.control', 'base.control'), ('base.image', 'out.image')]),
-    _graph('Tiled 4× upscale', 'Enlarge twice with a tiled detail pass in between (Phase 5).', 'sdxl',
+            ('source.image', 'control.image'), ('control.control', 'base.control'), ('base.image', 'out.image')],
+           exposed={'prompt': ['text'], 'source': ['asset']}),
+    _graph('Tiled 4× upscale', 'Enlarge twice with a tiled detail pass in between.', 'sdxl',
            [*_inputs(model='sdxl-base'), _sampler('base', 'sdxl', [380, 160], 'Base'),
             _node('up1', 'upscale', [720, 60], 'Upscale 2×', upscaler='4x-UltraSharp.pth', factor=2),
-            _node('tiles', 'tiled_detail', [1040, 160], strength=0.3, tile=1024, overlap=64),
-            _node('up2', 'upscale', [1360, 60], 'Upscale 2× again', upscaler='RealESRGAN_x4plus.pth', factor=2), _node('out', 'output', [1680, 160], label='Final')],
+            _node('tiles', 'tiled_detail', [1040, 160], strength=0.3, tile=1024, overlap=64, steps=20, sampler='dpm++2m', scheduler='karras', cfg_scale=6.5),
+            _node('up2', 'upscale', [1360, 60], 'Upscale 2× again', upscaler='4x-UltraSharp.pth', factor=2), _node('out', 'output', [1680, 160], label='Final')],
            [('prompt.text', 'base.prompt'), ('prompt.text', 'tiles.prompt'), ('model.model', 'base.model'),
-            ('model.model', 'tiles.model'), ('seed.seed', 'base.seed'), ('size.size', 'base.size'), ('base.image', 'up1.image'),
-            ('up1.image', 'tiles.image'), ('tiles.image', 'up2.image'), ('up2.image', 'out.image')]),
+            ('model.model', 'tiles.model'), ('seed.seed', 'base.seed'), ('seed.seed', 'tiles.seed'), ('size.size', 'base.size'),
+            ('base.image', 'up1.image'), ('up1.image', 'tiles.image'), ('tiles.image', 'up2.image'), ('up2.image', 'out.image')]),
 ]
 
 
@@ -313,7 +320,7 @@ def catalogue():
     """Everything the editor needs, as one JSON-ready object."""
     return {'components': COMPONENTS, 'order': list(COMPONENTS), 'port_types': PORT_TYPES, 'families': FAMILIES, 'defaults': DEFAULTS,
             'samplers': list(NATIVE_SAMPLERS), 'schedulers': list(NATIVE_SCHEDULERS), 'hires_upscalers': list(HIRES_UPSCALERS),
-            'sampler_aliases': dict(_model.SAMPLER_ALIASES), 'limits': LIMITS}
+            'sampler_aliases': dict(_model.SAMPLER_ALIASES), 'limits': LIMITS, 'runnable_phase': RUNNABLE_PHASE}
 
 
 # ---- Validation: the server's copy of the editor's rules (weightroom/static/workflow-graph.js) ----
@@ -321,7 +328,7 @@ def catalogue():
 LABEL = re.compile(r'[a-z][a-z0-9_]{0,39}')
 SLUG = re.compile(r'[a-z0-9][a-z0-9._-]{0,79}')
 MAX_DOCUMENT_BYTES = 256 * 1024
-RUNNABLE_PHASE = 4  # components of later phases are saved but cannot run yet
+RUNNABLE_PHASE = 5  # components of later phases are saved but cannot run yet
 
 
 def slug(name):
@@ -504,12 +511,26 @@ def problems(document, models=None, upscalers=None):
             continue
         if node['type'] == 'model' and node['values']['model'] not in installed:
             push(node, 'error', 'Choose an installed image model.')
+        if node['type'] == 'tiled_detail':
+            source = next(iter(into(node, 'model')), None)
+            model = installed.get(found[source]['values']['model']) if source else None
+            family = FAMILIES.get(model.get('family')) if model else None
+            if family and not family['init']:
+                push(node, 'error', f"{family['label']} has no image-to-image pass here; tiled detail needs an SDXL model.")
+            elif family and node['values']['tile'] % family['alignment']:
+                push(node, 'error', f"{family['label']} needs a tile size in multiples of {family['alignment']}.")
+            if node['values']['overlap'] * 2 >= node['values']['tile']:
+                push(node, 'error', 'The overlap must be less than half the tile size.')
+            continue
         if node['type'] == 'sampler':
             source = next(iter(into(node, 'model')), None)
             model = installed.get(found[source]['values']['model']) if source else None
             family = FAMILIES.get(model.get('family')) if model else None
             if not family:
                 continue
+            if into(node, 'control') and not model.get('control'):
+                push(node, 'error', 'This model has no ControlNet. Add one to an exclusive SDXL model entry under Models → Images, '
+                                    'or remove the control image.')
             references = len(into(node, 'references'))
             if references > family['references']:
                 push(node, 'error', f"{family['label']} uses at most {family['references']} reference images." if family['references']

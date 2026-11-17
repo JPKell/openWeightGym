@@ -23,11 +23,15 @@ def sample(name):
 
 
 def test_every_sample_is_a_valid_document_and_only_later_phases_report_problems():
+    controlled = [{**model, 'control': model['id'] == 'sdxl-base'} for model in MODELS]
     for one in graph.SAMPLES:
-        document, problems = graph.check(one, MODELS)
+        document, problems = graph.check(one, controlled)
         assert document['api_name'] == graph.slug(one['name'])
-        planned = {graph.COMPONENTS[node['type']]['phase'] for node in document['nodes']} - {4}
+        planned = {graph.COMPONENTS[node['type']]['phase'] for node in document['nodes'] if graph.COMPONENTS[node['type']]['phase'] > graph.RUNNABLE_PHASE}
         assert bool([p for p in problems if p['level'] == 'error']) == bool(planned), (one['name'], problems)
+    # Without a ControlNet on its model, the structure sample cannot run.
+    assert [p['text'] for p in graph.check(sample('Structure-guided generation'), MODELS)[1]] == [
+        'This model has no ControlNet. Add one to an exclusive SDXL model entry under Models → Images, or remove the control image.']
     assert 'manage-workflows' in ABILITIES
 
 
@@ -193,7 +197,7 @@ def test_workflow_api_needs_the_ability_to_change_and_access_to_every_model_to_r
     refine = browser.post('/mirrorwall-api/graphs', json={'document': sample('SDXL two-model refine')})
     assert refine.status_code == 201, refine.text
     draft = browser.post('/mirrorwall-api/graphs', json={'document': sample('Quick draft')}).json()
-    tiled = browser.post('/mirrorwall-api/graphs', json={'document': sample('Tiled 4× upscale')}).json()
+    tiled = browser.post('/mirrorwall-api/graphs', json={'document': sample('Structure-guided generation')}).json()  # no ControlNet
     assert tiled['problems'] and browser.post(f"/mirrorwall-api/graphs/{tiled['id']}/publish", json={'version': 1, 'expected_version': 1}).status_code == 400
     for one in (refine.json(), draft):
         published = browser.post(f"/mirrorwall-api/graphs/{one['id']}/publish", json={'version': 1, 'expected_version': 1})

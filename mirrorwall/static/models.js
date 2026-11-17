@@ -5,7 +5,7 @@
   let node = params.get('node') || '', defaultNode = '';
   const video=document.getElementById('image-studio')?.dataset.mediaKind==='video';
   const Profiles=video?SuiteVideoProfiles:SuiteImageProfiles;
-  const components=video?['text_encoder','vae','high_noise_diffusion_model','audio_vae','embeddings_connectors','byt5','clip_vision','latent_upscaler','tae']:['text_encoder','vae','clip_l','clip_g','tokenizer'];
+  const components=video?['text_encoder','vae','high_noise_diffusion_model','audio_vae','embeddings_connectors','byt5','clip_vision','latent_upscaler','tae']:['text_encoder','vae','clip_l','clip_g','tokenizer','control_net'];
   const SLOTS=['diffusion',...components,...(video?[]:['upscaler'])];
   const FAMILIES = Profiles.labels;
   const modelDrafts = new Map();

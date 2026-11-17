@@ -622,7 +622,8 @@ class Front:
 
     async def graph_models(self,user):
         """The caller's image models with their families, for workflow checks and access."""
-        return [{'id':m['id'],'family':(m.get('image_workflow') or {}).get('family')} for m in await self.media_catalogue(user,'image')]
+        return [{'id':m['id'],'family':(m.get('image_workflow') or {}).get('family'),'control':bool((m.get('image_workflow') or {}).get('control'))}
+                for m in await self.media_catalogue(user,'image')]
 
     async def graph_upscalers(self,user):
         """Installed upscaler files for a workflow manager, or None when the inventory cannot be read (checks are then skipped)."""

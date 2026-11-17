@@ -3,8 +3,22 @@
 Status: 2026-11-17 — phases 0–4 delivered: the live Stage lanes editor at Models → Image
 workflows runs test runs, and published workflows answer `workflow:<name>` calls and
 `GET /v1/workflows` ([mirrorwall/graph_run.py](../mirrorwall/graph_run.py)). Phase 5 (control
-images and tiled detail) is next. The owner's interview answers are recorded in
-[Decisions](#decisions-interview-2026-11-17) and are reflected throughout.
+images and tiled detail) is delivered as well; Phase 6 (video graphs) is next. The owner's
+interview answers are recorded in [Decisions](#decisions-interview-2026-11-17) and are reflected
+throughout.
+
+Phase 5 as delivered differs from the plan below in these ways:
+
+- A ControlNet is an optional `control_net` component of an SDXL model entry, loaded with
+  `--control-net` for the native server's life. It is allowed only on exclusive entries, because
+  shared-residency profiles were not measured with it. One entry loads one ControlNet.
+- The runtime finds edges itself (`image_preprocess` `canny=true`); depth and pose images are used
+  as given, since this app has no depth or pose estimator. FLUX control images (`control_image`
+  without a ControlNet) need a Flux 1 Canny/Depth family, which the app does not run.
+- Tiled detail runs on the control node. Each tile is one image request, and the tiles are blended
+  with linear fades across the overlaps. A step makes at most 64 tiles. An SDXL start image may
+  now be prepared at the output size beyond the model's reference size, so 1024-pixel tiles and
+  refine passes work.
 
 Phase 4 as delivered differs from the plan below in these ways:
 

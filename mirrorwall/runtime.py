@@ -88,6 +88,8 @@ def native_command(job,port):
     diffusion="cuda0&cuda1" if mode in ("layer","row") else "cuda0"
     cpu = settings.get('gpus') == 0
     backend = 'diffusion=cpu,te=cpu,vae=cpu' if cpu else f"diffusion={diffusion},te={'cuda1' if mode=='components' else 'cuda0'},vae=cuda0"
+    if components.get("control_net"):
+        backend+=",controlnet=cpu" if cpu else ",controlnet=cuda0"
     budget=",".join(f"cuda{i}={v}" for i,v in enumerate(options["vram_limit_gib"])) if options.get("vram_limit_gib") else "-1.5"
     command=[job["installation"]["executable"],"--listen-ip","127.0.0.1","--listen-port",str(port),
              # an SDXL checkpoint carries its own CLIP and VAE and loads as a full model; Flux 2 and SDXL UNet weights load alone
@@ -98,8 +100,9 @@ def native_command(job,port):
     if mode in ("layer","row"):
         command += ["--split-mode",mode]
     if options.get("staged",True):
-        command += ["--params-backend","diffusion=disk,te=disk,vae=disk"]
-    for key,flag in (("text_encoder","--llm"),("vae","--vae"),("clip_l","--clip_l"),("clip_g","--clip_g"),("tokenizer","--tokenizer")):
+        command += ["--params-backend","diffusion=disk,te=disk,vae=disk"+(",controlnet=disk" if components.get("control_net") else "")]
+    for key,flag in (("text_encoder","--llm"),("vae","--vae"),("clip_l","--clip_l"),("clip_g","--clip_g"),("tokenizer","--tokenizer"),
+                     ("control_net","--control-net")):
         if components.get(key):
             if key=='text_encoder' and options.get('family','').startswith('wan'):
                 flag='--t5xxl'
@@ -496,7 +499,8 @@ def unsupported_by_runtime(payload,capabilities):
             return f"the {kind} {value}"
     features=capabilities.get('features') or {}
     for feature,used,label in (('hires','hires' in payload,'a hires pass'),('vae_tiling','vae_tiling_params' in payload,'VAE tiling'),
-                               ('cache',payload.get('cache_mode','disabled')!='disabled','step caching')):
+                               ('cache',payload.get('cache_mode','disabled')!='disabled','step caching'),
+                               ('controlnet','control_image' in payload,'a ControlNet control image')):
         if used and features.get(feature) is False:
             return label
     return None
@@ -585,11 +589,19 @@ async def workflow(job,asked,native,cache=None,owner=None,upscaler_path=None):
                 "sample_params":{"sample_steps":resolved["steps"],"sample_method":resolved["sampler"],"scheduler":resolved["scheduler"],
                     **extra_sample,"guidance":{"txt_cfg":resolved["cfg_scale"],"distilled_guidance":resolved["guidance"],**extra_guidance}},
                 **extra_top}
+            rules=[]
             if prepared:
                 if options["family"]=="sdxl":
                     payload.update(init_image=prepared[0],strength=resolved["strength"])
                 else:
-                    payload.update(ref_images=prepared,image_preprocess="target=ref,mode=none",ref_image_args="resize_before_vae=false")
+                    payload.update(ref_images=prepared,ref_image_args="resize_before_vae=false")
+                    rules.append("target=ref,mode=none")
+            if "control" in resolved:
+                # The runtime fits the control image to the output (centre crop, then resize) and, for edges, finds them itself.
+                payload.update(control_image=resolved["control"]["image"],control_strength=resolved["control"]["strength"])
+                rules.append("target=control,mode=crop-resize,filter=lanczos"+(",canny=true" if resolved["control"]["edges"] else ""))
+            if rules:
+                payload["image_preprocess"]=rules[0] if len(rules)==1 else rules
             payload["lora"]=[{"path":entry["file"],"multiplier":resolved.get("loras",{}).get(name,entry.get("scale",1))}
                               for name,entry in options.get("loras",{}).items() if resolved.get("loras",{}).get(name,entry.get("scale",1))!=0]
             yield {"type":"image_generation.progress","stage":"generating","image_index":index}
@@ -627,7 +639,8 @@ async def workflow(job,asked,native,cache=None,owner=None,upscaler_path=None):
             yield {"type":"image_generation.completed","image_index":index,"b64_json":base64.b64encode(png_bytes(image)).decode(),
                    'created_at':int(time.time()),'output_format':'png','background':'opaque','quality':'auto','size':f'{image.width}x{image.height}',
                    "seed":(seed+index)%(2**31),"width":image.width,"height":image.height,
-                   "settings":{k:v for k,v in resolved.items() if k not in ("references","mask","metadata","user")},
+                   "settings":{**{k:v for k,v in resolved.items() if k not in ("references","mask","metadata","user","control")},
+                               **({"control":{k:v for k,v in resolved["control"].items() if k!="image"}} if "control" in resolved else {})},
                    "native_seconds":native_seconds,"elapsed_seconds":time.monotonic()-start,
                    "mask_mode":"composite" if "mask" in resolved else None}
 
