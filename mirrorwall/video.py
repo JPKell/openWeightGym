@@ -222,7 +222,7 @@ def check_profile(name, settings, cards):
     if settings.get('alone') is not True or settings.get('gpus')==0:
         raise ValueError('Video profiles require exclusive GPU admission.')
     allowed={'family','mode','components','split_mode','staged','host_ram_mib','defaults','limits','loras',
-             'threads','timeout','preview_interval','vram_limit_gib','layer_weights','runtime_capabilities','variant',
+             'threads','timeout','preview_interval','vram_limit_gib','runtime_capabilities','variant',
              'vae_tiling','temporal_tiling','recipe'}
     if options.get('recipe') and options['recipe'] not in RECIPES:
         raise ValueError('Choose a supported upstream video recipe.')
@@ -238,7 +238,7 @@ def check_profile(name, settings, cards):
             raise ValueError(key+' must be true or false.')
     # Placement, budgets, adapters and flags have the same contract as image profiles.
     surrogate={**settings,'sdcpp':{key:value for key,value in options.items() if key in
-        ('split_mode','staged','host_ram_mib','loras','threads','timeout','preview_interval','vram_limit_gib','layer_weights')}}
+        ('split_mode','staged','host_ram_mib','loras','threads','timeout','preview_interval','vram_limit_gib')}}
     surrogate['sdcpp'].update(family='sdxl',components={},limits={'max_references':0})
     loras=options.get('loras',{})
     if not isinstance(loras,dict):

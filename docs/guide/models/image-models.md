@@ -20,7 +20,7 @@ Use an account with [model management](/docs/system/abilities#ability-manage-mod
 
 ## Options
 
-Under **LoRAs**, **Add LoRA** adds a row whose **File** lists the library's LoRA adapters, labelled by node and folder like the component lists; choosing one fills an empty name from the file name. An existing model offers only copies on its own node. The checklist says whether each adapter fits the model's family. A model whose diffusion weights split across two GPUs merges its LoRAs into the weights when the adapter set changes, rather than applying them while sampling. A request fails when any adapter tensor finds no match in the model, so a partly compatible LoRA is never applied silently.
+Under **LoRAs**, **Add LoRA** adds a row whose **File** lists the library's LoRA adapters, labelled by node and folder like the component lists; choosing one fills an empty name from the file name. An existing model offers only copies on its own node. The checklist says whether each adapter fits the model's family. A request fails when any adapter tensor finds no match in the model, so a partly compatible LoRA is never applied silently.
 
 **Duplicate** creates a separate workflow. **Version history → Saved version → Use settings as draft** loads an earlier version into the editor; saving creates a new version. Workflow limits bound the choices offered in Image generation. **Delete workflow** uses two-click confirmation and removes all its versions. You can delete your personal workflows; shared workflows require model-management permission. Saved jobs, resolved settings and outputs remain available. A concurrent edit requires reloading before deletion.
 
@@ -30,7 +30,7 @@ Choose **MOSS-Image (Base / SFT)** for either variant. Supply its diffusion weig
 
 Start with 1024 × 1024, 50 Euler steps, the discrete scheduler and CFG 3. Dimensions must be multiples of 16. These profiles generate from text and support negative prompts; set **Reference images** to 0. Prompt enhancement is not applied automatically. The existing native installer revision supports both variants; manual older engine builds may need updating through the existing image installer.
 
-See the [native setup guide](https://github.com/leejet/stable-diffusion.cpp/blob/95ff76230889898e1bf40058ba272a3699b50dc6/docs/moss_image.md) and [MOSS inference recommendations](https://github.com/OpenMOSS/MOSS-Image/blob/main/USERGUIDE.md).
+See the [native setup guide](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/moss_image.md) and [MOSS inference recommendations](https://github.com/OpenMOSS/MOSS-Image/blob/main/USERGUIDE.md).
 
 ## Krea 2
 
@@ -38,7 +38,7 @@ Choose **Krea 2 (Raw / Turbo)** for either variant; both share one architecture,
 
 Raw starts at 1024 × 1024, 20 Euler steps, the discrete scheduler and CFG 3.5. Turbo starts at 8 steps and CFG 1, where negative prompts have no effect. The setup dialog offers both suggestions; save a Turbo model's workflow with its own defaults. Turbo's native 2048 × 2048 output (4.2 megapixels) exceeds the default **Pixel budget** of 2,097,152; raise it in the model's limits to use that size. Dimensions must be multiples of 16. These profiles generate from text; set **Reference images** to 0. Reference editing needs a community editing LoRA and is not supported yet.
 
-See the [native setup guide](https://github.com/leejet/stable-diffusion.cpp/blob/95ff76230889898e1bf40058ba272a3699b50dc6/docs/krea2.md).
+See the [native setup guide](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/krea2.md).
 
 ## Advanced workflows {#advanced-workflows}
 

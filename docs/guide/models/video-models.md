@@ -31,10 +31,10 @@ download menu. Shared encoders remain one Files entry and are protected while an
 
 | Family | Native component instructions |
 |---|---|
-| WAN | [WAN 2.1 and 2.2](https://github.com/leejet/stable-diffusion.cpp/blob/95ff76230889898e1bf40058ba272a3699b50dc6/docs/wan.md) |
-| LTX-2 | [LTX-2.3/2.5](https://github.com/leejet/stable-diffusion.cpp/blob/95ff76230889898e1bf40058ba272a3699b50dc6/docs/ltx2.md) |
-| HunyuanVideo | [HunyuanVideo 1.5](https://github.com/leejet/stable-diffusion.cpp/blob/95ff76230889898e1bf40058ba272a3699b50dc6/docs/hunyuan_video.md) |
-| MiniMax | [MiniMax-H3](https://github.com/leejet/stable-diffusion.cpp/blob/95ff76230889898e1bf40058ba272a3699b50dc6/docs/minimax_h3.md) |
+| WAN | [WAN 2.1 and 2.2](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/wan.md) |
+| LTX-2 | [LTX-2.3/2.5](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/ltx2.md) |
+| HunyuanVideo | [HunyuanVideo 1.5](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/hunyuan_video.md) |
+| MiniMax | [MiniMax-H3](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/minimax_h3.md) |
 
 LTX-2.5 requires its **conv** video VAE and its LTX-tuned Gemma 4 encoder with bundled projection.
 Stock Gemma 4 and the diffusion-decoder VAE are incompatible. HunyuanVideo shares Qwen2.5-VL 7B

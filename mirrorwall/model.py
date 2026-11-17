@@ -89,7 +89,7 @@ def check_model(name,settings,cards):
     path(settings["flags"]["model"],"diffusion model")
     options=settings.get("sdcpp")
     allowed={"family","components","split_mode","staged","host_ram_mib","defaults","limits",
-             "reference_megapixels","upscaler","loras","threads","timeout","preview_interval","preparation_python","vram_limit_gib","layer_weights"}
+             "reference_megapixels","upscaler","loras","threads","timeout","preview_interval","preparation_python","vram_limit_gib"}
     if not isinstance(options,dict) or options.keys()-allowed:
         raise ValueError("Unknown or missing sdcpp model options.")
     if options.get("family") not in FAMILIES or options.get("split_mode","single") not in SPLITS:
@@ -114,10 +114,6 @@ def check_model(name,settings,cards):
             path(options[key],key)
     if type(options.get("staged",True)) is not bool or type(settings.get("alone",False)) is not bool:
         raise ValueError("Image staged/alone settings must be boolean.")
-    if 'layer_weights' in options:
-        ratios=options['layer_weights']
-        if options.get('split_mode')!='layer' or not isinstance(ratios,list) or len(ratios)!=2 or any(type(v) not in (int,float) or not math.isfinite(v) or not .01<=v<=100 for v in ratios):
-            raise ValueError('Layer weights require two positive ratios and the layer split mode.')
     budget=options.get("host_ram_mib",8192)
     if type(budget) is not int or not 2048<=budget<=131072:
         raise ValueError("Image host RAM budget must be 2048–131072 MiB.")
@@ -260,9 +256,8 @@ def layouts(settings,cards):
 
 
 def fixed_split(settings,count):
-    """Only pinned layer ratios or explicit component placement can share measured cards."""
-    options=settings['sdcpp']
-    return count==1 or options.get('split_mode')=='components' or bool(options.get('split_mode')=='layer' and options.get('layer_weights'))
+    """Only explicit component placement can share measured cards; a layer split follows free VRAM."""
+    return count==1 or settings['sdcpp'].get('split_mode')=='components'
 
 
 def answered_settings(loaded,wanted):

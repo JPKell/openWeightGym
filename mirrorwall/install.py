@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Build or adopt a pinned, optional sdcpp runtime without restarting openWeightGym.
+"""Build or adopt an optional sdcpp runtime from upstream without restarting openWeightGym.
+
+Without --revision, the newest commit on the upstream default branch is built.
 
 Only the engine's TOML table and its private installation directory are changed.
 Verified releases are immutable; existing processes keep their original binary.
@@ -22,7 +24,6 @@ if __package__ in (None, ""):
 
 from loadcoach.classifier_jobs import ClassifierJobs
 
-REVISION = "95ff76230889898e1bf40058ba272a3699b50dc6"
 REPOSITORY = "https://github.com/leejet/stable-diffusion.cpp.git"
 
 
@@ -36,10 +37,18 @@ def build_flags(backend, architectures="native"):
     return flags
 
 
-def release_identity(revision, backend, patch_sha, flags):
+def release_identity(revision, backend, flags):
     """Avoid reusing a release compiled with different container or device options."""
     options=hashlib.sha256(json.dumps(flags,separators=(',',':')).encode()).hexdigest()[:12]
-    return revision+"-"+backend+("-"+patch_sha[:12] if patch_sha else "")+"-"+options
+    return revision+"-"+backend+"-"+options
+
+
+def latest_revision():
+    """The commit upstream's default branch points at now."""
+    answer=run(["git","ls-remote",REPOSITORY,"HEAD"],capture_output=True,text=True,timeout=60).stdout.split()
+    if not answer or not re.fullmatch(r"[0-9a-f]{40}",answer[0]):
+        raise ValueError("Could not read the newest stable-diffusion.cpp commit from "+REPOSITORY)
+    return answer[0]
 
 
 def digest(path):
@@ -180,10 +189,9 @@ def main():
     parser.add_argument("--root",type=Path,default=Path(__file__).resolve().parents[1])
     parser.add_argument("--prefix",type=Path,help="where releases are kept (default: ROOT/runtimes/sdcpp)")
     parser.add_argument("--backend",choices=("cuda","vulkan","cpu"),default="cuda")
-    parser.add_argument("--revision",default=REVISION)
-    parser.add_argument("--source",type=Path,help="Existing clean source checkout; otherwise fetch pinned upstream")
+    parser.add_argument("--revision",help="full commit SHA to build (default: the newest upstream commit)")
+    parser.add_argument("--source",type=Path,help="Existing clean source checkout; otherwise fetch upstream")
     parser.add_argument("--adopt-build",type=Path,help="Copy the bin directory of an existing build of the selected revision")
-    parser.add_argument("--upstream-only",action="store_true",help="Use an unpatched upstream build instead of openWeightGym's balanced layer split")
     parser.add_argument("--cuda-architectures",default="native")
     parser.add_argument("--jobs",type=int,default=4)
     parser.add_argument("--check",action="store_true")
@@ -192,7 +200,7 @@ def main():
     args.root=args.root.expanduser().resolve()
     chosen=args.prefix is not None
     args.prefix=(args.prefix or args.root/"runtimes/sdcpp").expanduser().resolve()
-    if not re.fullmatch(r"[0-9a-f]{40}",args.revision) or not 1<=args.jobs<=32:
+    if args.revision is not None and not re.fullmatch(r"[0-9a-f]{40}",args.revision) or not 1<=args.jobs<=32:
         parser.error("Use a full commit SHA and 1–32 build jobs")
     if not re.fullmatch(r"native|[0-9]+(?:;[0-9]+)*",args.cuda_architectures):
         parser.error("Invalid CUDA architectures")
@@ -208,12 +216,12 @@ def main():
         except (OSError,KeyError,ValueError,subprocess.SubprocessError) as problem:
             raise SystemExit(f"sdcpp in {folder} does not work: {problem}") from None
         return
-    patch=Path(__file__).with_name("patches")/"balanced-layer-split.patch"
-    patch_sha=digest(patch) if not args.upstream_only and patch.is_file() else ""
-    if args.adopt_build and patch_sha:
-        parser.error("Manual build adoption requires --upstream-only; use a normal install for the balanced split build")
+    if args.revision is None:
+        if args.source or args.adopt_build:
+            parser.error("--source and --adopt-build need the --revision they were built from")
+        args.revision=latest_revision()
     flags=build_flags(args.backend,args.cuda_architectures)
-    release=release_identity(args.revision,args.backend,patch_sha,flags)
+    release=release_identity(args.revision,args.backend,flags)
     target=args.prefix/"releases"/release
     print(f"sdcpp: {args.backend}; revision {args.revision}; target {target}")
     if args.dry_run:
@@ -225,7 +233,7 @@ def main():
             environment = build_environment(args.backend, "stable-diffusion.cpp")
         args.prefix.mkdir(parents=True,exist_ok=True,mode=0o700)
         target.parent.mkdir(exist_ok=True)
-        source=args.source.expanduser().resolve() if args.source else args.prefix/"source"/(args.revision+("-"+patch_sha[:12] if patch_sha else ""))
+        source=args.source.expanduser().resolve() if args.source else args.prefix/"source"/args.revision
         if not source.exists():
             if args.source:
                 raise ValueError("Source checkout does not exist")
@@ -235,26 +243,8 @@ def main():
             run(["git","-C",source,"submodule","update","--init","--recursive"])
         revision=run(["git","-C",source,"rev-parse","HEAD"],capture_output=True,text=True).stdout.strip()
         if revision!=args.revision:
-            raise ValueError("Source checkout is not at the selected pinned revision")
-        if patch_sha:
-            if args.source:
-                raise ValueError("Patched builds use installer-owned source; omit --source or choose --upstream-only")
-            applied=subprocess.run(["git","-C",str(source),"apply","--reverse","--check",str(patch)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
-            if not applied:
-                run(["git","-C",source,"diff","--quiet","HEAD","--"])
-                run(["git","-C",source,"apply","--check",patch])
-                run(["git","-C",source,"apply",patch])
-            expected=json.loads(patch.with_name('source.json').read_text())
-            if expected['revision']!=revision:
-                raise ValueError('openWeightGym patch has no provenance for this revision')
-            changed=set(run(['git','-C',source,'diff','HEAD','--name-only'],capture_output=True,text=True).stdout.splitlines())
-            if changed!=set(expected['files']):
-                raise ValueError('Native source has unrelated changes')
-            for file,hashes in expected['files'].items():
-                if digest(source/file)!=hashes['patched']:
-                    raise ValueError('Native patched source verification failed: '+file)
-        else:
-            run(["git","-C",source,"diff","--quiet","HEAD","--"])
+            raise ValueError("Source checkout is not at the selected revision")
+        run(["git","-C",source,"diff","--quiet","HEAD","--"])
         modules=run(['git','-C',source,'submodule','status','--recursive'],capture_output=True,text=True).stdout.splitlines()
         if any(not line.startswith(' ') for line in modules):
             raise ValueError('Native submodule revisions are not pinned')
@@ -280,7 +270,7 @@ def main():
             for name in ("sd-server","sd-cli"):
                 shutil.copy2(build/"bin"/name,stage/"bin"/name)
             manifest={"version":1,"repository":REPOSITORY,"revision":revision,"backend":args.backend,
-                "build_flags":flags,"build_cache_sha256":digest(cache),"suite_patch_sha256":patch_sha,
+                "build_flags":flags,"build_cache_sha256":digest(cache),
                 "video_containers":["webm","webp"],
                 "executables":{name:digest(stage/"bin"/name) for name in ("sd-server","sd-cli")},
                 "split_modes":["layer","row"],"split_note":"Requested modes require model/backend qualification; API flag presence does not prove effective splitting"}

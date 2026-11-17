@@ -99,9 +99,6 @@ def native_command(job,port):
              "--rng","cpu","--threads",str(options.get("threads",4)),"--flash-attn","off" if cpu else "on"]
     if mode in ("layer","row"):
         command += ["--split-mode",mode]
-        if options.get("loras"):
-            # Runtime LoRA graphs fault on CUDA when the diffusion weights span two cards; merge them instead.
-            command += ["--lora-apply-mode","immediately"]
     if options.get("staged",True):
         command += ["--params-backend","diffusion=disk,te=disk,vae=disk"+(",controlnet=disk" if components.get("control_net") else "")]
     for key,flag in (("text_encoder","--llm"),("vae","--vae"),("clip_l","--clip_l"),("clip_g","--clip_g"),("tokenizer","--tokenizer"),
@@ -238,9 +235,7 @@ class Native:
         self.incompatible_loras.clear()
         self.lora_counts.clear()
         self.prepare_loras()
-        environment={key:value for key,value in os.environ.items() if key!='SD_SUITE_SPLIT_WEIGHTS'}
-        if self.job['settings']['sdcpp'].get('layer_weights'):
-            environment['SD_SUITE_SPLIT_WEIGHTS']=','.join(str(v) for v in self.job['settings']['sdcpp']['layer_weights'])
+        environment=dict(os.environ)
         command=native_command(self.job,port)
         video=self.job['settings']['sdcpp'].get('mode')=='vid_gen'
         if video:

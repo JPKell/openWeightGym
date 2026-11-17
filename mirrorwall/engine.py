@@ -104,18 +104,6 @@ class SDCpp:
         for label,path in model.files_of(settings).items():
             if not Path(path).is_file():
                 raise ValueError("Missing image component: "+label)
-        if settings['sdcpp'].get('layer_weights'):
-            try:
-                manifest=json.loads(Path(options['manifest']).read_text())
-            except (OSError,ValueError):
-                raise ValueError('Fixed layer weights require a verified openWeightGym native installation.') from None
-            patch=Path(__file__).with_name('patches')/'balanced-layer-split.patch'
-            if manifest.get('suite_patch_sha256')!=hashlib.sha256(patch.read_bytes()).hexdigest():
-                raise ValueError('This native build does not support the current fixed layer weights; reinstall with scripts/install-sdcpp.sh.')
-            for role,key in (('sd-server','executable'),('sd-cli','cli')):
-                with open(options[key],'rb') as stream:
-                    if hashlib.file_digest(stream,'sha256').hexdigest()!=manifest.get('executables',{}).get(role):
-                        raise ValueError('Native executable differs from its verified installation.')
         delegated_parent()
 
     def launch(self,config,port,settings,cards):

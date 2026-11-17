@@ -299,7 +299,8 @@ providing `nvcc`. Distribution build tools can be installed with
 `sudo apt install git cmake build-essential`; install the toolkit matching the local driver
 separately. Vulkan needs its development headers/toolchain. CPU is an explicit backend choice.
 
-The script pins commit `95ff76230889898e1bf40058ba272a3699b50dc6`, verifies executables,
+The script builds the newest commit on upstream's default branch (`--revision SHA` chooses
+another), unpatched, records it in the release's `installation.json`, verifies executables,
 preserves immutable releases under `runtimes/sdcpp/releases` in the installation (`--prefix` chooses
 another folder), and changes only
 `[engines.sdcpp]` in `settings/loadcoach.toml`, retaining a private configuration backup. It
@@ -308,11 +309,10 @@ separately from completed base installation work; fix requirements and rerun the
 verifies the release that `[engines.sdcpp]` names, not whatever an older installation left elsewhere,
 and reports a broken one in a single line rather than stopping the installer's check.
 
-openWeightGym's default build includes a content-verified layer-placement patch. Explicit positive
-`layer_weights` ratios, such as `[3,1]`, permit unequal diffusion placement independent of live
-free VRAM. Indivisible layers may prevent an exact ratio. Upstream-only manual builds remain
-supported, but do not provide openWeightGym's fixed-ratio sharing contract. Effective splitting is checked
-from native execution; a silent one-card fallback fails the requested two-card workflow.
+A diffusion layer split places whole transformer blocks on each card in proportion to its
+free VRAM, as upstream decides at load time. Effective splitting is checked from native
+execution; a silent one-card fallback fails the requested two-card workflow. Because the placement
+follows free VRAM, a layer-split model cannot share its cards; only component placement can.
 
 Unqualified workflows reserve assigned cards. Sharing requires fixed placement and a measured
 maximum workflow envelope, including the permitted reference count/target, generation dimensions,
@@ -331,7 +331,6 @@ For a manual build:
 
 ```bash
 git clone --recursive https://github.com/leejet/stable-diffusion.cpp.git ~/stable-diffusion.cpp
-git -C ~/stable-diffusion.cpp checkout --detach 95ff76230889898e1bf40058ba272a3699b50dc6
 git -C ~/stable-diffusion.cpp submodule update --init --recursive
 cmake -S ~/stable-diffusion.cpp -B ~/stable-diffusion.cpp/build-suite \
   -DCMAKE_BUILD_TYPE=Release -DSD_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=native \
@@ -340,7 +339,8 @@ cmake -S ~/stable-diffusion.cpp -B ~/stable-diffusion.cpp/build-suite \
 cmake --build ~/stable-diffusion.cpp/build-suite --target sd-cli sd-server --parallel 4
 ~/stable-diffusion.cpp/build-suite/bin/sd-server --help
 scripts/install-sdcpp.sh --source ~/stable-diffusion.cpp \
-  --adopt-build ~/stable-diffusion.cpp/build-suite --backend cuda --upstream-only
+  --adopt-build ~/stable-diffusion.cpp/build-suite --backend cuda \
+  --revision "$(git -C ~/stable-diffusion.cpp rev-parse HEAD)"
 ```
 
 For Vulkan replace CUDA options with `-DSD_VULKAN=ON` and register with `--backend vulkan`;

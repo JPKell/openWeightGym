@@ -79,13 +79,13 @@ def test_image_limits_and_component_changes_are_in_the_measurement_identity(imag
     assert image_settings["sdcpp"]["components"]["text_encoder"]!="sha-text_encoder"
 
 
-def test_unequal_image_placement_shares_only_a_current_qualified_workflow(image_settings,monkeypatch):
+def test_component_placement_shares_only_a_current_qualified_workflow(image_settings,monkeypatch):
     from types import SimpleNamespace
     import time
     from loadcoach.config import Config
     from loadcoach.models import Models
     from loadcoach.runner import Runner,Server
-    settings={**image_settings,'alone':False,'sdcpp':{**image_settings['sdcpp'],'layer_weights':[3,1]}}
+    settings={**image_settings,'alone':False,'sdcpp':{**image_settings['sdcpp'],'split_mode':'components'}}
     library=Models(':memory:');library.put('flux',settings)
     runner=Runner(Config(gpus=('CUDA0','CUDA1'),card_margin=256),None,models=library)
     runner.builds[('sdcpp','sd-server')]=(None,'sdcpp:current')
@@ -106,7 +106,7 @@ def test_unequal_image_placement_shares_only_a_current_qualified_workflow(image_
     reversed_cards={**settings,'gpus':['CUDA1','CUDA0']}
     assert runner.place('flux',reversed_cards,set())==(('CUDA1','CUDA0'),[])
     assert model.fixed_split(settings,2)
-    settings['sdcpp'].pop('layer_weights')
+    settings['sdcpp']['split_mode']='layer'  # placement follows free VRAM, so a layer split cannot share
     assert not model.fixed_split(settings,2)
 
 
@@ -157,7 +157,7 @@ def test_corrupt_release_is_not_adopted_or_executed(tmp_path):
 def test_video_container_build_options_cannot_reuse_an_incompatible_release():
     flags=installer.build_flags('cuda','120')
     assert '-DSD_WEBM=ON' in flags and '-DSD_WEBP=ON' in flags
-    release=lambda options:installer.release_identity(installer.REVISION,'cuda','patch',options)
+    release=lambda options:installer.release_identity('a'*40,'cuda',options)
     assert release(flags)!=release([one.replace('SD_WEBM=ON','SD_WEBM=OFF') for one in flags])
     assert release(flags)!=release(installer.build_flags('cuda','native'))
 
@@ -272,15 +272,6 @@ def test_native_layout_stages_components_and_names_only_admitted_devices(image_s
     assert command[command.index('--split-mode')+1]=='layer'
     assert command[command.index('--params-backend')+1]=='diffusion=disk,te=disk,vae=disk'
     assert '--lora-apply-mode' not in command
-
-
-def test_split_diffusion_merges_loras_instead_of_applying_them_at_runtime(image_settings):
-    from copy import deepcopy
-    split=deepcopy(image_settings); split['sdcpp']['loras']={'style':{'file':'/models/style.safetensors','scale':1}}
-    command=native_command(private_job(split),12345)
-    assert command[command.index('--lora-apply-mode')+1]=='immediately'
-    split['sdcpp']['split_mode']='single'
-    assert '--lora-apply-mode' not in native_command(private_job(split),12345)
 
 
 def test_cpu_image_placement_is_explicit_and_cannot_keep_a_gpu_split(image_settings):

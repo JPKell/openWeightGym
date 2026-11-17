@@ -51,7 +51,7 @@
     components.forEach(name => { if ($(name).value.trim()) profile.components[name] = $(name).value.trim(); });
     if (!video && $('upscaler').value.trim()) profile.upscaler = $('upscaler').value.trim(); else delete profile.upscaler;
     if ($('vram').value.trim()) profile.vram_limit_gib = $('vram').value.split(',').map(Number); else delete profile.vram_limit_gib;
-    if ($('layer-weights').value.trim()) profile.layer_weights = $('layer-weights').value.split(',').map(Number); else delete profile.layer_weights;
+    delete profile.layer_weights;
     const gpus = SuiteHardware.read('mw', profile.split_mode === 'single' ? 1 : 2);
     if (gpus === 0) profile.split_mode = 'single';
     return {engine:'sdcpp', flags:{model:$('diffusion').value.trim(),'ctx-size':0}, sdcpp:profile, gpus, alone:video || $('alone').checked};
@@ -158,7 +158,7 @@
     SuiteHardware.set('mw', model?.gpus ?? 1, nodeCardsByNode[activeNode()] || nodeCards);
     document.querySelector('[data-image-split]').hidden = model?.gpus === 0;
     $('ram').value = profile.host_ram_mib || 8192; $('vram').value = profile.vram_limit_gib?.join(',') || '';
-    $('layer-weights').value = profile.layer_weights?.join(',') || ''; $('alone').checked = video || model?.alone || false;
+    $('alone').checked = video || model?.alone || false;
     if(!video) $('ref-mp').value = profile.reference_megapixels || 1; $('threads').value = profile.threads || 4;
     if(!video) choose('upscaler', profile.upscaler); $('staged').checked = profile.staged !== false;
     SLOTS.forEach(name => Array.from($(name).options).forEach(option => {

@@ -130,13 +130,14 @@ def test_image_and_audio_builders_prepare_tools_before_git_and_use_selected_comp
             assert kwargs["env"] == environment
             assert "-DCMAKE_CUDA_COMPILER=/custom CUDA/bin/nvcc" in command
             raise RuntimeError("reached compilation")
-        return subprocess.CompletedProcess(command, 0, stdout=installer.REVISION if "rev-parse" in command else "", stderr="")
+        return subprocess.CompletedProcess(command, 0, stdout=revision if "rev-parse" in command else "", stderr="")
 
     source = tmp_path / "source"; source.mkdir()
     root = tmp_path / "suite"
     arguments = ["installer", "--root", str(root), "--source", str(source), "--backend", "cuda"]
+    revision = "a" * 40 if engine == "image" else installer.REVISION
     if engine == "image":
-        arguments.append("--upstream-only")
+        arguments += ["--revision", revision]
     monkeypatch.setattr(sys, "argv", arguments)
     monkeypatch.setattr(build, "build_environment", prepare)
     monkeypatch.setattr(installer, "run", run)

@@ -40,7 +40,7 @@ voice-desktop = "voice.desktop:main"
 packages = ["developer_tools", "engines", "engines.llama_cpp", "engines.whisper_cpp", "engines.strata", "mirrorwall", "soundroom", "db", "db.drivers", "loadcoach", "benchmarks", "benchmarks.suites", "benchmarks.suites.ifeval", "benchmarks.suites.ifeval.vendor", "toollocker", "toollocker.tools", "weightroom", "spotter", "turnstile", "voice", "plugins", "plugins.hermes"]
 
 [tool.setuptools.package-data]
-mirrorwall = ["patches/*.patch", "patches/*.json", "pages/*.html", "static/*"]
+mirrorwall = ["pages/*.html", "static/*"]
 soundroom = ["catalog.toml", "pages/*.html", "static/*"]
 "benchmarks.suites" = ["*.json"]
 "benchmarks.suites.ifeval" = ["*.json", "*.jsonl"]

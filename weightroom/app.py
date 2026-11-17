@@ -2580,7 +2580,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 candidate['flags'] = {key: value for key, value in candidate['flags'].items() if key not in ('tensor-split', 'split-mode', 'main-gpu')}
                 if engine == 'sdcpp':
                     candidate['sdcpp']['split_mode'] = 'single'
-                    for key in ('layer_weights', 'vram_limit_gib'):
+                    for key in ('layer_weights', 'vram_limit_gib'):  # layer_weights: profiles saved before it was removed
                         candidate['sdcpp'].pop(key, None)
                 answer = await ask('POST', '/turnstile/models/install', person.key, json={
                     'name': name, 'settings': candidate, 'source_model_id': model.get('model_id'),
