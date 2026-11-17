@@ -20,7 +20,7 @@ Use an account with [model management](/docs/system/abilities#ability-manage-mod
 
 ## Options
 
-Under **LoRAs**, **Add LoRA** adds a row whose **File** lists the library's LoRA adapters, labelled by node and folder like the component lists; choosing one fills an empty name from the file name. An existing model offers only copies on its own node. The checklist says whether each adapter fits the model's family.
+Under **LoRAs**, **Add LoRA** adds a row whose **File** lists the library's LoRA adapters, labelled by node and folder like the component lists; choosing one fills an empty name from the file name. An existing model offers only copies on its own node. The checklist says whether each adapter fits the model's family. A model whose diffusion weights split across two GPUs merges its LoRAs into the weights when the adapter set changes, rather than applying them while sampling. A request fails when any adapter tensor finds no match in the model, so a partly compatible LoRA is never applied silently.
 
 **Duplicate** creates a separate workflow. **Version history → Saved version → Use settings as draft** loads an earlier version into the editor; saving creates a new version. Workflow limits bound the choices offered in Image generation. **Delete workflow** uses two-click confirmation and removes all its versions. You can delete your personal workflows; shared workflows require model-management permission. Saved jobs, resolved settings and outputs remain available. A concurrent edit requires reloading before deletion.
 

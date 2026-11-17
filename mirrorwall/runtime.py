@@ -99,6 +99,9 @@ def native_command(job,port):
              "--rng","cpu","--threads",str(options.get("threads",4)),"--flash-attn","off" if cpu else "on"]
     if mode in ("layer","row"):
         command += ["--split-mode",mode]
+        if options.get("loras"):
+            # Runtime LoRA graphs fault on CUDA when the diffusion weights span two cards; merge them instead.
+            command += ["--lora-apply-mode","immediately"]
     if options.get("staged",True):
         command += ["--params-backend","diffusion=disk,te=disk,vae=disk"+(",controlnet=disk" if components.get("control_net") else "")]
     for key,flag in (("text_encoder","--llm"),("vae","--vae"),("clip_l","--clip_l"),("clip_g","--clip_g"),("tokenizer","--tokenizer"),
@@ -149,6 +152,7 @@ class Native:
         self.row_split=False
         self.applied_loras=set()
         self.incompatible_loras=set()
+        self.lora_counts={}
         self.capabilities={}
         self.stage='loading'
         self.step_progress={}
@@ -182,11 +186,16 @@ class Native:
                     self.stage='encoding container'
                 if (match:=re.search(r'(\d+)\s*/\s*(\d+)\s*[-|]',clean)) and re.search(r's/it|it/s',clean):
                     self.step_progress={'step':int(match[1]),'total_steps':int(match[2])}
+            if re.search(r'\bapply lora (immediately|at runtime)\b',clean,re.I):
+                # A new application replaces the previous adapter set; its counts start again.
+                self.lora_counts.clear(); self.applied_loras.clear(); self.incompatible_loras.clear()
             if match:=re.search(r'\((\d+) / (\d+)\) LoRA tensors have been applied, lora_file_path = (.+)',clean):
-                if int(match[1])>0 and match[1]==match[2]:
+                # Segmented (staged or split) weights report one partial count per graph segment.
+                count=self.lora_counts.setdefault(match[3],[0,int(match[2])]); count[0]+=int(match[1])
+                if 0<count[0]==count[1]:
                     self.applied_loras.add(match[3])
                 else:
-                    self.incompatible_loras.add(match[3])
+                    self.applied_loras.discard(match[3])
             if match:=re.search(r'incompatible LoRA tensors have been skipped, lora_file_path = (.+)',clean):
                 self.incompatible_loras.add(match[1])
 
@@ -227,6 +236,7 @@ class Native:
         self.row_split=False
         self.applied_loras.clear()
         self.incompatible_loras.clear()
+        self.lora_counts.clear()
         self.prepare_loras()
         environment={key:value for key,value in os.environ.items() if key!='SD_SUITE_SPLIT_WEIGHTS'}
         if self.job['settings']['sdcpp'].get('layer_weights'):

@@ -271,6 +271,16 @@ def test_native_layout_stages_components_and_names_only_admitted_devices(image_s
     assert command[command.index('--backend')+1]=='diffusion=cuda0&cuda1,te=cuda0,vae=cuda0'
     assert command[command.index('--split-mode')+1]=='layer'
     assert command[command.index('--params-backend')+1]=='diffusion=disk,te=disk,vae=disk'
+    assert '--lora-apply-mode' not in command
+
+
+def test_split_diffusion_merges_loras_instead_of_applying_them_at_runtime(image_settings):
+    from copy import deepcopy
+    split=deepcopy(image_settings); split['sdcpp']['loras']={'style':{'file':'/models/style.safetensors','scale':1}}
+    command=native_command(private_job(split),12345)
+    assert command[command.index('--lora-apply-mode')+1]=='immediately'
+    split['sdcpp']['split_mode']='single'
+    assert '--lora-apply-mode' not in native_command(private_job(split),12345)
 
 
 def test_cpu_image_placement_is_explicit_and_cannot_keep_a_gpu_split(image_settings):
@@ -447,6 +457,26 @@ def test_native_diagnostics_require_real_split_and_complete_lora_application(ima
     assert not native.row_split
     assert native.applied_loras=={'/models/good.safetensors'}
     assert '/models/partial.safetensors' in native.incompatible_loras
+
+
+def test_segmented_lora_counts_add_up_and_restart_with_each_application(image_settings):
+    import asyncio
+    from types import SimpleNamespace
+    from mirrorwall.runtime import Native
+    native=Native(private_job(image_settings))
+    async def read(*lines):
+        output=asyncio.StreamReader()
+        for line in lines: output.feed_data(line)
+        output.feed_eof();native.process=SimpleNamespace(stdout=output)
+        await native.read_output()
+    asyncio.run(read(b'[I] apply lora immediately --- diffusion_engine.cpp:1672\n',
+        *[b'[I] (%d / 6) LoRA tensors have been applied, lora_file_path = /c/a.safetensors --- lora.hpp:1044\n'%n for n in (0,4,2,0)]))
+    assert native.applied_loras=={'/c/a.safetensors'}
+    asyncio.run(read(b'[I] apply lora immediately\n',b'(0 / 6) LoRA tensors have been applied, lora_file_path = /c/a.safetensors\n',
+        b'(5 / 6) LoRA tensors have been applied, lora_file_path = /c/a.safetensors\n'))
+    assert native.applied_loras==set()
+    asyncio.run(read(b'[I] apply lora at runtime\n',b'[W] Only (5 / 6) LoRA tensors have been applied, lora_file_path = /c/a.safetensors\n'))
+    assert native.applied_loras==set()
 
 
 def test_moss_multi_gpu_diagnostics_recognize_applied_layer_and_row_splits(image_settings):
