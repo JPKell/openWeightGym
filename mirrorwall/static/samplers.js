@@ -8,6 +8,7 @@
   if (!root) return;
   const $ = id => document.getElementById('sc-' + id), P = window.SuiteImageProfiles;
   const limit = Number(root.dataset.limit) || 512;
+  let runs = new Map();  // earlier comparison id -> status
   let models = [], saved = [], references = [], job = null, timer = null, tiles = new Map(), focus = {x: 50, y: 50}, zoom = 1;
   const drafts = new Map();  // per model: the form and its reference images as you left them, in page memory
   const sizes = {};  // reference asset id -> {width, height}
@@ -155,6 +156,7 @@
       const started = await api('jobs', {method: 'POST', body});
       say(`Started ${count()} images. They are saved to your image library as they finish; you can leave this page and open the comparison again later.`);
       await open(started.id, body);
+      reloadRuns();
     } catch (error) { say(error.message, true); count(); }
   }
 
@@ -173,6 +175,8 @@
     try { found = await api('jobs/' + encodeURIComponent(job.id) + '/lines'); }
     catch (error) { say(error.message, true); timer = setTimeout(refresh, 4000); return; }
     job.status = found.status;
+    if (runs.has(job.id)) runs.set(job.id, found.status); else if (!running(found.status)) reloadRuns();
+    runButtons();
     let next = found.lines.find(line => line.state === 'waiting');
     for (const line of found.lines) draw(line, running(found.status) && found.status !== 'paused' && line === next, found.progress);
     const done = found.lines.filter(line => line.state === 'done').length, failed = found.lines.filter(line => line.state === 'failed').length;
@@ -264,11 +268,43 @@
   function earlier(jobs) {
     const select = $('earlier'), keep = select.value;
     select.replaceChildren(new Option('Earlier comparisons…', ''));
+    runs = new Map();
     for (const row of jobs.filter(one => one.settings?.sweep?.sampler || one.settings?.sweep?.scheduler)) {
+      runs.set(row.id, row.status);
       const sweep = row.settings.sweep, when = window.suiteFormatTime?.(row.created * 1000, false) ?? new Date(row.created * 1000).toLocaleString();
       select.add(new Option(`${row.model} · ${(sweep.scheduler || ['—']).length}×${(sweep.sampler || ['—']).length} · ${when}`, row.id));
     }
-    select.value = keep;
+    select.value = runs.has(keep) ? keep : '';
+    runButtons();
+  }
+  /** Delete run acts on the open (or chosen) finished run; Clear all on every finished one. Running runs are kept. */
+  function runButtons() {
+    const chosen = $('earlier').value, status = chosen === job?.id ? job.status : runs.get(chosen);
+    $('delete-run').disabled = !chosen || running(status);
+    $('clear-runs').disabled = ![...runs.keys()].some(id => !running(id === job?.id ? job.status : runs.get(id)));
+  }
+  async function reloadRuns() {
+    try { earlier((await api('state')).jobs || []); } catch (error) { say(error.message, true); }
+  }
+  function closeRun(identifiers) {
+    if (!job || !identifiers.includes(job.id)) return;
+    clearTimeout(timer); job = null; tiles = new Map(); $('grid').replaceChildren(); count();
+  }
+  async function deleteRun() {
+    const identifier = $('earlier').value; if (!identifier) return;
+    try {
+      await api('jobs/' + encodeURIComponent(identifier), {method: 'DELETE'});
+      closeRun([identifier]); say('Deleted the comparison and its images.');
+    } catch (error) { say(error.message, true); }
+    reloadRuns();
+  }
+  async function clearRuns() {
+    try {
+      const found = await api('comparisons', {method: 'DELETE'});
+      closeRun(found.deleted);
+      say(`Deleted ${found.deleted.length} comparison${found.deleted.length === 1 ? '' : 's'} and their images.` + (found.running ? ` ${found.running} still running ${found.running === 1 ? 'was' : 'were'} kept.` : ''));
+    } catch (error) { say(error.message, true); }
+    reloadRuns();
   }
 
   function wire() {
@@ -293,7 +329,9 @@
       root.querySelectorAll(`input[name="${kind}"]`).forEach(input => { input.checked = Boolean(button.dataset.scAll); });
       count();
     }));
-    $('earlier').addEventListener('change', () => { if ($('earlier').value) open($('earlier').value); });
+    $('earlier').addEventListener('change', () => { runButtons(); if ($('earlier').value) open($('earlier').value); });
+    $('delete-run').addEventListener('click', deleteRun);
+    $('clear-runs').addEventListener('click', clearRuns);
     $('pause').addEventListener('click', () => control(job?.status === 'paused' ? 'resume' : 'pause'));
     $('stop').addEventListener('click', () => control('cancel'));
     $('zoom').addEventListener('input', () => setZoom(Number($('zoom').value)));

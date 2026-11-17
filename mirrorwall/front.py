@@ -507,6 +507,28 @@ class Front:
                              'progress':{'stage':'queued'} if number in self.batches.image_waiting else self.progress.get(number)},
                             headers={'cache-control':'no-store'})
 
+    async def remove_job(self,request,user):
+        """Delete one of the caller's finished image jobs and the images it made."""
+        number=request.path_params['identifier']
+        if number in self.transient:
+            return error(409,'This job is still running; stop it before deleting it.')
+        try:
+            if not self.store.delete_job(user.identity,number):
+                return error(404,'There is no such image job of yours.')
+        except ValueError as problem:
+            return error(409,str(problem))
+        return JSONResponse({'deleted':True,'id':number})
+
+    async def clear_comparisons(self,request,user):
+        """Delete every finished sampler comparison of the caller's; running ones are kept."""
+        deleted,kept=[],0
+        for number in self.store.comparison_jobs(user.identity):
+            try:
+                self.store.delete_job(user.identity,number) and deleted.append(number)
+            except ValueError:
+                kept+=1
+        return JSONResponse({'deleted':deleted,'running':kept})
+
     async def control(self,request,user):
         """Stop/pause/resume only the caller's existing image batch."""
         number=request.path_params['identifier']
@@ -916,6 +938,7 @@ class Front:
                 route('/mirrorwall/assets/{identifier}',self.asset,'DELETE'),
                 route('/mirrorwall/assets/{identifier}/content',self.asset),route('/mirrorwall/assets/{identifier}/thumbnail',self.asset),
                 route('/mirrorwall/jobs',self.start,'POST'),route('/mirrorwall/jobs/{identifier}',self.control,'POST'),
+                route('/mirrorwall/jobs/{identifier}',self.remove_job,'DELETE'),route('/mirrorwall/comparisons',self.clear_comparisons,'DELETE'),
                 route('/mirrorwall/jobs/{identifier}/lines',self.job_lines),
                 route('/mirrorwall/preferences',self.preferences),route('/mirrorwall/preferences',self.preferences,'POST'),route('/mirrorwall/presets',self.preset,'POST'),
                 route('/mirrorwall/workflows',self.workflows),route('/mirrorwall/presets/{identifier}',self.preset_history),

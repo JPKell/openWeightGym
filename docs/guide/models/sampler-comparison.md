@@ -50,6 +50,10 @@ and the rest of the run continues.
 - **Hide settings** gives the results the full page width. **Show settings** brings them back
   unchanged. This browser remembers both choices.
 - **Earlier comparisons** reopens a previous run, including one that is still running.
+- **Delete run** deletes the chosen run and the images it made. **Clear all** does the same for
+  every finished comparison. Both ask you to select the button a second time. Stop a running
+  comparison before deleting it; Clear all keeps running ones. Reference images stay in your
+  library, and the run's batch record stays in **Batches** and the event log.
 
 ## Limits
 

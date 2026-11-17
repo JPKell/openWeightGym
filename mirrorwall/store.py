@@ -212,6 +212,26 @@ class Store:
         self.path(identifier,True).unlink(missing_ok=True)
         return True
 
+    def delete_job(self,owner,identifier):
+        """Delete one finished job of the owner's and the images it made; its saved references stay in the library.
+        The batch executor's own record (Batches, Event log) is kept."""
+        if self.owner(identifier)!=owner:
+            return False
+        active=self.db.execute("SELECT 1 FROM batches WHERE id=? AND status IN ('validating','in_progress','finalizing','paused','cancelling')",(identifier,)).fetchone()
+        if active:
+            raise ValueError('This job is still running; stop it before deleting it.')
+        for asset, in self.db.execute("SELECT asset FROM mirrorwall_job_assets WHERE job=? AND role='output'",(identifier,)).fetchall():
+            self.delete(owner,asset)
+        with self.db:
+            self.db.execute('DELETE FROM mirrorwall_job_assets WHERE job=?',(identifier,))
+            self.db.execute('DELETE FROM mirrorwall_jobs WHERE id=? AND owner_id=?',(identifier,owner))
+        return True
+
+    def comparison_jobs(self,owner):
+        """Every job of the owner's that is a sampler comparison (a sampler or scheduler sweep)."""
+        rows=self.db.execute('SELECT id,payload FROM mirrorwall_jobs WHERE owner_id=?',(owner,)).fetchall()
+        return [identifier for identifier,payload in rows if {'sampler','scheduler'}&set((json.loads(payload).get('sweep') or {}))]
+
     def bind_job(self,identifier,owner,model_id,model_name,payload,references=()):
         """Bind the existing durable batch to stable account/model identities."""
         for asset in references:

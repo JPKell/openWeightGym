@@ -89,6 +89,32 @@ def test_job_lines_report_order_images_and_failures_only_to_the_owner(comparison
     assert server.get(f'/mirrorwall-api/jobs/{number}/lines').json()['status'] == 'completed'
     sign_in(server, 'pat')
     assert server.get(f'/mirrorwall-api/jobs/{number}/lines').status_code in (403, 404)
+    assert server.delete(f'/mirrorwall-api/jobs/{number}').status_code == 404
+
+
+def test_deleting_runs_removes_their_images_keeps_running_ones_and_references(comparison):
+    server, front, held, run = comparison
+    store, owner = front.store, front.store.owner
+    reference = server.post('/mirrorwall-api/assets', json={'filename': 'start.png', 'kind': 'reference',
+                                                            'b64_json': __import__('base64').b64encode(png_bytes(Image.new('RGB', (64, 64)))).decode()}).json()['id']
+    numbers = []
+    for samplers in (['euler'], ['dpm++2m'], ['euler', 'dpm++2m', 'er_sde', 'ddim_trailing']):  # the stub GPU leaves the last one running
+        started = server.post('/mirrorwall-api/jobs', json={'request': BASE, 'sweep': {'scheduler': ['karras'], 'sampler': samplers}})
+        assert started.status_code == 201, started.text
+        numbers.append(started.json()['id'])
+    run(numbers[0]); run(numbers[1])
+    running = numbers[2]
+    images = lambda number: [one['asset_id'] for one in server.get(f'/mirrorwall-api/jobs/{number}/lines').json()['lines'] if one.get('asset_id')]
+    first = images(numbers[0])
+    assert first and server.get(f'/mirrorwall-api/assets/{first[0]}/content').status_code == 200
+    assert server.delete(f'/mirrorwall-api/jobs/{running}').status_code == 409  # still running
+    assert server.delete(f'/mirrorwall-api/jobs/{numbers[0]}').json() == {'deleted': True, 'id': numbers[0]}
+    assert server.get(f'/mirrorwall-api/assets/{first[0]}/content').status_code == 404
+    assert server.get(f'/mirrorwall-api/jobs/{numbers[0]}/lines').status_code == 404
+    cleared = server.delete('/mirrorwall-api/comparisons').json()
+    assert cleared == {'deleted': [numbers[1]], 'running': 1}
+    assert [row['id'] for row in server.get('/mirrorwall-api/state').json()['jobs']] == [running]
+    assert server.get(f'/mirrorwall-api/assets/{reference}/content').status_code == 200  # saved references stay
 
 
 @pytest.mark.parametrize('width', [1440, 390])
@@ -202,6 +228,17 @@ def test_page_runs_a_comparison_and_zooms_every_image_to_the_same_region(compari
         page.locator('#sc-earlier').select_option(index=1)
         expect(page.locator('.sc-tile')).to_have_count(6)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        # Delete run asks twice, then removes the run and its images; Clear all has nothing left.
+        expect(page.locator('#sc-delete-run')).to_be_enabled()
+        page.locator('#sc-delete-run').click()
+        expect(page.locator('#sc-delete-run')).to_have_text('Delete this run and its images?')
+        expect(page.locator('.sc-tile')).to_have_count(6)
+        page.locator('#sc-delete-run').click()
+        expect(page.locator('#sc-status')).to_have_text('Deleted the comparison and its images.')
+        expect(page.locator('.sc-tile')).to_have_count(0)
+        expect(page.locator('#sc-earlier option')).to_have_count(1)
+        expect(page.locator('#sc-delete-run')).to_be_disabled()
+        expect(page.locator('#sc-clear-runs')).to_be_disabled()
         assert not errors
     finally:
         browser.close(); engine.stop()

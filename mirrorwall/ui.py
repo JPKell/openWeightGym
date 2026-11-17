@@ -154,7 +154,8 @@ def routes(for_people, page, ask, model_api):
                      (len(parts) == 3 and parts[0] == "graph-runs" and parts[2] == "stop" and request.method == "POST") or
                      (len(parts) == 2 and parts[0] == "presets" and request.method in ("GET", "DELETE")) or
                      (action in ("assets", "assets/download", "jobs", "presets", "preferences") and request.method == "POST") or
-                     (len(parts) == 2 and parts[0] == "jobs" and request.method == "POST") or
+                     (len(parts) == 2 and parts[0] == "jobs" and request.method in ("POST", "DELETE")) or
+                     (action == "comparisons" and request.method == "DELETE") or
                      (len(parts) == 3 and parts[0] == "jobs" and parts[2] == "lines" and request.method == "GET") or
                      (len(parts) == 2 and parts[0] == "assets" and request.method == "DELETE") or
                      (len(parts) == 3 and parts[0] == "assets" and parts[2] in ("content", "thumbnail") and request.method == "GET"))

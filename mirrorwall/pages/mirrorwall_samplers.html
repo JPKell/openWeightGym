@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from 'parts.html' import page_header, alert, card, form_section, form_actions %}
+{% from 'parts.html' import page_header, alert, card, form_section, form_actions, confirm_two %}
 {% from 'generation_design_parts.html' import reference_row %}
 {# Sampler comparison: one prompt through every chosen scheduler × sampler, as one ordinary image job; results in a
    grid with a zoom that shows the same region of every image. Behaviour in samplers.js; layout in samplers.css. #}
@@ -8,13 +8,15 @@
 <link rel="stylesheet" href="/static/generation.css?v=2">
 <link rel="stylesheet" href="/mirrorwall-static/samplers.css?v=5">
 <script src="/mirrorwall-static/image-profiles.js?v=2" defer></script>
-<script src="/mirrorwall-static/samplers.js?v=4" defer></script>
+<script src="/mirrorwall-static/samplers.js?v=5" defer></script>
 {% endblock %}
 {% block main %}
 <div id="samplers" data-samplers="{{ samplers|join(',') }}" data-schedulers="{{ schedulers|join(',') }}" data-limit="{{ limit }}">
 {% call page_header('Sampler comparison', back=('/models/images', 'Images'), help='/docs/model-guides/sampler-comparison') %}
 <label class="visually-hidden" for="sc-earlier">Earlier comparisons</label>
 <select id="sc-earlier" class="form-select form-select-sm sc-earlier"><option value="">Earlier comparisons…</option></select>
+<button type="button" class="btn btn-sm btn-outline-danger" id="sc-delete-run" disabled {{ confirm_two('Delete this run and its images?') }}>Delete run</button>
+<button type="button" class="btn btn-sm btn-outline-danger" id="sc-clear-runs" disabled {{ confirm_two('Delete every finished comparison and its images?') }}>Clear all</button>
 {% endcall %}
 {% call alert('danger', role='alert', attrs={'id':'sc-error','hidden':''}) %}{% endcall %}
 <p id="sc-status" class="small text-secondary" role="status" aria-live="polite">Loading image models…</p>
