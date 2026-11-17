@@ -151,6 +151,41 @@ window.SuiteWorkflowGraph = (() => {
     return depth;
   }
 
+  /** Lane and row of each node: a node stays in the lane its author chose (`lane[0]`), but never
+      before or beside a source; rows follow the author's order (`lane[1]`), then run order. */
+  function lanes(graph) {
+    const column = {}, ids = order(graph);
+    for (const id of ids) {
+      const earliest = Math.max(0, ...graph.links.filter(link => link.to[0] === id).map(link => (column[link.from[0]] ?? 0) + 1));
+      const chosen = find(graph, id)?.lane?.[0];
+      column[id] = Math.max(earliest, Number.isFinite(chosen) ? chosen : 0);
+    }
+    const rank = Object.fromEntries(ids.map((id, index) => [id, index])), result = {}, byColumn = {};
+    ids.forEach(id => (byColumn[column[id]] ||= []).push(id));
+    for (const [lane, members] of Object.entries(byColumn)) {
+      const key = id => { const row = find(graph, id)?.lane?.[1]; return Number.isFinite(row) ? row : rank[id]; };
+      members.sort((a, b) => key(a) - key(b) || rank[a] - rank[b]).forEach((id, index) => { result[id] = [Number(lane), index]; });
+    }
+    return result;
+  }
+
+  /** The earliest lane a node may occupy: one after its deepest source. */
+  function earliestLane(graph, id, placed = lanes(graph)) {
+    return Math.max(0, ...graph.links.filter(link => link.to[0] === id).map(link => placed[link.from[0]][0] + 1));
+  }
+
+  /** Move a node to a lane and row; rows in that lane are renumbered so the order is explicit.
+      Returns the lane actually used, which is never before the node's sources. */
+  function moveToLane(graph, id, lane, row) {
+    const placed = lanes(graph), target = Math.max(earliestLane(graph, id, placed), Math.max(0, Math.round(lane)));
+    const members = Object.keys(placed).filter(one => one !== id && placed[one][0] === target).sort((a, b) => placed[a][1] - placed[b][1]);
+    members.splice(Math.max(0, Math.min(members.length, Math.round(row))), 0, id);
+    members.forEach((one, index) => { const node = find(graph, one); node.lane = [one === id ? target : node.lane?.[0] ?? null, index]; });
+    return target;
+  }
+
+  function clearLanes(graph) { graph.nodes.forEach(node => { delete node.lane; }); return graph; }
+
   /** The model a step uses, through its Model input. */
   function modelOf(graph, id, models) {
     const link = linksInto(graph, id, 'model')[0], source = link && find(graph, link.from[0]);
@@ -181,7 +216,8 @@ window.SuiteWorkflowGraph = (() => {
   }
 
   /** Problems that block a run (error) or deserve attention (warning), per node. */
-  function validate(graph, catalogue, models) {
+  function validate(graph, catalogue, models, upscalers = null) {
+    const latent = catalogue.hires_upscalers || [];
     const problems = [], push = (node, level, text) => problems.push({node: node?.id || null, level, text});
     if (graph.nodes.length > catalogue.limits.nodes) push(null, 'error', `Use at most ${catalogue.limits.nodes} components.`);
     if (graph.links.length > catalogue.limits.links) push(null, 'error', `Use at most ${catalogue.limits.links} links.`);
@@ -196,6 +232,9 @@ window.SuiteWorkflowGraph = (() => {
         if (input.required && !linksInto(graph, node.id, input.name).length) push(node, 'error', `${input.label} needs a source.`);
       }
       if (node.type === 'model' && !models.some(model => model.id === node.values.model)) push(node, 'error', 'Choose an installed image model.');
+      if (node.type === 'upscale' && !node.values.upscaler) push(node, 'error', 'Choose an upscaler.');
+      const wanted = node.type === 'upscale' ? node.values.upscaler : node.type === 'sampler' && node.values.hires ? node.values.hires_upscaler : '';
+      if (upscalers && wanted && !latent.includes(wanted) && !upscalers.some(one => one.id === wanted)) push(node, 'error', 'That upscaler is not installed on any node.');
       if (node.type === 'sampler') {
         const model = modelOf(graph, node.id, models), family = model && catalogue.families[model.family];
         if (!family) continue;
@@ -246,5 +285,5 @@ window.SuiteWorkflowGraph = (() => {
   }
 
   return {spec, inputs, outputs, find, linksInto, linksFrom, reaches, destinations, sources, connect, disconnect, add,
-    insertAfter, remove, order, depths, modelOf, stages, validate, request, examples, slug};
+    insertAfter, remove, order, depths, lanes, earliestLane, moveToLane, clearLanes, modelOf, stages, validate, request, examples, slug};
 })();

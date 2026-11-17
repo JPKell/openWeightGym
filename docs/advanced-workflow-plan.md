@@ -381,6 +381,8 @@ requested, uses `owg update; owg restart` and verifies the running source and li
 | Delivery order | Phase 1 (proposals) first, then Phase 0, then Phase 2; commit and push after each; no deployment. Native GPU checks only after the GPUs have been idle for several minutes |
 | Klein default | Keep 6 steps until a native comparison justifies a change |
 | Version pinning | Yes: `workflow:<name>@<version>`; unpinned calls use the current version |
+| Layout (2026-11-17) | **02 Stage lanes** is the live layout, because the component list grows long. Cards can be dragged (or moved with Alt + arrows) to a later lane or another place in a lane, never before a step they use; Tidy layout restores run order. Canvas and Outline remain as views |
+| Upscalers (2026-11-17) | Each Upscale step names an installed upscaler file by file name, so a graph can chain or compare several. The hires pass may also name an installed upscaler file; Phase 4 must pass the image model's upscaler folder to `sd-server` (`--hires-upscalers-dir`) and resolve each file on the chosen node |
 
 ## Sources
 

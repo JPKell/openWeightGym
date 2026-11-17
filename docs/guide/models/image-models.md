@@ -50,7 +50,11 @@ separate from model management.
   uninstalled models, family limits, steps of later phases) can be published.
 - Anyone allowed to use every model a published workflow uses may run it and sees only its
   inputs, overridable bounds and outputs. Drafts and history stay with workflow managers.
-- The ten shipped samples are read-only templates; save a copy to change one.
+- Each Upscale step names an installed upscaler file (ESRGAN family, for example
+  `4x-UltraSharp.pth`) and a factor; chain several to enlarge in stages, or feed one image to
+  several into a Compare to choose between them. A Sampler's hires pass can use a latent method
+  or an installed upscaler file. A file no node has is a run problem.
+- The shipped samples are read-only templates; save a copy to change one.
 - Removing a workflow keeps the images and job records it produced.
 
 The editor page and `workflow:<name>` API calls are not available yet. Until then the shipped

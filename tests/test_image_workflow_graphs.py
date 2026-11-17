@@ -87,6 +87,48 @@ def test_run_problems_follow_the_installed_models_and_their_families():
     assert any(one['name'] == 'prompt.text' for one in caller['inputs'])
 
 
+def test_upscale_steps_and_hires_passes_choose_installed_upscaler_files():
+    installed = ['4x-UltraSharp.pth', 'RealESRGAN_x4plus.pth']
+    document = sample('Upscaler comparison')
+    assert {n['values']['upscaler'] for n in document['nodes'] if n['type'] == 'upscale'} >= {'4x-UltraSharp.pth', '4x_NMKD-Siax_200k.pth'}
+    assert not graph.check(document, MODELS)[1]  # without an inventory, files are not checked
+    found = graph.check(document, MODELS, installed)[1]
+    assert found == [{'node': 'siax', 'level': 'error', 'text': 'That upscaler is not installed on any node.'}]
+    next(n for n in document['nodes'] if n['id'] == 'siax')['values']['upscaler'] = ''
+    assert {'node': 'siax', 'level': 'error', 'text': 'Choose an upscaler.'} in graph.check(document, MODELS, installed)[1]
+    for bad in ('../../etc/passwd', 'up/scaler.pth', 'notes.txt'):
+        next(n for n in document['nodes'] if n['id'] == 'siax')['values']['upscaler'] = bad
+        with pytest.raises(ValueError, match='must name an upscaler file'):
+            graph.check(document, MODELS)
+    hires = sample('SDXL two-pass hires')
+    base = next(n for n in hires['nodes'] if n['id'] == 'base')
+    base['values']['hires_upscaler'] = 'RealESRGAN_x4plus.pth'
+    assert not [p for p in graph.check(hires, MODELS, installed)[1] if p['node'] == 'base']
+    base['values']['hires_upscaler'] = '4x_NMKD-Siax_200k.pth'
+    assert 'That upscaler is not installed on any node.' in [p['text'] for p in graph.check(hires, MODELS, installed)[1]]
+    base['values']['hires_upscaler'] = 'bicubic please'
+    with pytest.raises(ValueError, match='or an installed upscaler file'):
+        graph.check(hires, MODELS)
+
+
+def test_lane_positions_are_kept_and_editor_link_flags_dropped():
+    document = sample('Quick draft')
+    document['nodes'][0]['lane'] = [2, 0]
+    document['nodes'][1]['lane'] = [None, 1.5]
+    document['links'][0]['auto'] = True
+    checked = graph.check(document, MODELS)[0]
+    assert checked['nodes'][0]['lane'] == [2, 0] and checked['nodes'][1]['lane'] == [None, 1.5] and 'lane' not in checked['nodes'][2]
+    assert all(link.keys() == {'from', 'to'} for link in checked['links'])
+    for bad in ([1], [-1, 0], ['a', 0], {'lane': 1}):
+        document['nodes'][0]['lane'] = bad
+        with pytest.raises(ValueError, match='lane position'):
+            graph.check(document, MODELS)
+    document['nodes'][0]['lane'] = None
+    document['links'][0]['auto'] = 'yes'
+    with pytest.raises(ValueError, match='Each link'):
+        graph.check(document, MODELS)
+
+
 def test_versions_publishing_pins_and_removal(tmp_path):
     store = Store(Batches(str(tmp_path / 'accounts.db')).db, tmp_path)
     document = graph.check(sample('SDXL two-model refine'), MODELS)[0]
@@ -144,7 +186,7 @@ def test_workflow_api_needs_the_ability_to_change_and_access_to_every_model_to_r
     assert browser.post('/mirrorwall-api/graphs', json={'document': sample('Quick draft')}).status_code == 403
     sign_in(browser, 'jordan')
     library = browser.get('/mirrorwall-api/graphs').json()
-    assert library['can_manage'] and len(library['templates']) == 10 and library['catalogue']['samplers'][5] == 'dpm++2m'
+    assert library['can_manage'] and len(library['templates']) == len(graph.SAMPLES) and library['catalogue']['samplers'][5] == 'dpm++2m'
     assert browser.post('/mirrorwall-api/graphs', json={'document': {'name': 'Bad', 'nodes': 'x'}}).status_code == 400
     refine = browser.post('/mirrorwall-api/graphs', json={'document': sample('SDXL two-model refine')})
     assert refine.status_code == 201, refine.text

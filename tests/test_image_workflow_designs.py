@@ -140,7 +140,7 @@ def test_insert_after_reroutes_and_family_rules_block_runs(preview):
         select_node(page, f'load_image{index}')
         page.locator('[data-destination="base.references"]').check()
     expect(page.locator('[data-wf-problems]')).to_contain_text('uses at most 4 reference images')
-    page.locator('[data-wf-view=outline]').click()
+    page.locator('button[data-wf-view=outline]').click()
     expect(page.locator('.wf-outline')).to_contain_text('To: Base · Reference images')
     page.locator('.wf-outline [data-node="base"]').click()
     expect(page.locator('.wf-chips button')).to_have_count(5)
@@ -208,3 +208,79 @@ def test_narrow_screens_start_in_outline_without_overflow(tmp_path, width):
         assert page.evaluate("document.documentElement.dataset.bsTheme") == 'dark'
         browser.close()
         assert not errors
+
+
+def lane(page, node):
+    card = page.locator(f'.wf-nodes [data-node="{node}"]')
+    return int(card.get_attribute('data-lane')), int(card.get_attribute('data-row'))
+
+
+def drag_to(page, node, x, y):
+    head = page.locator(f'.wf-nodes [data-node="{node}"] .wf-node-head').bounding_box()
+    page.mouse.move(head['x'] + 30, head['y'] + 8)
+    page.mouse.down()
+    page.mouse.move(head['x'] + 50, head['y'] + 20, steps=3)
+    page.mouse.move(x, y, steps=8)
+    expect(page.locator('.wf-lane-drop')).to_be_visible()
+    page.mouse.up()
+
+
+def test_lanes_move_cards_by_drag_and_keyboard_but_never_before_their_sources(preview):
+    page = preview
+    expect(page.locator('button[data-wf-view=lanes]')).to_have_attribute('aria-pressed', 'true')
+    choose(page, 'Upscaler comparison')
+    page.locator('#duplicate-workflow').click()
+    assert lane(page, 'siax') == (2, 2) and lane(page, 'again') == (3, 0)
+    below = page.locator('.wf-nodes [data-node="again"]').bounding_box()
+    drag_to(page, 'siax', below['x'] + 60, below['y'] + below['height'] + 30)
+    assert lane(page, 'siax') == (3, 1)
+    expect(page.locator('[data-wf-status]')).to_have_text('Siax 2× is in lane 4, position 2.')
+    above = page.locator('.wf-nodes [data-node="again"]').bounding_box()
+    drag_to(page, 'siax', above['x'] + 60, above['y'] - 4)
+    assert lane(page, 'siax') == (3, 0) and lane(page, 'again') == (3, 1)
+    # A step cannot move before what it uses; the reason is announced.
+    prompt = page.locator('.wf-nodes [data-node="prompt"]').bounding_box()
+    drag_to(page, 'base', prompt['x'] + 60, prompt['y'] + 40)
+    assert lane(page, 'base')[0] == 1
+    expect(page.locator('[data-wf-status]')).to_contain_text('Base uses')
+    # Moving a source later pushes everything that uses it along.
+    page.locator('.wf-nodes [data-node="seed"]').focus()
+    page.keyboard.press('Alt+ArrowRight')
+    assert lane(page, 'seed')[0] == 1 and lane(page, 'base')[0] == 2 and lane(page, 'sharp')[0] == 3
+    page.keyboard.press('Alt+ArrowLeft')
+    assert lane(page, 'seed')[0] == 0 and lane(page, 'base')[0] == 1
+    page.locator('[data-wf-undo]').click()
+    assert lane(page, 'seed')[0] == 1
+    page.locator('[data-wf-tidy]').click()
+    assert lane(page, 'seed') == (0, 2) and lane(page, 'siax') == (2, 2)
+    expect(page.locator('[data-wf-status]')).to_have_text('Lanes follow the run order again.')
+    page.locator('button[data-wf-view=canvas]').click()
+    expect(page.locator('#editor')).to_have_attribute('data-wf-layout', 'canvas')
+    page.wait_for_timeout(100)
+    assert links(page) > 0
+
+
+def test_upscale_steps_offer_every_installed_upscaler_and_flag_missing_ones(preview):
+    page = preview
+    page.locator('#duplicate-workflow').click()
+    select_node(page, 'base')
+    page.locator('[data-add-after-type]').select_option('upscale')
+    page.locator('[data-add-after]').click()
+    expect(page.locator('[data-wf-problems]')).to_contain_text('Choose an upscaler.')
+    picker = page.locator('.wf-inspector [data-field="upscaler"]')
+    expect(picker.locator('option')).to_have_count(6)
+    picker.select_option('RealESRGAN_x2plus.pth')
+    expect(page.locator('.wf-nodes [data-node="upscale1"]')).to_contain_text('×2 · RealESRGAN x2 plus')
+    expect(page.locator('[data-wf-problems]')).not_to_contain_text('upscaler')
+    # A second upscaler chained after the first.
+    page.locator('[data-add-after-type]').select_option('upscale')
+    page.locator('[data-add-after]').click()
+    page.locator('.wf-inspector [data-field="upscaler"]').select_option('4x-UltraSharp.pth')
+    expect(port(page, 'upscale2', 'image')).to_contain_text('← Upscale')
+    expect(port(page, 'out', 'image')).to_contain_text('← Upscale 2')
+    # The hires pass lists installed upscalers after the latent methods.
+    select_node(page, 'base')
+    choose(page, 'SDXL two-pass hires')
+    select_node(page, 'base')
+    page.locator('.wf-advanced summary').click()
+    expect(page.locator('.wf-inspector [data-field="hires_upscaler"] optgroup[label="Installed upscalers"] option')).to_have_count(5)

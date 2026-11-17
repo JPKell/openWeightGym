@@ -3,10 +3,13 @@
 {% from 'parts.html' import section_title %}
 {% from 'navigation_parts.html' import pills, pill_button %}
 
-{% macro toolbar() %}
+{# `views` orders the view pills; the first is the default. Lanes and Canvas draw the graph, Outline lists it. #}
+{% macro toolbar(views=('canvas','outline')) %}
+{% set names = {'lanes':'Lanes','canvas':'Canvas','outline':'Outline'} %}
 <div class="wf-toolbar">
-{% call pills('Editor view',buttons=true,class_='mb-0 gap-1') %}{{ pill_button('Canvas',true,attrs={'data-wf-view':'canvas'}) }}{{ pill_button('Outline',attrs={'data-wf-view':'outline'}) }}{% endcall %}
-<div class="d-flex gap-1 align-items-center" data-wf-zoom-controls><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-zoom="out" aria-label="Zoom out">−</button><span class="small text-secondary wf-zoom-level" data-wf-zoom-level aria-live="polite">100%</span><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-zoom="in" aria-label="Zoom in">+</button><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-zoom="fit">Fit</button><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-tidy>Tidy layout</button></div>
+{% call pills('Editor view',buttons=true,class_='mb-0 gap-1') %}{% for view in views %}{{ pill_button(names[view],loop.first,attrs={'data-wf-view':view}) }}{% endfor %}{% endcall %}
+<div class="d-flex gap-1 align-items-center" data-wf-zoom-controls><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-zoom="out" aria-label="Zoom out">−</button><span class="small text-secondary wf-zoom-level" data-wf-zoom-level aria-live="polite">100%</span><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-zoom="in" aria-label="Zoom in">+</button><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-zoom="fit">Fit</button></div>
+<button type="button" class="btn btn-sm btn-outline-secondary" data-wf-tidy title="Lanes: return every card to run order. Canvas: arrange by depth.">Tidy layout</button>
 <div class="d-flex gap-1"><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-undo disabled aria-keyshortcuts="Control+Z">Undo</button><button type="button" class="btn btn-sm btn-outline-secondary" data-wf-redo disabled aria-keyshortcuts="Control+Shift+Z">Redo</button></div>
 <span class="wf-status small" data-wf-status role="status" aria-live="polite"></span>
 </div>
@@ -18,7 +21,7 @@
 
 {% macro surface() %}
 <div class="wf-surface" data-wf-surface tabindex="-1">
-<div class="wf-sizer" data-wf-sizer><div class="wf-nodes" data-wf-nodes role="group" aria-label="Workflow components. Select one to edit; Alt and an arrow key moves it."><svg class="wf-links" data-wf-links aria-hidden="true"></svg></div></div>
+<div class="wf-sizer" data-wf-sizer><div class="wf-nodes" data-wf-nodes role="group" aria-label="Workflow components. Select one to edit; drag its title, or press Alt and an arrow key, to move it."><svg class="wf-links" data-wf-links aria-hidden="true"></svg></div></div>
 </div>
 <ol class="wf-outline" data-wf-outline aria-label="Workflow components in run order" hidden></ol>
 {% endmacro %}
@@ -55,7 +58,7 @@
 <span class="wf-overline" data-kind></span><p class="small text-secondary mt-1" data-help></p>
 <div class="wf-fields"><div class="wf-field"><label class="form-label" for="wf-node-title">Name</label><input id="wf-node-title" class="form-control" data-node-title maxlength="60"></div><div class="wf-field"><label class="form-label" for="wf-node-label">Step label <small class="text-secondary">used by API overrides</small></label><input id="wf-node-label" class="form-control font-monospace" data-node-label maxlength="40"></div></div>
 <div class="wf-fields" data-fields></div>
-<details class="wf-advanced" data-advanced><summary>Advanced sampling</summary><div class="wf-fields" data-advanced-fields></div></details>
+<details class="wf-advanced" data-advanced><summary>Advanced settings</summary><div class="wf-fields" data-advanced-fields></div></details>
 <section class="wf-connections" data-inputs-section><span class="wf-overline">USE FROM</span><div data-inputs></div></section>
 <section class="wf-connections" data-outputs-section><span class="wf-overline">SEND TO</span><div data-outputs></div></section>
 <div class="wf-node-actions"><label class="visually-hidden" for="wf-add-after-type">Component to add after this one</label><select id="wf-add-after-type" class="form-select form-select-sm" data-add-after-type></select><button type="button" class="btn btn-sm btn-outline-primary" data-add-after>Add after</button><button type="button" class="btn btn-sm btn-outline-secondary" data-duplicate>Duplicate</button><button type="button" class="btn btn-sm btn-outline-danger" data-remove>Remove</button></div>

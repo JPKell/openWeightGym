@@ -51,11 +51,11 @@
 .wf-port[data-type=seed] .wf-dot { background: var(--wf-seed); } .wf-port[data-type=size] .wf-dot { background: var(--wf-size); }
 .wf-port[data-type=control] .wf-dot { background: var(--wf-control); }
 
-/* Lanes: one column per step depth, links still drawn from rendered ports. */
-[data-wf-layout=lanes] .wf-nodes { display: grid; grid-auto-columns: 280px; grid-auto-rows: min-content; column-gap: 70px; row-gap: 16px;
-  width: auto; height: auto; padding: 16px; align-items: start; }
-[data-wf-layout=lanes] .wf-node { position: relative; left: auto !important; top: auto !important; grid-column: var(--wf-column); grid-row: var(--wf-row); }
-[data-wf-layout=lanes] .wf-node-head { cursor: default; }
+/* Lanes: cards are placed by the editor in lanes (never before a source) and stacked per lane; links are drawn from rendered ports. */
+[data-wf-layout=lanes] .wf-node.is-dragging { z-index: 5; opacity: .92; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.wf-node-head:active { cursor: grabbing; }
+.wf-lane-drop { position: absolute; z-index: 4; width: 280px; padding-top: 4px; border-top: 4px solid var(--suite-accent); border-radius: 2px;
+  pointer-events: none; font-size: 11px; font-weight: 600; color: var(--suite-accent); }
 [data-wf-layout=lanes] [data-wf-zoom-controls], [data-wf-view=outline] [data-wf-zoom-controls] { display: none !important; }
 
 .wf-outline { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }

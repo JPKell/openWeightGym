@@ -12,14 +12,14 @@
 <header class="iw-topbar"><a href="#workspace" class="iw-brand">{{ icon('barbell') }} <strong>weightRoom</strong><span class="text-secondary">/ Models / Image workflows</span></a><div class="d-flex gap-2 align-items-center"><span class="wf-overline iw-demo-label">INTERACTIVE DESIGN PREVIEW</span><button class="btn btn-sm btn-outline-secondary" id="theme" type="button">Dark mode</button></div></header>
 <main class="iw-page">
 <section class="iw-review" aria-label="Design comparison">
-{% call pills('Design proposals',buttons=true,class_='iw-designs mb-0') %}{{ pill_button('01 / Node canvas',true,attrs={'data-design':'canvas'}) }}{{ pill_button('02 / Stage lanes',attrs={'data-design':'lanes'}) }}{{ pill_button('03 / Split studio',attrs={'data-design':'split'}) }}{% endcall %}<p id="design-note" class="small text-secondary mb-0"></p>
+{% call pills('Design proposals',buttons=true,class_='iw-designs mb-0') %}{{ pill_button('01 / Node canvas',attrs={'data-design':'canvas'}) }}{{ pill_button('02 / Stage lanes · selected',true,attrs={'data-design':'lanes'}) }}{{ pill_button('03 / Split studio',attrs={'data-design':'split'}) }}{% endcall %}<p id="design-note" class="small text-secondary mb-0"></p>
 </section>
-<div id="workspace" data-layout="canvas">
+<div id="workspace" data-layout="lanes">
 {% call page_header('Image workflows',pretitle='MODELS / IMAGE WORKFLOWS') %}<label class="visually-hidden" for="workflow-choice">Workflow</label><select id="workflow-choice" class="form-select form-select-sm iw-choice"></select><button class="btn btn-outline-secondary btn-sm" id="new-workflow" type="button">New workflow</button><button class="btn btn-outline-secondary btn-sm" id="duplicate-workflow" type="button">Duplicate</button><button class="btn btn-primary btn-sm" id="save-workflow" type="button">Save version</button>{% endcall %}
 <div class="iw-meta"><div class="iw-name"><label class="form-label" for="workflow-name">Workflow name <small class="text-secondary">API model name: <code id="api-name"></code></small></label><input id="workflow-name" class="form-control" maxlength="100"></div><div class="iw-summary"><label class="form-label" for="workflow-summary">Summary</label><input id="workflow-summary" class="form-control" maxlength="240"></div><div class="iw-badges"><span class="badge bg-blue-lt" id="workflow-version"></span><label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="workflow-published"><span class="form-check-label">Published</span></label></div></div>
 <div id="feedback" hidden>{{ alert('info',attrs={'id':'feedback-text','aria-live':'polite'}) }}</div>
-<div class="wf-editor iw-editor" id="editor" data-wf-layout="canvas">
-<div class="iw-toolbar">{{ toolbar() }}</div>
+<div class="wf-editor iw-editor" id="editor" data-wf-layout="lanes">
+<div class="iw-toolbar">{{ toolbar(views=('lanes','canvas','outline')) }}</div>
 <div class="iw-palette">{{ palette() }}</div>
 <div class="iw-surface">{{ surface() }}</div>
 <div class="iw-inspector">{{ inspector() }}</div>
@@ -34,5 +34,6 @@
 <script id="workflow-samples" type="application/json">{{ samples|tojson }}</script>
 <script id="workflow-models" type="application/json">{{ models|tojson }}</script>
 <script id="workflow-assets" type="application/json">{{ assets|tojson }}</script>
+<script id="workflow-upscalers" type="application/json">{{ upscalers|tojson }}</script>
 <script>{{ graph_javascript|safe }}</script><script>{{ editor_javascript|safe }}</script><script>{{ javascript|safe }}</script>
 </body></html>

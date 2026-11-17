@@ -4,11 +4,11 @@
   const $ = id => document.getElementById(id);
   const data = id => JSON.parse($(id).textContent);
   const G = window.SuiteWorkflowGraph;
-  const catalogue = data('workflow-catalogue'), models = data('workflow-models'), assets = data('workflow-assets');
+  const catalogue = data('workflow-catalogue'), models = data('workflow-models'), assets = data('workflow-assets'), upscalers = data('workflow-upscalers');
   const clone = value => JSON.parse(JSON.stringify(value));
   const NOTES = {
     canvas: 'Node canvas: a free canvas between the palette and the inspector. Drag nodes or use Alt + arrows; links follow Send to choices.',
-    lanes: 'Stage lanes: each column is one step deeper in the run. Placement is automatic, so authors only choose connections.',
+    lanes: 'Stage lanes (selected): each lane runs after the ones to its left. Drag a card by its title, or press Alt and an arrow, to move it between lanes or reorder a lane; Tidy layout restores run order.',
     split: 'Split studio: a compact canvas above the test run, for tuning a saved workflow against real inputs.',
   };
   let workflows = [], current = 0, running = null, language = 'curl';
@@ -19,7 +19,7 @@
     current = 0;
   }
   fresh();
-  const editor = SuiteWorkflowEditor.create(editorRoot, {catalogue, models, assets, graph: workflows[0].graph,
+  const editor = SuiteWorkflowEditor.create(editorRoot, {catalogue, models, assets, upscalers, graph: workflows[0].graph,
     onChange: (graph, how = {}) => { workflows[current].graph = {...workflows[current].graph, nodes: graph.nodes, links: graph.links}; if (!how.layout) workflows[current].dirty = true; refresh(); }});
 
   function announce(text) { $('feedback').hidden = !text; $('feedback-text').textContent = text || ''; }
@@ -172,10 +172,10 @@
 
   function layout(name) {
     $('workspace').dataset.layout = name;
-    editorRoot.dataset.wfLayout = name === 'lanes' ? 'lanes' : 'canvas';
+    if (editorRoot.dataset.wfView === 'outline') editorRoot.dataset.wfLayout = name === 'lanes' ? 'lanes' : 'canvas';
+    else editor.view(name === 'lanes' ? 'lanes' : 'canvas');
     document.querySelectorAll('[data-design]').forEach(button => { const on = button.dataset.design === name; button.classList.toggle('active', on); button.setAttribute('aria-pressed', String(on)); });
     $('design-note').textContent = NOTES[name];
-    if (name === 'lanes' || editorRoot.dataset.wfView === 'canvas') editor.redraw();
   }
 
   document.querySelectorAll('[data-design]').forEach(button => button.addEventListener('click', () => layout(button.dataset.design)));
@@ -213,12 +213,12 @@
     try { await navigator.clipboard.writeText(editorRoot.querySelector('[data-wf-api-code]').textContent); announce('Copied the API example.'); }
     catch { announce('Copy is unavailable here; select the example text instead.'); }
   });
-  $('reset').addEventListener('click', () => { fresh(); layout('canvas'); open(0); });
+  $('reset').addEventListener('click', () => { fresh(); layout('lanes'); open(0); });
   $('theme').addEventListener('click', () => {
     const dark = document.documentElement.dataset.bsTheme !== 'dark', control = document.querySelector('[data-theme-form] [name="mode"]');
     control.value = dark ? 'dark' : 'light'; control.dispatchEvent(new Event('change', {bubbles: true}));
     $('theme').textContent = dark ? 'Light mode' : 'Dark mode';
   });
   $('theme').textContent = document.documentElement.dataset.bsTheme === 'dark' ? 'Light mode' : 'Dark mode';
-  layout('canvas'); refresh();
+  layout('lanes'); refresh();
 })();

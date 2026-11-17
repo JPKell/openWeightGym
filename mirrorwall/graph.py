@@ -16,7 +16,8 @@ from mirrorwall import model as _model
 NATIVE_SAMPLERS = _model.SAMPLERS
 NATIVE_SCHEDULERS = _model.SCHEDULERS
 CACHE_MODES = ('off',) + _model.CACHE_MODES
-HIRES_UPSCALERS = _model.HIRES_UPSCALERS  # model upscaling is the separate Upscale step
+HIRES_UPSCALERS = _model.HIRES_UPSCALERS  # latent methods; installed upscaler files are offered as well
+UPSCALER_FILE = re.compile(r'[A-Za-z0-9][A-Za-z0-9 ._+()-]{0,199}\.(pth|pt|safetensors|gguf)')
 
 PORT_TYPES = {
     'text': 'Text', 'model': 'Model', 'image': 'Image', 'mask': 'Mask',
@@ -48,7 +49,11 @@ DEFAULTS = {
 
 
 def _field(name, label, kind, default=None, **extra):
-    """One editable value of a component; `kind` is text, textarea, number, choice, toggle, model or asset."""
+    """One editable value of a component; `kind` is text, textarea, number, choice, toggle, model, asset or upscaler.
+
+    An upscaler names an installed upscaler file (ESRGAN family) by file name; nodes resolve it locally.
+    A choice with `upscalers` also accepts installed upscaler files after its fixed choices.
+    """
     return {'name': name, 'label': label, 'kind': kind, 'default': default, **extra}
 
 
@@ -71,7 +76,7 @@ SAMPLER_FIELDS = [
     _field('cache_mode', 'Step cache', 'choice', 'off', choices=list(CACHE_MODES), advanced=True),
     _field('vae_tiling', 'VAE tiling', 'toggle', False, advanced=True),
     _field('hires', 'Hires pass', 'toggle', False, advanced=True),
-    _field('hires_upscaler', 'Hires upscaler', 'choice', 'Latent', choices=list(HIRES_UPSCALERS), needs='hires', advanced=True),
+    _field('hires_upscaler', 'Hires upscaler', 'choice', 'Latent', choices=list(HIRES_UPSCALERS), upscalers=True, needs='hires', advanced=True),
     _field('hires_scale', 'Hires scale', 'number', 1.5, min=1, max=4, step=0.05, needs='hires', advanced=True, overridable=True),
     _field('hires_steps', 'Hires steps', 'number', 14, min=1, max=200, step=1, needs='hires', advanced=True, overridable=True),
     _field('hires_denoise', 'Hires denoise', 'number', 0.38, min=0, max=1, step=0.01, needs='hires', advanced=True, overridable=True),
@@ -113,9 +118,11 @@ COMPONENTS = {
                 'help': 'One generation pass. A start image makes it an image-to-image pass whose strength sets how much changes.'},
     'upscale': {'label': 'Upscale', 'group': 'Refine', 'phase': 4, 'stage': True,
                 'inputs': [_port('image', 'Image', 'image', True)], 'outputs': [_port('image', 'Image', 'image')],
-                'fields': [_field('factor', 'Factor', 'number', 2, min=1, max=4, step=0.5, overridable=True),
-                           _field('upscaler', 'Upscaler', 'choice', 'Model upscaler', choices=['Model upscaler'])],
-                'help': 'Enlarges with the configured AI upscaler; never a silent plain resize.'},
+                'fields': [_field('upscaler', 'Upscaler', 'upscaler', ''),
+                           _field('factor', 'Factor', 'number', 2, min=1, max=4, step=0.5, overridable=True),
+                           _field('tile', 'Tile size', 'number', 512, min=128, max=1024, step=64, advanced=True)],
+                'help': 'Enlarges with an installed AI upscaler, then resizes exactly to the factor. '
+                        'Use several Upscale steps to chain or compare upscalers.'},
     'resize': {'label': 'Resize / crop', 'group': 'Refine', 'phase': 4,
                'inputs': [_port('image', 'Image', 'image', True)], 'outputs': [_port('image', 'Image', 'image')],
                'fields': [_field('mode', 'Mode', 'choice', 'fit', choices=['fit', 'fill', 'crop', 'pad']),
@@ -211,7 +218,7 @@ SAMPLES = [
            [*_inputs(model='sdxl-base', negative=True),
             _sampler('base', 'sdxl', [380, 160], 'Base with hires', hires=True, hires_upscaler='Latent', hires_scale=1.5,
                      hires_steps=14, hires_denoise=0.38),
-            _node('upscale', 'upscale', [720, 160], factor=2), _node('out', 'output', [1040, 160], label='Final')],
+            _node('upscale', 'upscale', [720, 160], upscaler='4x-UltraSharp.pth', factor=2), _node('out', 'output', [1040, 160], label='Final')],
            [('prompt.text', 'base.prompt'), ('negative.text', 'base.negative'), ('model.model', 'base.model'),
             ('seed.seed', 'base.seed'), ('size.size', 'base.size'), ('base.image', 'upscale.image'), ('upscale.image', 'out.image')],
            exposed={'negative': ['text']}, overridable={'base': {'hires_denoise': [0.2, 0.5], 'steps': [20, 40]}}),
@@ -236,6 +243,17 @@ SAMPLES = [
            [*[(source, f'{key}.{port}') for key in ('euler', 'dpm', 'res', 'ersde')
               for source, port in (('prompt.text', 'prompt'), ('model.model', 'model'), ('seed.seed', 'seed'), ('size.size', 'size'))],
             *[(f'{key}.image', 'compare.images') for key in ('euler', 'dpm', 'res', 'ersde')]]),
+    _graph('Upscaler comparison', 'One SDXL image enlarged by three upscalers, side by side, plus a chained 4× pass.', 'sdxl',
+           [*_inputs(model='sdxl-base'), _sampler('base', 'sdxl', [380, 160], 'Base'),
+            *[_node(key, 'upscale', [720, 40 + 180 * index], label, upscaler=file, factor=2)
+              for index, (key, label, file) in enumerate([('sharp', 'UltraSharp 2×', '4x-UltraSharp.pth'),
+                                                          ('real', 'RealESRGAN 2×', 'RealESRGAN_x4plus.pth'),
+                                                          ('siax', 'Siax 2×', '4x_NMKD-Siax_200k.pth')])],
+            _node('again', 'upscale', [1040, 40], 'UltraSharp then 2× more', upscaler='4x-UltraSharp.pth', factor=2),
+            _node('compare', 'compare', [1360, 220], label='Upscalers')],
+           [('prompt.text', 'base.prompt'), ('model.model', 'base.model'), ('seed.seed', 'base.seed'), ('size.size', 'base.size'),
+            *[('base.image', f'{key}.image') for key in ('sharp', 'real', 'siax')], ('sharp.image', 'again.image'),
+            *[(f'{key}.image', 'compare.images') for key in ('sharp', 'real', 'siax', 'again')]]),
     _graph('Family comparison', 'One prompt and seed through three model families.', 'flux2-klein',
            [_node('prompt', 'prompt', [40, 40], text='A ceramic teapot shaped like a sleeping fox, studio product photo'),
             _node('seed', 'seed', [40, 280], mode='fixed', value=77),
@@ -252,7 +270,7 @@ SAMPLES = [
     _graph('Krea Turbo draft → SDXL detail', 'A fast composition, enlarged, then detailed by SDXL at low strength.', 'krea2',
            [*_inputs(model='krea2-turbo'), _node('model2', 'model', [380, 420], 'Detail model', model='sdxl-base'),
             _sampler('draft', 'krea2', [380, 120], 'Draft', steps=8, cfg_scale=1),
-            _node('upscale', 'upscale', [720, 120], factor=2),
+            _node('upscale', 'upscale', [720, 120], upscaler='4x-UltraSharp.pth', factor=2),
             _sampler('detail', 'sdxl', [1040, 220], 'Detail', steps=20, strength=0.3),
             _node('out', 'output', [1360, 220], label='Final'), _node('draft_out', 'output', [1040, 20], label='Draft')],
            [('prompt.text', 'draft.prompt'), ('prompt.text', 'detail.prompt'), ('model.model', 'draft.model'),
@@ -282,9 +300,9 @@ SAMPLES = [
             ('source.image', 'control.image'), ('control.control', 'base.control'), ('base.image', 'out.image')]),
     _graph('Tiled 4× upscale', 'Enlarge twice with a tiled detail pass in between (Phase 5).', 'sdxl',
            [*_inputs(model='sdxl-base'), _sampler('base', 'sdxl', [380, 160], 'Base'),
-            _node('up1', 'upscale', [720, 60], 'Upscale 2×', factor=2),
+            _node('up1', 'upscale', [720, 60], 'Upscale 2×', upscaler='4x-UltraSharp.pth', factor=2),
             _node('tiles', 'tiled_detail', [1040, 160], strength=0.3, tile=1024, overlap=64),
-            _node('up2', 'upscale', [1360, 60], 'Upscale 2× again', factor=2), _node('out', 'output', [1680, 160], label='Final')],
+            _node('up2', 'upscale', [1360, 60], 'Upscale 2× again', upscaler='RealESRGAN_x4plus.pth', factor=2), _node('out', 'output', [1680, 160], label='Final')],
            [('prompt.text', 'base.prompt'), ('prompt.text', 'tiles.prompt'), ('model.model', 'base.model'),
             ('model.model', 'tiles.model'), ('seed.seed', 'base.seed'), ('size.size', 'base.size'), ('base.image', 'up1.image'),
             ('up1.image', 'tiles.image'), ('tiles.image', 'up2.image'), ('up2.image', 'out.image')]),
@@ -294,7 +312,7 @@ SAMPLES = [
 def catalogue():
     """Everything the editor needs, as one JSON-ready object."""
     return {'components': COMPONENTS, 'order': list(COMPONENTS), 'port_types': PORT_TYPES, 'families': FAMILIES, 'defaults': DEFAULTS,
-            'samplers': list(NATIVE_SAMPLERS), 'schedulers': list(NATIVE_SCHEDULERS), 'limits': LIMITS}
+            'samplers': list(NATIVE_SAMPLERS), 'schedulers': list(NATIVE_SCHEDULERS), 'hires_upscalers': list(HIRES_UPSCALERS), 'limits': LIMITS}
 
 
 # ---- Validation: the server's copy of the editor's rules (weightroom/static/workflow-graph.js) ----
@@ -325,8 +343,13 @@ def _value(field, value):
             raise ValueError(f'{label} must be on or off.')
         return value
     if kind == 'choice':
-        if value not in field['choices']:
-            raise ValueError(f'{label} must be one of: ' + ', '.join(map(str, field['choices'])) + '.')
+        if value not in field['choices'] and not (field.get('upscalers') and isinstance(value, str) and UPSCALER_FILE.fullmatch(value)):
+            raise ValueError(f'{label} must be one of: ' + ', '.join(map(str, field['choices'])) +
+                             (' or an installed upscaler file' if field.get('upscalers') else '') + '.')
+        return value
+    if kind == 'upscaler':
+        if not isinstance(value, str) or (value and not UPSCALER_FILE.fullmatch(value)):
+            raise ValueError(f'{label} must name an upscaler file, such as 4x-UltraSharp.pth.')
         return value
     if not isinstance(value, str) or len(value) > field.get('max', 200) or '\0' in value:
         raise ValueError(f"{label} must be text of at most {field.get('max', 200)} characters.")
@@ -337,11 +360,12 @@ def _ports(node, side):
     return {port['name']: port for port in COMPONENTS[node['type']].get(side, [])}
 
 
-def check(document, models=None):
+def check(document, models=None, upscalers=None):
     """Validate a workflow document. Structural faults raise ValueError; run problems are returned.
 
-    `models` lists the installed image models as {'id', 'family'}; without it, model-dependent
-    rules are skipped. Returns (normalized document, [{'node', 'level', 'text'}]).
+    `models` lists the installed image models as {'id', 'family'} and `upscalers` the installed
+    upscaler file names; without them, the dependent rules are skipped.
+    Returns (normalized document, [{'node', 'level', 'text'}]).
     """
     if not isinstance(document, dict):
         raise ValueError('A workflow must be a JSON object.')
@@ -368,8 +392,8 @@ def check(document, models=None):
         raise ValueError(f"Use at most {LIMITS['nodes']} components and {LIMITS['links']} links.")
     clean, seen = [], set()
     for node in nodes:
-        if not isinstance(node, dict) or node.keys() - {'id', 'type', 'title', 'values', 'at', 'exposed', 'overridable'}:
-            raise ValueError('Each component has id, type, title, values, at, exposed and overridable only.')
+        if not isinstance(node, dict) or node.keys() - {'id', 'type', 'title', 'values', 'at', 'lane', 'exposed', 'overridable'}:
+            raise ValueError('Each component has id, type, title, values, at, lane, exposed and overridable only.')
         identifier, kind = node.get('id'), node.get('type')
         if not isinstance(identifier, str) or not LABEL.fullmatch(identifier):
             raise ValueError('Step labels start with a letter and use lowercase letters, digits and underscores (up to 40).')
@@ -390,6 +414,10 @@ def check(document, models=None):
         if (not isinstance(at, list) or len(at) != 2 or any(type(one) not in (int, float) or not math.isfinite(one)
                                                             or not -10000 <= one <= 100000 for one in at)):
             raise ValueError(f'{identifier}: a position is two numbers.')
+        lane = node.get('lane')
+        if lane is not None and (not isinstance(lane, list) or len(lane) != 2 or any(
+                one is not None and (type(one) not in (int, float) or not math.isfinite(one) or not 0 <= one <= 500) for one in lane)):
+            raise ValueError(f'{identifier}: a lane position is [lane or null, order or null].')
         exposed = node.get('exposed', [])
         if not isinstance(exposed, list) or len(set(exposed)) != len(exposed) or any(one not in fields for one in exposed):
             raise ValueError(f'{identifier}: callers may only set this component\'s own fields.')
@@ -408,12 +436,12 @@ def check(document, models=None):
         if set(exposed) & set(bounds):
             raise ValueError(f'{identifier}: a field is either set by callers or overridable within bounds, not both.')
         clean.append({'id': identifier, 'type': kind, 'title': title.strip(), 'values': values, 'at': list(at),
-                      'exposed': list(exposed), 'overridable': bounds})
+                      **({'lane': list(lane)} if lane is not None else {}), 'exposed': list(exposed), 'overridable': bounds})
     found = {node['id']: node for node in clean}
     clean_links, into = [], {}
     for link in links:
-        if (not isinstance(link, dict) or link.keys() != {'from', 'to'} or
-                any(not isinstance(end, list) or len(end) != 2 or not all(isinstance(one, str) for one in end) for end in link.values())):
+        if (not isinstance(link, dict) or link.keys() - {'auto'} != {'from', 'to'} or not isinstance(link.get('auto', False), bool) or
+                any(not isinstance(end, list) or len(end) != 2 or not all(isinstance(one, str) for one in end) for end in (link['from'], link['to']))):
             raise ValueError('Each link is {"from": [label, output], "to": [label, input]}.')
         (source, output), (target, entry) = link['from'], link['to']
         if source not in found or target not in found:
@@ -441,11 +469,11 @@ def check(document, models=None):
               'nodes': clean, 'links': clean_links}
     if isinstance(document.get('family'), str) and document['family'] in FAMILIES:
         result['family'] = document['family']
-    return result, problems(result, models)
+    return result, problems(result, models, upscalers)
 
 
-def problems(document, models=None):
-    """Run problems of a structurally valid document: missing sources, family rules, planned components."""
+def problems(document, models=None, upscalers=None):
+    """Run problems of a structurally valid document: missing sources, family rules, planned components, upscalers."""
     found, listed = {node['id']: node for node in document['nodes']}, []
     def push(node, level, text):
         listed.append({'node': node and node['id'], 'level': level, 'text': text})
@@ -463,6 +491,12 @@ def problems(document, models=None):
         for port in component.get('inputs', []):
             if port['required'] and not into(node, port['name']):
                 push(node, 'error', f"{port['label']} needs a source.")
+        if node['type'] == 'upscale' and not node['values']['upscaler']:
+            push(node, 'error', 'Choose an upscaler.')
+        wanted = [node['values'].get('upscaler')] if node['type'] == 'upscale' else (
+            [node['values']['hires_upscaler']] if node['type'] == 'sampler' and node['values']['hires'] else [])
+        if upscalers is not None and any(one and one not in HIRES_UPSCALERS and one not in upscalers for one in wanted):
+            push(node, 'error', 'That upscaler is not installed on any node.')
         if models is None:
             continue
         if node['type'] == 'model' and node['values']['model'] not in installed:

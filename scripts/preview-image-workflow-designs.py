@@ -18,6 +18,12 @@ MODELS = [
     {'id': 'krea2-turbo', 'label': 'Krea 2 Turbo', 'family': 'krea2', 'nodes': ['atlas']},
     {'id': 'qwen-image', 'label': 'Qwen Image', 'family': 'qwen-image', 'nodes': ['atlas']},
 ]
+# Sample upscaler files by file name, as nodes report them; the Upscale step and hires pass choose from these.
+UPSCALERS = [{'id': '4x-UltraSharp.pth', 'label': '4x UltraSharp', 'scale': 4, 'nodes': ['atlas', 'orion']},
+             {'id': 'RealESRGAN_x4plus.pth', 'label': 'RealESRGAN x4 plus', 'scale': 4, 'nodes': ['atlas', 'orion']},
+             {'id': '4x_NMKD-Siax_200k.pth', 'label': '4x NMKD Siax 200k', 'scale': 4, 'nodes': ['orion']},
+             {'id': 'RealESRGAN_x4plus_anime_6B.pth', 'label': 'RealESRGAN x4 anime 6B', 'scale': 4, 'nodes': ['atlas']},
+             {'id': 'RealESRGAN_x2plus.pth', 'label': 'RealESRGAN x2 plus', 'scale': 2, 'nodes': ['atlas']}]
 ASSETS = [{'id': 'jacket', 'label': 'Denim jacket.png'}, {'id': 'portrait', 'label': 'Studio portrait.png'},
           {'id': 'loft', 'label': 'Brick loft.png'}, {'id': 'street', 'label': 'Street photo.png'}]
 
@@ -34,7 +40,7 @@ def render():
         editor_javascript=(static / 'workflow-editor.js').read_text(),
         javascript=(static / 'image-workflow-designs.js').read_text(),
         theme_javascript=(static / 'themes.js').read_text(),
-        catalogue=graph['catalogue'](), samples=graph['SAMPLES'], models=MODELS, assets=ASSETS,
+        catalogue=graph['catalogue'](), samples=graph['SAMPLES'], models=MODELS, assets=ASSETS, upscalers=UPSCALERS,
         icons_svg=re.sub(r'\bid="([^"]+)"', r'id="workflow-icon-\1"', (static / 'icons.svg').read_text()),
     ).replace('/static/icons.svg?v=3#', '#workflow-icon-')
 

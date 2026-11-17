@@ -24,10 +24,13 @@ browser-local sample actions, light/dark appearance and failure states. Sample a
 illustrative; it is not a generated video. The selected live layout is Canvas on both pages.
 
 For Image workflows, run `.venv/bin/python scripts/preview-image-workflow-designs.py` and open
-`build/image-workflow-designs/index.html`. Node canvas, Stage lanes and Split studio share one
-editor: Send to and Use from connect steps, Add after inserts a step, and the test run returns
-placeholder pictures with a matching API example. Samples are read-only; duplicate one to edit.
-Narrow screens start in Outline. Nothing is generated and no service is contacted.
+`build/image-workflow-designs/index.html`. Node canvas, Stage lanes (selected for the live page)
+and Split studio share one editor: Send to and Use from connect steps, Add after inserts a step,
+and the test run returns placeholder pictures with a matching API example. In Lanes, drag a card
+by its title, or press Alt and an arrow key, to move it to a later lane or reorder a lane; a card
+never moves before the steps it uses, and Tidy layout restores run order. Upscale steps choose
+from sample upscaler files. Samples are read-only; duplicate one to edit. Narrow screens start
+in Outline. Nothing is generated and no service is contacted.
 
 ## Related
 
