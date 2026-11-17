@@ -22,14 +22,20 @@ at least one installed image model. A comparison is an ordinary image job. It sh
 3. Set the width, height, steps, CFG scale (or distilled guidance for Flux-style models) and seed.
    **Images per combination** above 1 adds the next seeds, so each combination gets the same
    set of seeds.
-4. In **Schedulers** and **Samplers**, untick the ones you do not want. **All** and **None** set
+4. If the model takes reference images, **Reference images** appears under the settings. Upload
+   images or add saved references, up to the model's limit. Every combination uses the same
+   references. **Reference size** sets the size they are prepared at; without an upscaler on the
+   model, a smaller image is refused until you lower it. SDXL models redraw one starting image,
+   and **Image strength** sets how much of it changes.
+5. In **Schedulers** and **Samplers**, untick the ones you do not want. **All** and **None** set
    the whole list at once. The count under **Run comparison** shows how many images the run makes.
-5. Select **Run comparison**. The results fill in as each image finishes. **Pause** and **Stop**
+6. Select **Run comparison**. The results fill in as each image finishes. **Pause** and **Stop**
    act on the whole run.
 
 ## Compare results
 
-Results are grouped by scheduler. Each image's sampler and scheduler are shown under it, followed by
+Results fill one continuous grid in run order: every chosen sampler with the first scheduler, then
+with the next. Each image's sampler and scheduler are shown under it, followed by
 its seed, steps and CFG. A combination the runtime refuses is marked as failed, with the reason,
 and the rest of the run continues.
 

@@ -92,7 +92,7 @@ def test_job_lines_report_order_images_and_failures_only_to_the_owner(comparison
 
 
 @pytest.mark.parametrize('width', [1440, 390])
-def test_page_runs_a_comparison_and_zooms_every_image_to_the_same_region(comparison, width):
+def test_page_runs_a_comparison_and_zooms_every_image_to_the_same_region(comparison, width, tmp_path):
     server, front, held, run = comparison
     engine = playwright.sync_playwright().start()
     browser, page = browser_context(engine, server)
@@ -111,12 +111,34 @@ def test_page_runs_a_comparison_and_zooms_every_image_to_the_same_region(compari
         for value in ('euler', 'dpm++2m', 'lcm'):
             page.locator(f'#sc-samplers input[value="{value}"]').check()
         expect(page.locator('#sc-count')).to_have_text('2 schedulers × 3 samplers = 6 images')
+        # References: offered only for models that take them, and sent with every combination.
+        expect(page.locator('#sc-reference-box')).to_be_visible()
+        picture = tmp_path / 'start.png'
+        Image.new('RGB', (400, 400), (200, 120, 40)).save(picture)
+        page.locator('#sc-upload').set_input_files(str(picture))
+        expect(page.locator('#sc-references .ig-reference')).to_have_count(1)
+        expect(page.locator('#sc-references')).to_contain_text('400 × 400')
+        expect(page.locator('#sc-upload')).to_be_disabled()  # this model takes one
+        expect(page.locator('#sc-count')).to_contain_text('smaller than the reference size')
+        expect(page.locator('#sc-run')).to_be_disabled()
+        page.locator('#sc-reference-mp').fill('0.1')
+        expect(page.locator('#sc-count')).to_have_text('2 schedulers × 3 samplers = 6 images')
+        expect(page.locator('#sc-strength')).to_be_visible()
+        page.locator('#sc-model').select_option('qwen')
+        expect(page.locator('#sc-reference-box')).to_be_hidden()
+        page.locator('#sc-model').select_option('sketch')
+        expect(page.locator('#sc-references .ig-reference')).to_have_count(1)
         page.locator('#sc-prompt').fill('A lighthouse at dusk')
         page.locator('#sc-cfg').fill('4.5')
         page.locator('#sc-seed').fill('1234')
-        page.locator('#sc-run').click()
+        with page.expect_request(lambda sent: sent.url.endswith('/mirrorwall-api/jobs') and sent.method == 'POST') as posted:
+            page.locator('#sc-run').click()
+        body = posted.value.post_data_json
+        assert len(body['references']) == 1 and body['request']['reference_megapixels'] == 0.1 and body['request']['strength'] == 0.75
         expect(page.locator('#sc-status')).to_contain_text('Running · 2 of 6 done · 1 failed')
-        expect(page.locator('.sc-group-title')).to_have_text(['Scheduler · karras', 'Scheduler · beta'])
+        # One continuous grid in run order, with no per-scheduler sets.
+        expect(page.locator('#sc-grid > .sc-tile')).to_have_count(6)
+        expect(page.locator('.sc-tile [data-scheduler]')).to_have_text(['karras'] * 3 + ['beta'] * 3)
         first = page.locator('.sc-tile').first
         expect(first.locator('figcaption')).to_contain_text('euler · karras')
         expect(first.locator('[data-detail]')).to_have_text('seed 1234 · 28 steps · CFG 4.5')

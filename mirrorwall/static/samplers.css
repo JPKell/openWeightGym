@@ -1,16 +1,15 @@
-/* Sampler comparison (Models → Sampler comparison): settings beside a results grid whose zoom shows the same region of every image. */
+/* Sampler comparison (Models → Sampler comparison): settings beside one continuous results grid whose zoom shows the same region of every image. */
 .sc-layout { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
 .sc-settings { min-width: 0; }
 .sc-earlier { max-width: 320px; }
+.sc-settings .ig-reference .min-w-0 { max-width: none; flex: 1; }
 .sc-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 4px 12px; margin: 0; padding: 0; border: 0; }
 .sc-choice { margin: 0; font-size: 13px; font-family: var(--tblr-font-monospace, monospace); overflow-wrap: anywhere; }
 .sc-viewer { position: sticky; top: 12px; min-width: 0; }
 .sc-tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
 .sc-zoom { width: 140px; }
 .sc-size { width: auto; }
-.sc-grid { display: grid; gap: 18px; max-height: calc(100vh - 170px); overflow: auto; }
-.sc-group-title { font-size: 14px; font-weight: 600; margin: 0 0 8px; font-family: var(--tblr-font-monospace, monospace); }
-.sc-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--sc-tile, 180px), 1fr)); gap: 10px; }
+.sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--sc-tile, 180px), 1fr)); gap: 10px; align-content: start; max-height: calc(100vh - 170px); overflow: auto; }
 .sc-grid[data-size=small] { --sc-tile: 130px; }
 .sc-grid[data-size=large] { --sc-tile: 300px; }
 .sc-tile { margin: 0; min-width: 0; }
