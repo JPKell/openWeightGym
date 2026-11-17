@@ -15,6 +15,8 @@ SAMPLERS = ("euler", "euler_a", "heun", "dpm2", "dpm++2s_a", "dpm++2m", "dpm++2m
             "dpm++2m_sde", "dpm++2m_sde_bt", "lms")
 SCHEDULERS = ("discrete", "karras", "exponential", "ays", "gits", "sgm_uniform", "simple", "smoothstep", "kl_optimal",
               "lcm", "bong_tangent", "ltx2", "logit_normal", "flux2", "flux", "beta")
+# An installed upscaler named by file name; each node resolves it in its own file index, never from a caller's path.
+UPSCALER_FILE = re.compile(r'[A-Za-z0-9][A-Za-z0-9 ._+()-]{0,199}\.(pth|pt|safetensors|gguf)')
 SAMPLER_ALIASES = {"dpmpp2s_a": "dpm++2s_a", "dpmpp2m": "dpm++2m", "dpmpp2mv2": "dpm++2mv2"}  # earlier saved names
 CACHE_MODES = ("easycache", "ucache", "dbcache", "taylorseer", "cache-dit", "spectrum")
 UNET_CACHES = ("ucache", "spectrum")  # SDXL is a UNet; the others are DiT block caches

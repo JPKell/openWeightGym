@@ -142,7 +142,9 @@ def routes(for_people, page, ask, model_api):
         permitted = ((action in ("state", "preferences", "assets", "workflows", "graphs") and request.method == "GET") or
                      (action == "graphs" and request.method == "POST") or
                      (len(parts) == 2 and parts[0] == "graphs" and request.method in ("GET", "DELETE")) or
-                     (len(parts) == 3 and parts[0] == "graphs" and parts[2] == "publish" and request.method == "POST") or
+                     (len(parts) == 3 and parts[0] == "graphs" and parts[2] in ("publish", "run") and request.method == "POST") or
+                     (len(parts) == 2 and parts[0] == "graph-runs" and request.method == "GET") or
+                     (len(parts) == 3 and parts[0] == "graph-runs" and parts[2] == "stop" and request.method == "POST") or
                      (len(parts) == 2 and parts[0] == "presets" and request.method in ("GET", "DELETE")) or
                      (action in ("assets", "assets/download", "jobs", "presets", "preferences") and request.method == "POST") or
                      (len(parts) == 2 and parts[0] == "jobs" and request.method == "POST") or

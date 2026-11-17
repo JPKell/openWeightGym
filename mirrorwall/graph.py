@@ -17,7 +17,7 @@ NATIVE_SAMPLERS = _model.SAMPLERS
 NATIVE_SCHEDULERS = _model.SCHEDULERS
 CACHE_MODES = ('off',) + _model.CACHE_MODES
 HIRES_UPSCALERS = _model.HIRES_UPSCALERS  # latent methods; installed upscaler files are offered as well
-UPSCALER_FILE = re.compile(r'[A-Za-z0-9][A-Za-z0-9 ._+()-]{0,199}\.(pth|pt|safetensors|gguf)')
+UPSCALER_FILE = _model.UPSCALER_FILE
 
 PORT_TYPES = {
     'text': 'Text', 'model': 'Model', 'image': 'Image', 'mask': 'Mask',
@@ -498,6 +498,8 @@ def problems(document, models=None, upscalers=None):
             [node['values']['hires_upscaler']] if node['type'] == 'sampler' and node['values']['hires'] else [])
         if upscalers is not None and any(one and one not in HIRES_UPSCALERS and one not in upscalers for one in wanted):
             push(node, 'error', 'That upscaler is not installed on any node.')
+        if node['type'] == 'sampler' and node['values']['hires'] and node['values']['hires_upscaler'] not in HIRES_UPSCALERS:
+            push(node, 'error', 'A hires pass with an upscaler file cannot run yet; choose a latent method or add an Upscale step.')
         if models is None:
             continue
         if node['type'] == 'model' and node['values']['model'] not in installed:

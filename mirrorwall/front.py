@@ -14,7 +14,7 @@ from starlette.routing import Route
 
 from loadcoach import observability as observation
 from mirrorwall.requests import checked_request,MAX_REQUEST_BYTES
-from mirrorwall import graph,stream
+from mirrorwall import graph,graph_run,stream
 
 IMAGE_PATHS=("/v1/images/generations","/v1/images/edits")
 
@@ -36,6 +36,7 @@ class Front:
         self.adult_previews_allowed=adult_previews_allowed
         self.progress={}
         self.transient={}
+        self.graph_runs={}  # test runs from the Image workflows page, in memory for an hour after they end
         self.video_remux=lambda: True
 
     def adult_previews(self,user):
@@ -104,6 +105,8 @@ class Front:
         """Retain allowed completed image responses on the control node while forwarding real previews."""
         if response.status_code>=400:
             return response
+        if request.headers.get('x-mirrorwall-intermediate')=='1':
+            return response  # a workflow step's image: the run keeps it in memory, and saves only its Outputs
         quiet=request.headers.get('x-loadcoach-log')=='off'
         job=request.headers.get('x-mirrorwall-job')
         line=request.headers.get('x-mirrorwall-line')
@@ -693,6 +696,186 @@ class Front:
             return error(409,'This workflow changed elsewhere. Reload and review it before removing it.')
         return JSONResponse({'removed':identifier},headers={'cache-control':'no-store'})
 
+    def stage_sender(self,user,request_headers):
+        """Send one workflow step through the caller's own image API access; its image is not saved."""
+        passed={key:value for key,value in request_headers.items() if key in ('x-loadcoach-log','x-loadcoach-trace','x-loadcoach-sensitivity','x-loadcoach-priority')}
+        async def send(path,body):
+            headers={**passed,'authorization':'Bearer '+self.batches.internal_key(user.name),'x-mirrorwall-intermediate':'1'}
+            async with self.batches.door.stream('POST',path,json=body,headers=headers,timeout=None) as response:
+                if response.status_code>=400:
+                    await response.aread()
+                    try:
+                        detail=response.json().get('error',{})
+                    except ValueError:
+                        detail={}
+                    yield {'type':'error','error':{'message':(detail.get('message') if isinstance(detail,dict) else str(detail)) or f'HTTP {response.status_code}'}}
+                    return
+                node=response.headers.get('x-loadcoach-node')
+                async for event in stream.events(response.aiter_bytes()):
+                    yield {**event,'node':node} if event.get('type') in ('image_generation.completed','image_edit.completed') else event
+        return send
+
+    async def runnable_workflows(self,user):
+        """Published workflows the caller may run: every model each one uses must be one of theirs."""
+        models=await self.graph_models(user)
+        return [one for row in self.store.graphs() if (one:=self.runnable(row,models))],models
+
+    async def workflow_listing(self,user):
+        """`GET /v1/workflows`: what a caller may run, with inputs, overridable fields, outputs and models."""
+        try:
+            found,_=await self.runnable_workflows(user)
+        except ValueError as problem:
+            return error(503,str(problem))
+        return JSONResponse({'object':'list','data':[{**one,'id':'workflow:'+one['api_name'],'object':'workflow','workflow_id':one['id']} for one in found]},
+                            headers={'cache-control':'no-store'})
+
+    async def execute_workflow(self,user,document,asked,*,headers,quiet,identity,image_of=None):
+        """Yield a prepared run's events; Output images are saved to the caller's library with the workflow and step settings."""
+        models=await self.graph_models(user)
+        failing=[one['text'] for one in graph.problems(document,models) if one['level']=='error']
+        if failing:
+            raise graph_run.RunError('This workflow cannot run: '+' '.join(failing))
+        prepared,count,images=graph_run.prepare(document,asked)
+        upscalers=await self.graph_upscalers(user) if user.can('manage-models') or user.can('manage-workflows') else None
+        async for event in graph_run.run(prepared,count,images,models=models,upscalers=upscalers,
+                                         send=self.stage_sender(user,headers),image_of=image_of):
+            if event['type']=='workflow.output':
+                saved=self.retain_event(user,{**event,'type':'image_generation.completed','workflow':identity},quiet=quiet)
+                event={**event,'asset_id':saved['asset_id'],'asset_url':saved['asset_url']}
+            yield event
+
+    async def workflow_api(self,request,user,asked):
+        """`model="workflow:<name>[@version]"` on the image endpoints: run a published workflow as the caller."""
+        try:
+            name,version=graph_run.parse_model(asked.get('model'))
+            models=await self.graph_models(user)
+            found=self.store.runnable_graph(name,version)
+            if not found or not set(graph.models_of(found['document']))<={m['id'] for m in models}:
+                return error(404,'There is no such workflow.')
+            quiet=request.headers.get('x-loadcoach-log')=='off'
+            if quiet and not await self.batches.can_unlogged(user):
+                return error(403,'Your account or the current compute policy does not permit no-log generation.')
+            identity={'id':found['id'],'api_name':found['api_name'],'version':found['version']}
+            graph_run.prepare(found['document'],asked)  # refuse bad inputs before anything starts
+        except graph_run.RunError as problem:
+            return error(400,str(problem))
+        except ValueError as problem:
+            return error(503,str(problem))
+        sequence=self.execute_workflow(user,found['document'],asked,headers=request.headers,quiet=quiet,identity=identity,image_of=None)
+        kind='image_edit' if request.url.path.endswith('/edits') else 'image_generation'
+        if asked.get('stream'):
+            async def events():
+                try:
+                    async for event in sequence:
+                        if event['type']=='workflow.output':
+                            event={**event,'type':kind+'.completed'}
+                        yield stream.encode(event)
+                    yield stream.encode({'type':'workflow.completed','workflow':identity})
+                except graph_run.RunError as problem:
+                    yield stream.encode({'type':'error','error':{'message':str(problem)}})
+            return StreamingResponse(events(),media_type='text/event-stream',headers={'cache-control':'no-store'})
+        data=[]
+        try:
+            async for event in sequence:
+                if event['type']=='workflow.output':
+                    data.append({key:value for key,value in event.items() if key!='type'})
+        except graph_run.RunError as problem:
+            return error(502 if data else 400,str(problem))
+        return JSONResponse({'created':int(time.time()),'data':data,'workflow':identity},headers={'cache-control':'no-store'})
+
+    async def graph_run(self,request,user):
+        """Start a manager's test run of a saved version or the unsaved draft; the page polls its state. Outputs go to the library."""
+        if not user.can('manage-workflows'):
+            return error(403,'Test runs require the manage-workflows ability.')
+        row=self.store.graph(request.path_params['identifier']) if request.path_params['identifier']!='draft' else None
+        try:
+            asked=await self.read_json(request)
+            if not isinstance(asked,dict) or asked.keys()-{'document','version','inputs','n','temporary'}:
+                raise ValueError('Send document or version, inputs, n and temporary.')
+            models=await self.graph_models(user)
+            if asked.get('document') is not None:
+                document,_=graph.check(asked['document'],models)
+                identity={'id':row['id'] if row else None,'api_name':document['api_name'],'version':None,'draft':True}
+            else:
+                if not row:
+                    return error(404,'There is no such workflow.')
+                chosen=next((one for one in self.store.graph_versions(row['id']) if one['version']==asked.get('version',row['version'])),None)
+                if not chosen:
+                    raise ValueError('There is no such version of this workflow.')
+                document,identity=chosen['document'],{'id':row['id'],'api_name':row['api_name'],'version':chosen['version']}
+            if not set(graph.models_of(document))<={m['id'] for m in models}:
+                raise ValueError('You may not use every model this workflow uses.')
+            temporary=asked.get('temporary',False)
+            if type(temporary) is not bool:
+                raise ValueError('temporary must be true or false.')
+            if temporary and not await self.batches.can_unlogged(user):
+                return error(403,'Your account or the current compute policy does not permit no-log generation.')
+            run={'n':asked.get('n',1),'workflow_inputs':asked.get('inputs') or {}}
+            graph_run.prepare(document,run)
+        except (ValueError,TypeError) as problem:
+            return error(400,str(problem))
+        def image_of(identifier):
+            content=self.store.content(user.identity,identifier)
+            return base64.b64encode(content).decode() if content else None
+        for identifier,row in list(self.graph_runs.items()):
+            if row['status']!='running' and time.time()-row['updated']>3600:
+                self.graph_runs.pop(identifier)
+        if sum(row['owner']==user.identity and row['status']=='running' for row in self.graph_runs.values())>=2:
+            return error(429,'Two test runs are already running; wait for one or stop it.')
+        identifier='graph_run_'+secrets.token_hex(12)
+        state=self.graph_runs[identifier]={'id':identifier,'owner':user.identity,'status':'running','workflow':identity,'events':[],
+                                           'outputs':[],'steps':{},'error':None,'created':time.time(),'updated':time.time()}
+        headers={'x-loadcoach-log':'off'} if temporary else {}
+        async def execute():
+            try:
+                async for event in self.execute_workflow(user,document,run,headers=headers,quiet=temporary,identity=identity,image_of=image_of):
+                    event={key:value for key,value in event.items() if key!='b64_json'}  # the page loads saved images by URL
+                    if event['type']=='workflow.output':
+                        state['outputs'].append(event)
+                    elif event['type']=='workflow.step':
+                        state['steps'][f"{event['item']}:{event['step']}"]=event
+                    elif event['type']=='workflow.started':
+                        state['plan']=event
+                    state['events']=[*state['events'][-39:],{key:value for key,value in event.items() if key!='stages'}]
+                    state['updated']=time.time()
+                state['status']='completed'
+            except asyncio.CancelledError:
+                state['status']='stopped'
+                raise
+            except graph_run.RunError as problem:
+                state.update(status='failed',error=str(problem))
+            except Exception as problem:  # a stage that broke the connection: shown, never hidden
+                state.update(status='failed',error='The run stopped: '+(str(problem) or type(problem).__name__))
+            finally:
+                state['updated']=time.time()
+        task=asyncio.create_task(execute())
+        state['task']=task
+        self.batches.carrying.add(task)
+        task.add_done_callback(self.batches.carrying.discard)
+        return JSONResponse(self.graph_run_view(state),201,headers={'cache-control':'no-store'})
+
+    @staticmethod
+    def graph_run_view(state):
+        return {key:value for key,value in state.items() if key not in ('task','owner')}
+
+    async def graph_run_state(self,request,user):
+        """A test run's progress and outputs, for the manager who started it."""
+        state=self.graph_runs.get(request.path_params['identifier'])
+        if not state or state['owner']!=user.identity:
+            return error(404,'There is no such test run of yours.')
+        return JSONResponse(self.graph_run_view(state),headers={'cache-control':'no-store'})
+
+    async def graph_run_stop(self,request,user):
+        """Stop a running test run; the step in progress is abandoned and nothing after it starts."""
+        state=self.graph_runs.get(request.path_params['identifier'])
+        if not state or state['owner']!=user.identity:
+            return error(404,'There is no such test run of yours.')
+        if state['status']=='running':
+            state['task'].cancel()
+            state['status']='stopped'
+            state['updated']=time.time()
+        return JSONResponse(self.graph_run_view(state),headers={'cache-control':'no-store'})
+
     def routes(self,caller,log):
         """Expose control-node-owned image operations through the existing API-key authority."""
         from turnstile.accounts import signed_in
@@ -708,4 +891,7 @@ class Front:
                 route('/mirrorwall/presets/{identifier}',self.remove_preset,'DELETE'),
                 route('/mirrorwall/graphs',self.graph_library),route('/mirrorwall/graphs',self.graph_save,'POST'),
                 route('/mirrorwall/graphs/{identifier}',self.graph_detail),route('/mirrorwall/graphs/{identifier}',self.graph_remove,'DELETE'),
-                route('/mirrorwall/graphs/{identifier}/publish',self.graph_publish,'POST')]
+                route('/mirrorwall/graphs/{identifier}/publish',self.graph_publish,'POST'),
+                route('/mirrorwall/graphs/{identifier}/run',self.graph_run,'POST'),
+                route('/mirrorwall/graph-runs/{identifier}',self.graph_run_state),
+                route('/mirrorwall/graph-runs/{identifier}/stop',self.graph_run_stop,'POST')]

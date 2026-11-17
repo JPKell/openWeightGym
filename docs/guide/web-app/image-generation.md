@@ -74,6 +74,9 @@ it no longer falls back to its default.
 Sampler and scheduler can be chosen for every model entry, including shared-residency entries;
 those keep their profile's CFG scale, which is locked on the page.
 
+To run a multi-step workflow instead of one model, send `model: "workflow:<name>"`; see
+[Image workflows](/docs/model-guides/image-workflows#calling-a-workflow-from-the-api).
+
 API callers of an exclusive model entry can add an `advanced` object to
 `/v1/images/generations`. Shared-residency entries keep their measured profile and refuse it.
 

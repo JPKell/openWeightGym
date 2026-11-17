@@ -1504,9 +1504,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 if len(content)>MAX_REQUEST_BYTES:
                     return error(413,'Image request exceeds 60 MiB.')
             try:
-                body=json.dumps(request_body(request.headers.get('content-type',''),bytes(content))).encode()
+                parsed=request_body(request.headers.get('content-type',''),bytes(content))
+                body=json.dumps(parsed).encode()
             except (ValueError,TypeError,UnicodeError) as problem:
                 return error(400,str(problem))
+            if isinstance(parsed,dict) and isinstance(parsed.get('model'),str) and parsed['model'].startswith('workflow:') and port == settings.ports[0]:
+                # A published image workflow, called like a model; each of its steps comes back here as an ordinary image request.
+                if user is None:
+                    return error(401, "Missing or wrong API key.")
+                return await image_work.workflow_api(request,user,parsed)
             headers=MutableHeaders(scope=request.scope)
             headers['content-type']='application/json'
             headers['content-length']=str(len(body))
@@ -1671,6 +1677,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                      statement.address(f"/loadcoach/{parts[2]}/{local}", query), body,
                                      list(request.headers.items()), machine=machine_name)
             return upstream if isinstance(upstream, Response) else relay(upstream)
+        if port == settings.ports[0] and user is not None and request.method == "GET" and path == "/v1/workflows":
+            return await image_work.workflow_listing(user)
         if port == settings.ports[0] and user is not None and request.method == "GET" and path.startswith("/v1/models/") and path.removeprefix("/v1/models/") in hosted.offered(user):
             return JSONResponse(hosted.described(path.removeprefix("/v1/models/")))
         if port == settings.ports[0] and user is not None and request.method == "GET" and path in ("/loadcoach/models", "/loadcoach/settings", "/loadcoach/engines"):

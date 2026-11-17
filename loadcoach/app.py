@@ -864,6 +864,15 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             marks = marks | {"adapters": ",".join(wanted)}
         if hasattr(admitted_engine, "prepare_request"):
             body = json.dumps(admitted_engine.prepare_request(request.url.path, asked)).encode()
+        upscaler_path = None
+        if admitted_engine.id == 'sdcpp' and isinstance(asked.get('upscale_with'), dict):
+            # An upscale step names an installed file; this node finds it in its own index, never at a path a caller wrote.
+            # The database is asked here, on this thread; only the file index is read on the other.
+            upscaler_path = await asyncio.to_thread(upscaler_file, asked['upscale_with'].get('upscaler'), places())
+            if upscaler_path is None:
+                runner.release(ticket)
+                ended("refused", 400, why="upscaler not installed on this node")
+                return error(400, "That upscaler is not installed on this node.", code="upscaler_not_found")
         # From here the request counts as running, until `finish` is called exactly once.
         finish = partial(runner.release, ticket)
         priority = ticket.priority
@@ -875,6 +884,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             if key not in HOP_HEADERS and key != "authorization" and not key.startswith("x-loadcoach-")
         }
         headers.update(ticket.server.headers)  # private engine credential only, never the caller's key
+        if upscaler_path:
+            headers['x-loadcoach-upscaler-path'] = upscaler_path
         if admitted_engine.id == 'sdcpp' and not quiet:
             headers['x-loadcoach-image-owner'] = hashlib.sha256((user.identity or user.name).encode()).hexdigest()
         started = time.monotonic()
@@ -1421,6 +1432,16 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if config.places:
             return dict(config.places)
         return {folder: folder for folder in sorted({str(Path(library.stored(name)["flags"]["model"]).parent) for name in library.names()})}
+
+    def upscaler_file(name, spots: dict[str, str]) -> str | None:
+        """The path of an installed image upscaler file named by its file name, from this node's file index. Runs off the request thread."""
+        if not isinstance(name, str):
+            return None
+        index = file_index.current(spots)
+        for kept in sorted(index["files"].values(), key=lambda kept: kept["path"]):
+            if Path(kept["path"]).name == name and (kept.get("facts", {}).get("image_identity") or {}).get("kind") == "upscaler" and Path(kept["path"]).is_file():
+                return kept["path"]
+        return None
 
     def place_of(path: str) -> str | None:
         """The name of the place a file is in: its own folder, or the folder above that. None if it is in neither."""

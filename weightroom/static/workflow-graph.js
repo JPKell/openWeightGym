@@ -235,6 +235,7 @@ window.SuiteWorkflowGraph = (() => {
       if (node.type === 'upscale' && !node.values.upscaler) push(node, 'error', 'Choose an upscaler.');
       const wanted = node.type === 'upscale' ? node.values.upscaler : node.type === 'sampler' && node.values.hires ? node.values.hires_upscaler : '';
       if (upscalers && wanted && !latent.includes(wanted) && !upscalers.some(one => one.id === wanted)) push(node, 'error', 'That upscaler is not installed on any node.');
+      if (node.type === 'sampler' && node.values.hires && !latent.includes(node.values.hires_upscaler)) push(node, 'error', 'A hires pass with an upscaler file cannot run yet; choose a latent method or add an Upscale step.');
       if (node.type === 'sampler') {
         const model = modelOf(graph, node.id, models), family = model && catalogue.families[model.family];
         if (!family) continue;

@@ -7,6 +7,7 @@
   const G = window.SuiteWorkflowGraph, $ = id => document.getElementById('graph-' + id);
   const editorRoot = $('editor'), clone = value => JSON.parse(JSON.stringify(value));
   let library = null, models = [], editor = null, entries = [], current = -1, language = 'curl', busy = false, opening = false, drafts = 0;
+  let running = null;  // the test run being watched: {id, rows, timer}
 
   function say(text, problem = false) {
     $('error').hidden = !problem; if (problem) $('error').textContent = text;
@@ -72,8 +73,10 @@
   function plan() {
     const stages = editor.stages(), loads = stages.filter(stage => stage.load).length;
     const errors = editor.problems().filter(problem => problem.level === 'error').length;
-    editorRoot.querySelector('[data-wf-run-plan]').textContent = errors ? `Fix ${errors} problem${errors === 1 ? '' : 's'} before publishing.` :
+    editorRoot.querySelector('[data-wf-run-plan]').textContent = errors ? `Fix ${errors} problem${errors === 1 ? '' : 's'} before running or publishing.` :
       `Run plan: ${stages.length} step${stages.length === 1 ? '' : 's'} · ${loads} model load${loads === 1 ? '' : 's'}`;
+    editorRoot.querySelector('[data-wf-run-button]').disabled = Boolean(errors) || Boolean(running);
+    editorRoot.querySelector('[data-wf-run-stop]').hidden = !running;
   }
   function refresh() {
     header(); choices(); editor.runInputs(); plan();
@@ -93,7 +96,7 @@
     current = index;
     const one = entry();
     opening = true; editor.load(one.graph); opening = false;
-    editorRoot.querySelector('[data-wf-stages]').replaceChildren(); editorRoot.querySelector('[data-wf-results]').replaceChildren();
+    if (!running) { editorRoot.querySelector('[data-wf-stages]').replaceChildren(); editorRoot.querySelector('[data-wf-results]').replaceChildren(); }
     refresh();
     if (!quiet) say(one.kind === 'template' ? 'Samples are read-only templates. Saving creates your own copy.' : '');
     const address = new URL(location.href);
@@ -159,6 +162,77 @@
     say(`Deleted “${one.graph.name}”. Images and job records it produced stay available.`);
   }
 
+  /** Start a test run: the saved version as it is, or the workflow on screen when it has unsaved changes. */
+  async function run() {
+    if (running) return;
+    let inputs;
+    try { inputs = editor.runValues(); } catch (error) { say(error.message, true); return; }
+    const one = entry(), saved = one.kind === 'saved' && !one.dirty;
+    const body = saved ? {version: one.version, inputs} : {document: {...clone(one.graph), ...editor.graph(), name: one.graph.name, summary: one.graph.summary || ''}, inputs};
+    delete body.document?.id;
+    const stages = editor.stages(), list = editorRoot.querySelector('[data-wf-stages]');
+    editorRoot.querySelector('[data-wf-results]').replaceChildren();
+    const rows = Object.fromEntries(stages.map(stage => {
+      const row = document.createElement('li'); row.className = 'wf-stage'; row.dataset.state = 'waiting'; row.dataset.step = stage.id;
+      const name = document.createElement('span'); name.textContent = stage.node.title + (stage.model ? ' · ' + stage.model.label : '');
+      const status = document.createElement('span'); status.className = 'small text-secondary'; status.textContent = stage.load ? 'loads model' : 'waiting';
+      const bar = document.createElement('progress'); bar.max = 100; bar.value = 0; bar.setAttribute('aria-label', stage.node.title + ' progress');
+      row.append(name, status, bar);
+      return [stage.id, {row, status, bar}];
+    }));
+    list.replaceChildren(...Object.values(rows).map(one => one.row));
+    running = {id: null, rows, shown: 0}; plan();
+    try {
+      const state = await api('graphs/' + (one.kind === 'saved' ? encodeURIComponent(one.id) : 'draft') + '/run', {method: 'POST', body});
+      running.id = state.id;
+      say(saved ? `Running version ${one.version}. Outputs are saved to your image library.` : 'Running the workflow as shown, unsaved changes included. Outputs are saved to your image library.');
+      watch();
+    } catch (error) { running = null; plan(); say(error.message, true); }
+  }
+
+  async function watch() {
+    if (!running?.id) return;
+    let state;
+    try { state = await api('graph-runs/' + encodeURIComponent(running.id)); }
+    catch (error) { running.timer = setTimeout(watch, 2000); return; }
+    for (const step of Object.values(state.steps || {})) {
+      const one = running.rows[step.step]; if (!one) continue;
+      one.row.dataset.state = step.state === 'completed' ? 'done' : 'running';
+      one.bar.value = step.state === 'completed' ? 100 : Math.max(one.bar.value, 5);
+      one.status.textContent = step.state === 'completed' ? `done${step.width ? ' · ' + step.width + ' × ' + step.height : ''}${step.node ? ' · ' + step.node : ''}` : 'running';
+    }
+    const last = [...(state.events || [])].reverse().find(event => event.type === 'workflow.progress');
+    const active = last && running.rows[last.step];
+    if (active && active.row.dataset.state === 'running') {
+      if (last.step_index !== undefined && last.total_steps) active.bar.value = Math.round(100 * last.step_index / last.total_steps);
+      active.status.textContent = last.stage || 'running';
+    }
+    const results = editorRoot.querySelector('[data-wf-results]');
+    for (const output of (state.outputs || []).slice(running.shown)) {
+      const figure = document.createElement('figure'), link = document.createElement('a'), image = document.createElement('img'), caption = document.createElement('figcaption');
+      figure.className = 'wf-result';
+      link.href = '/mirrorwall-api/assets/' + encodeURIComponent(output.asset_id) + '/content'; link.target = '_blank'; link.rel = 'noopener';
+      image.src = '/mirrorwall-api/assets/' + encodeURIComponent(output.asset_id) + '/thumbnail'; image.alt = output.output; image.loading = 'lazy';
+      caption.textContent = output.output + (output.seed !== null && output.seed !== undefined ? ' · seed ' + output.seed : '') + ' · ' + output.width + ' × ' + output.height;
+      link.append(image); figure.append(link, caption); results.append(figure);
+    }
+    running.shown = (state.outputs || []).length;
+    if (state.status === 'running') { running.timer = setTimeout(watch, 700); return; }
+    for (const one of Object.values(running.rows)) {
+      if (one.row.dataset.state !== 'done') { one.row.dataset.state = state.status === 'completed' ? 'done' : 'failed'; one.status.textContent = state.status === 'completed' ? 'not needed' : state.status; }
+    }
+    running = null; plan();
+    if (state.status === 'completed') say(`Test run complete: ${state.outputs.length} image${state.outputs.length === 1 ? '' : 's'} saved to your library.`);
+    else if (state.status === 'stopped') say('Stopped. Images already finished stay in your library.');
+    else say(state.error || 'The test run failed.', true);
+  }
+
+  async function stop() {
+    if (!running?.id) return;
+    try { await api('graph-runs/' + encodeURIComponent(running.id) + '/stop', {method: 'POST'}); } catch (error) { say(error.message, true); }
+    clearTimeout(running.timer); watch();
+  }
+
   function wire() {
     $('choice').addEventListener('change', () => open(Number($('choice').value)));
     $('name').addEventListener('input', () => {
@@ -183,7 +257,8 @@
       opening = true; editor.load(one.graph); opening = false; refresh();
       say(row.version === one.version ? `Showing the latest version ${row.version}.` : `Opened version ${row.version}. Saving makes it version ${one.version + 1}; version ${row.version} stays in the history.`);
     });
-    editorRoot.querySelector('[data-wf-run-form]').addEventListener('submit', event => event.preventDefault());
+    editorRoot.querySelector('[data-wf-run-form]').addEventListener('submit', event => { event.preventDefault(); run(); });
+    editorRoot.querySelector('[data-wf-run-stop]').addEventListener('click', stop);
     editorRoot.querySelectorAll('[data-wf-api-language]').forEach(button => button.addEventListener('click', () => {
       language = button.dataset.wfApiLanguage;
       editorRoot.querySelectorAll('[data-wf-api-language]').forEach(one => { one.classList.toggle('active', one === button); one.setAttribute('aria-pressed', String(one === button)); });
@@ -202,7 +277,9 @@
       if (!library.can_manage) throw new Error('Your account may not manage image workflows.');
       const opened = root.dataset.open ? entries.findIndex(one => one.key === 'saved:' + root.dataset.open) : -1;
       if (opened >= 0) current = opened;
-      editor = SuiteWorkflowEditor.create(editorRoot, {catalogue: library.catalogue, models, upscalers: library.upscalers ?? null, graph: entry().graph,
+      // Your reference images, for Load image steps in test runs; the page still works without them.
+      const assets = await api('assets?kind=reference').then(found => (found.assets || []).map(one => ({id: one.id, label: one.filename || one.id}))).catch(() => []);
+      editor = SuiteWorkflowEditor.create(editorRoot, {catalogue: library.catalogue, models, assets, upscalers: library.upscalers ?? null, graph: entry().graph,
         onChange: (graph, how = {}) => {
           if (opening) return;
           const one = entry(); one.graph = {...one.graph, nodes: graph.nodes, links: graph.links};

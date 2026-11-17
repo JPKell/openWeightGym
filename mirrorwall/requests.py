@@ -177,6 +177,24 @@ def native_extensions(resolved):
     return sample,guidance,top
 
 
+def checked_upscale_with(asked,result):
+    """An upscale-only request: one source image enlarged by a named installed upscaler file, then resized to the factor."""
+    value=asked["upscale_with"]
+    if not isinstance(value,dict) or value.keys()-{"upscaler","factor","tile"} or "upscaler" not in value:
+        raise ValueError("upscale_with takes upscaler, factor and tile.")
+    if not isinstance(value["upscaler"],str) or not model.UPSCALER_FILE.fullmatch(value["upscaler"]):
+        raise ValueError("upscale_with.upscaler must name an installed upscaler file, such as 4x-UltraSharp.pth.")
+    factor=value.get("factor",2)
+    if type(factor) not in (int,float) or not math.isfinite(factor) or not 1<=factor<=4:
+        raise ValueError("upscale_with.factor must be 1–4.")
+    tile=value.get("tile",512)
+    if type(tile) is not int or not 128<=tile<=1024:
+        raise ValueError("upscale_with.tile must be an integer from 128 to 1024.")
+    if len(result["references"])!=1 or "mask" in asked or result["n"]!=1 or result.get("upscale",1)!=1 or "detail_resize" in asked or asked.get("advanced"):
+        raise ValueError("An upscale-only request takes one image and no mask, count, upscale factor, detail resize or advanced settings.")
+    return {"upscaler":value["upscaler"],"factor":factor,"tile":tile}
+
+
 def checked_request(asked,settings=None):
     """Normalize supported OpenAI fields and explicit openWeightGym image extensions."""
     if not isinstance(asked,dict):
@@ -184,13 +202,15 @@ def checked_request(asked,settings=None):
     allowed={"model","prompt","negative_prompt","n","size","width","height","steps","seed","guidance","cfg_scale",
              "sampler","scheduler","references","image","mask","strength","loras","upscale","stream","partial_images",
              "response_format","output_format","user","quality","background","moderation","metadata","live_previews","reference_megapixels","detail_resize",
-             "advanced"}
+             "advanced","upscale_with"}
     unknown=asked.keys()-allowed
     if unknown:
         raise ValueError("Unsupported image settings: "+", ".join(sorted(unknown)))
     if not isinstance(asked.get("model"),str) or not asked["model"]:
         raise ValueError("Choose an image model.")
     prompt=asked.get("prompt")
+    if "upscale_with" in asked and prompt is None:
+        prompt=asked["prompt"]="Upscale"  # an upscale-only request generates nothing, so it needs no prompt
     if not isinstance(prompt,str) or not prompt.strip() or len(prompt)>24000:
         raise ValueError("Prompt must contain 1–24000 characters.")
     result={**model.defaults(settings or {}),**asked}
@@ -297,6 +317,8 @@ def checked_request(asked,settings=None):
             raise ValueError('A shared-residency workflow pins its CFG scale; edit the profile or use an exclusive model entry.')
         if result.get('advanced'):
             raise ValueError('Advanced sampling settings need an exclusive model entry; shared-residency workflows keep their measured profile.')
+    if "upscale_with" in asked:
+        result["upscale_with"]=checked_upscale_with(asked,result)
     if result.get('advanced',{}).get('hires') and (result.get('detail_resize') or result.get('upscale',1)>1):
         raise ValueError('Use the hires pass or Upscale / Resize & add detail, not both.')
     loras=result.get("loras",{})

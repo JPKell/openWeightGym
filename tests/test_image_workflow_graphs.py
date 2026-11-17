@@ -103,7 +103,9 @@ def test_upscale_steps_and_hires_passes_choose_installed_upscaler_files():
     hires = sample('SDXL two-pass hires')
     base = next(n for n in hires['nodes'] if n['id'] == 'base')
     base['values']['hires_upscaler'] = 'RealESRGAN_x4plus.pth'
-    assert not [p for p in graph.check(hires, MODELS, installed)[1] if p['node'] == 'base']
+    # An installed file is accepted, but a hires pass cannot run one yet, so it is a problem to fix before publishing.
+    assert [p['text'] for p in graph.check(hires, MODELS, installed)[1] if p['node'] == 'base'] == [
+        'A hires pass with an upscaler file cannot run yet; choose a latent method or add an Upscale step.']
     base['values']['hires_upscaler'] = '4x_NMKD-Siax_200k.pth'
     assert 'That upscaler is not installed on any node.' in [p['text'] for p in graph.check(hires, MODELS, installed)[1]]
     base['values']['hires_upscaler'] = 'bicubic please'

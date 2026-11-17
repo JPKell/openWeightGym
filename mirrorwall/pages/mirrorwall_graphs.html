@@ -5,8 +5,8 @@
 {% block title %}Image workflows · Models · openWeightGym{% endblock %}
 {% block scripts %}
 <link rel="stylesheet" href="/static/workflow-editor.css?v=2">
-<script src="/static/workflow-graph.js?v=2" defer></script><script src="/static/workflow-editor.js?v=2" defer></script>
-<script src="/mirrorwall-static/graphs.js?v=1" defer></script>
+<script src="/static/workflow-graph.js?v=3" defer></script><script src="/static/workflow-editor.js?v=3" defer></script>
+<script src="/mirrorwall-static/graphs.js?v=2" defer></script>
 {% endblock %}
 {% block main %}
 <div id="graphs" data-open="{{ open_graph }}" data-preset="{{ from_preset }}">
@@ -33,7 +33,7 @@
 <div class="wf-area-surface">{{ surface() }}</div>
 <div class="wf-area-inspector">{{ inspector() }}</div>
 <div class="wf-area-problems">{{ problems() }}</div>
-<div class="wf-area-run">{{ run_panel(runs=false) }}</div>
+<div class="wf-area-run">{{ run_panel() }}</div>
 </div>
 </div>
 {{ templates() }}

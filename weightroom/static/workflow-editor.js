@@ -452,7 +452,9 @@ window.SuiteWorkflowEditor = (() => {
     }
     /** Values typed into the test-run form, by caller key; an override outside its bounds raises with the reason. */
     function runValues() {
-      const values = Object.fromEntries([...root.querySelectorAll('[data-wf-run-inputs] [data-key]')].map(input => [input.dataset.key, input.value]));
+      // Numbers go as numbers; an image left unchosen is left out, so the run says which one it needs.
+      const values = Object.fromEntries([...root.querySelectorAll('[data-wf-run-inputs] [data-key]')].filter(input => input.value !== '' || input.tagName === 'TEXTAREA')
+        .map(input => [input.dataset.key, input.type === 'number' ? Number(input.value) : input.value]));
       for (const [key, value] of Object.entries(values)) {
         const [id, name] = key.split('.'), node = G.find(state, id), range = name && node?.overridable?.[name];
         if (range && (Number(value) < range[0] || Number(value) > range[1])) throw new Error(`${node.title} · ${name} must be from ${range[0]} to ${range[1]}.`);

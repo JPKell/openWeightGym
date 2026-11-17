@@ -1,5 +1,6 @@
 """Live Models → Image workflows page: Stage lanes editor over the real graph API, drafts, versions, publishing and presets."""
 
+import asyncio
 import copy
 
 import pytest
@@ -25,8 +26,17 @@ def site(desk, monkeypatch):
 
     async def upscalers(self, user):
         return copy.deepcopy(UPSCALERS)
+    async def send(path, body):
+        import base64, io
+        from PIL import Image
+        await asyncio.sleep(.05)
+        yield {'type': 'image_generation.progress', 'stage': 'generating'}
+        buffer = io.BytesIO(); Image.new('RGB', (64, 64), 'teal').save(buffer, 'PNG')
+        yield {'type': 'image_generation.completed', 'b64_json': base64.b64encode(buffer.getvalue()).decode(), 'seed': body.get('seed'),
+               'width': 64, 'height': 64, 'node': 'atlas'}
     monkeypatch.setattr(Front, 'media_catalogue', catalogue)
     monkeypatch.setattr(Front, 'graph_upscalers', upscalers)
+    monkeypatch.setattr(Front, 'stage_sender', lambda self, user, headers: send)
     return server
 
 
@@ -35,7 +45,7 @@ def test_route_navigation_and_ability(site):
     assert site.get('/models/image-workflows').status_code == 403
     sign_in(site, 'jordan')
     page = site.get('/models/image-workflows')
-    assert page.status_code == 200 and 'data-wf-view="lanes"' in page.text and 'data-wf-run-unavailable' in page.text
+    assert page.status_code == 200 and 'data-wf-view="lanes"' in page.text and 'data-wf-run-button' in page.text and 'data-wf-run-unavailable' not in page.text
     found = navigation('/models/image-workflows', ['manage-workflows', 'manage-models'], False)
     assert found['section'] == 'Models' and found['active'] == '/models/image-workflows'
     models = next(group for group in found['groups'] if group['name'] == 'Models')
@@ -191,6 +201,27 @@ def test_keyboard_only_linking(site):
         source = page.get_by_label('Image (required)')
         source.select_option('sampler1.image')
         expect(page.locator('[data-wf-problems]')).to_have_attribute('data-state', 'ready')
+        assert not errors
+    finally:
+        browser.close(); engine.stop()
+
+
+def test_test_run_of_unsaved_changes_shows_steps_and_saved_outputs(site):
+    sign_in(site, 'jordan')
+    engine, browser, page, errors = editor(site)
+    try:
+        choose(page, 'Sampler shoot-out')
+        page.locator('[data-wf-run-inputs] textarea').fill('A heron at dawn')
+        page.locator('[data-wf-run-button]').click()
+        expect(page.locator('#graph-status')).to_contain_text('Test run complete: 4 images saved to your library.')
+        expect(page.locator('[data-wf-stages] .wf-stage[data-state=done]')).to_have_count(4)
+        expect(page.locator('[data-wf-stages] [data-step="dpm"]')).to_contain_text('done · 64 × 64 · atlas')
+        expect(page.locator('[data-wf-results] figure')).to_have_count(4)
+        expect(page.locator('[data-wf-results] figcaption').first).to_contain_text('Samplers · Euler · simple · seed 1234')
+        assert page.locator('[data-wf-results] img').first.evaluate('image => image.complete && image.naturalWidth > 0')
+        expect(page.locator('[data-wf-run-button]')).to_be_enabled()
+        outputs = site.get('/mirrorwall-api/assets').json()['assets']
+        assert len(outputs) == 4 and outputs[0]['metadata']['workflow']['draft'] is True
         assert not errors
     finally:
         browser.close(); engine.stop()

@@ -1,8 +1,25 @@
 # Advanced image workflows plan
 
-Status: 2026-11-17 — phases 0–3 delivered (the live Stage lanes editor is at Models → Image
-workflows); Phase 4, execution and `workflow:` API calls, is next. The owner's interview answers
-are recorded in [Decisions](#decisions-interview-2026-11-17) and are reflected throughout.
+Status: 2026-11-17 — phases 0–4 delivered: the live Stage lanes editor at Models → Image
+workflows runs test runs, and published workflows answer `workflow:<name>` calls and
+`GET /v1/workflows` ([mirrorwall/graph_run.py](../mirrorwall/graph_run.py)). Phase 5 (control
+images and tiled detail) is next. The owner's interview answers are recorded in
+[Decisions](#decisions-interview-2026-11-17) and are reflected throughout.
+
+Phase 4 as delivered differs from the plan below in these ways:
+
+- Intermediate images stay in the run's memory rather than becoming 24-hour assets; Outputs are
+  saved with the workflow version and every step's settings. Stage requests carry
+  `x-mirrorwall-intermediate: 1`, so the image API returns them without saving.
+- Runs can be stopped, not paused or resumed. Test runs are background jobs the page polls,
+  because the in-process hop from the web app to turnstile buffers streams.
+- A hires pass naming an upscaler file is a run problem: `sd-server` reads hires upscalers from
+  one folder given at start, which a per-request choice would have to restart. Upscale steps run
+  any installed file through an upscale-only request (`upscale_with`), resolved by each node's
+  LoadCoach from its own file index and passed to the runtime in a private header.
+- Upscale steps pin the node that made their image when it holds the file (the request body's
+  `node`, so Settings → General must allow callers to choose the node); otherwise routing chooses.
+- Image generation does not list workflows yet.
 
 ## Goal
 

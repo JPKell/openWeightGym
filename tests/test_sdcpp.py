@@ -628,3 +628,42 @@ def test_advanced_sampling_reaches_the_native_request(image_settings):
         assert 'clip_skip' not in payload and 'shifted_timestep' not in sample
         client.post('/v1/images/generations',headers=headers,json={'model':'flux2-dev','prompt':'Plain','size':'256x256'})
         assert native.payloads[1]['cache_mode']=='disabled' and 'hires' not in native.payloads[1]
+
+
+def test_upscale_only_requests_take_one_image_and_a_named_installed_file(image_settings):
+    import base64
+    from PIL import Image
+    small=base64.b64encode(png_bytes(Image.new('RGB',(32,32),'blue'))).decode()
+    resolved=checked_request({'model':'m','image':small,'upscale_with':{'upscaler':'4x-UltraSharp.pth','factor':2}},image_settings)
+    assert resolved['upscale_with']=={'upscaler':'4x-UltraSharp.pth','factor':2,'tile':512}
+    for bad,why in (({'upscaler':'../etc/passwd'},'installed upscaler file'),({'upscaler':'/abs/x.pth'},'installed upscaler file'),
+                    ({'upscaler':'a.pth','factor':5},'factor'),({'upscaler':'a.pth','tile':64},'tile'),({'upscaler':'a.pth','path':'x'},'takes')):
+        with pytest.raises(ValueError,match=why):
+            checked_request({'model':'m','image':small,'upscale_with':bad},image_settings)
+    with pytest.raises(ValueError,match='one image'):
+        checked_request({'model':'m','prompt':'x','upscale_with':{'upscaler':'a.pth'}},image_settings)
+    with pytest.raises(ValueError,match='one image'):
+        checked_request({'model':'m','image':[small,small],'upscale_with':{'upscaler':'a.pth'}},image_settings)
+
+
+def test_upscale_only_runs_the_resolved_file_and_never_generates_or_qualifies(image_settings,monkeypatch):
+    import base64
+    from PIL import Image
+    from mirrorwall import runtime
+    calls=[]
+    async def upscale(job,image,target,folder,label,model_path=None,tile=512):
+        calls.append((target,model_path,tile))
+        return image.resize(target)
+    monkeypatch.setattr(runtime,'upscale',upscale)
+    upscaler=Path(image_settings['flags']['model']).with_name('4x-UltraSharp.pth'); upscaler.write_bytes(b'esrgan')
+    native=FakeNative();job=private_job(image_settings)
+    small=base64.b64encode(png_bytes(Image.new('RGB',(40,24),'blue'))).decode()
+    asked={'model':'flux2-dev','image':small,'upscale_with':{'upscaler':'4x-UltraSharp.pth','factor':2.5,'tile':256}}
+    with TestClient(create_app(job,native)) as client:
+        base={'authorization':'Bearer '+job['token']}
+        missing=client.post('/v1/images/edits',headers=base,json=asked)
+        assert missing.status_code==502 and 'not installed on this node' in missing.json()['error']['message']
+        answer=client.post('/v1/images/edits',headers={**base,'x-loadcoach-upscaler-path':str(upscaler)},json=asked)
+        assert answer.status_code==200,answer.text
+        assert answer.json()['data'][0]['size']=='100x60'
+        assert calls==[((100,60),str(upscaler),256)] and native.payloads==[]

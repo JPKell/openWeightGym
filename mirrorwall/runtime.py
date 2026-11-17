@@ -411,22 +411,25 @@ def native_error(value):
     return str(detail.get('message','generation stopped') if isinstance(detail,dict) else detail)[:2000]
 
 
-async def upscale(job,image,target,folder,label):
-    """Run one native-factor model upscale, then Lanczos to the requested final size."""
+async def upscale(job,image,target,folder,label,model_path=None,tile=512):
+    """Run one native-factor model upscale, then Lanczos to the requested final size.
+
+    The profile's configured upscaler is used unless LoadCoach resolved another installed file for this request."""
     options=job["settings"]["sdcpp"]
-    if not options.get("upscaler"):
+    model_path=model_path or options.get("upscaler")
+    if not model_path:
         raise ValueError("This reference/output requires a configured model upscaler; ordinary enlargement is not a fallback.")
     source=folder/(label+"-input.png")
     output=folder/(label+"-upscaled.png")
     image.save(source)
     command=[job["installation"]["cli"],"-M","upscale","--init-img",str(source),"--output",str(output),
-             "--upscale-model",options["upscaler"],"--upscale-repeats","1","--upscale-tile-size","512",
+             "--upscale-model",model_path,"--upscale-repeats","1","--upscale-tile-size",str(tile),
              "--backend","upscaler=cpu" if job['settings'].get('gpus') == 0 else "upscaler=cuda0","--threads",str(options.get("threads",4))]
     process=await asyncio.create_subprocess_exec(*command,stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL)
     try:
         await asyncio.wait_for(process.wait(),options.get("timeout",1800))
         if process.returncode or not output.is_file():
-            raise RuntimeError("Configured model upscaler failed; no ordinary-resize fallback was used.")
+            raise RuntimeError("The model upscaler failed; no ordinary-resize fallback was used.")
         with Image.open(output) as decoded:
             result=decoded.convert("RGB")
         return result.resize(target,Image.Resampling.LANCZOS) if result.size!=target else result
@@ -499,11 +502,39 @@ def unsupported_by_runtime(payload,capabilities):
     return None
 
 
-async def workflow(job,asked,native,cache=None,owner=None):
+async def upscale_only(job,resolved,native,upscaler_path):
+    """Enlarge one source image with the installed upscaler LoadCoach resolved; nothing is generated."""
+    if not upscaler_path or not Path(upscaler_path).is_file():
+        raise ValueError("That upscaler is not installed on this node.")
+    asked=resolved["upscale_with"]
+    start=time.monotonic()
+    yield {"type":"image_generation.progress","stage":"preparing","reference":1}
+    image=await asyncio.to_thread(decode_image,resolved["references"][0])
+    target=(round(image.width*asked["factor"]),round(image.height*asked["factor"]))
+    if max(target)>8192 or target[0]*target[1]>33554432:
+        raise ValueError("Upscaled output exceeds 8192 pixels a side or 32 megapixels.")
+    await native.stop()  # the upscaler runs as its own native process, so the GPU is released first
+    yield {"type":"image_generation.progress","stage":"upscaling","image_index":0}
+    with tempfile.TemporaryDirectory(prefix="job-",dir=job.get('scratch')) as temporary:
+        if target==image.size:
+            result=image
+        else:
+            result=await upscale(job,image,target,Path(temporary),"upscale",upscaler_path,asked["tile"])
+    yield {"type":"image_generation.completed","image_index":0,"b64_json":base64.b64encode(png_bytes(result)).decode(),
+           'created_at':int(time.time()),'output_format':'png','background':'opaque','quality':'auto','size':f'{result.width}x{result.height}',
+           "seed":None,"width":result.width,"height":result.height,"settings":{"upscale_with":asked},
+           "native_seconds":0,"elapsed_seconds":time.monotonic()-start,"mask_mode":None}
+
+
+async def workflow(job,asked,native,cache=None,owner=None,upscaler_path=None):
     """Prepare immutable inputs once, generate a bounded image batch, then upscale outputs."""
     settings=job["settings"]
     options=settings["sdcpp"]
     resolved=checked_request(asked,settings)
+    if "upscale_with" in resolved:
+        async for event in upscale_only(job,resolved,native,upscaler_path):
+            yield event
+        return
     extra_sample,extra_guidance,extra_top=native_extensions(resolved)
     start=time.monotonic()
     seed=resolved["seed"] if resolved["seed"]>=0 else secrets.randbelow(2**31-1)
@@ -718,8 +749,10 @@ def create_app(job,native=None):
             completed=False
             meter=Meter(job.get('monitor_cards', job['cards']))
             sampling=asyncio.create_task(meter.run())
-            qualifying=envelope(check(asked,job['settings']),job['settings']) and not (profile and profile.get('qualified'))
-            sequence=(video_workflow if video else workflow)(job,asked,native,None if qualifying else cache,request.headers.get('x-loadcoach-image-owner'))
+            upscale_only='upscale_with' in asked and not video  # runs no model, so it never measures or qualifies the profile
+            qualifying=not upscale_only and envelope(check(asked,job['settings']),job['settings']) and not (profile and profile.get('qualified'))
+            sequence=(video_workflow(job,asked,native,None if qualifying else cache,request.headers.get('x-loadcoach-image-owner')) if video else
+                      workflow(job,asked,native,None if qualifying else cache,request.headers.get('x-loadcoach-image-owner'),request.headers.get('x-loadcoach-upscaler-path')))
             try:
                 async with asyncio.timeout(job['settings']['sdcpp'].get('limits',{}).get('max_job_seconds',1800) if video else None):
                     async for event in sequence:
@@ -735,11 +768,11 @@ def create_app(job,native=None):
                     meter.stopping.set()
                     await sampling
                     measured=meter.result()
-                    qualified=completed and measured['complete'] and envelope(check(asked,job['settings']),job['settings'])
+                    qualified=not upscale_only and completed and measured['complete'] and envelope(check(asked,job['settings']),job['settings'])
                     if profile and profile.get('qualified'):
                         measured['gpu_peak_mib']=[max(a,b) for a,b in zip(profile['gpu_peak_mib'],measured['gpu_peak_mib'])]
                         measured['rss_peak_mib']=max(profile['rss_peak_mib'],measured['rss_peak_mib'])
-                    profile={**measured,'successful':completed,'qualified':completed and measured['complete'] and (qualified or bool(profile and profile.get('qualified'))),'at':time.time(),
+                    profile=profile if upscale_only else {**measured,'successful':completed,'qualified':completed and measured['complete'] and (qualified or bool(profile and profile.get('qualified'))),'at':time.time(),
                              **({'runtime_capabilities':getattr(native,'capabilities',{}),
                                  'seconds_per_output_second':getattr(native,'seconds_per_output_second',None)} if video and completed else {})}
                     busy=False
