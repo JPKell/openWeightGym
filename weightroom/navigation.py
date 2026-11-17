@@ -13,7 +13,7 @@ NAV_SECTIONS = {
         ('Desktop apps', ('/voice/desktop',)),
     ),
     'Models': (
-        ('Catalogue', ('/models', '/models/images', '/models/video', '/models/audio', '/cloud-apis')),
+        ('Catalogue', ('/models', '/models/images', '/models/image-workflows', '/models/video', '/models/audio', '/cloud-apis')),
         ('Routing & capacity', ('/roles', '/dry-fit')),
         ('Files & provenance', ('/files', '/fingerprints')),
         ('Downloads', ('/hub', '/civitai')),
@@ -95,6 +95,8 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
         groups[0]["links"].append(("Voice desktop app", '/voice/desktop'))
     if "manage-models" in can:
         groups[1]["links"] = [("Models", "/models"), ("Images", "/models/images"), ("Video", "/models/video"), ("Audio", "/models/audio"), ("Roles", "/roles")]
+    if "manage-workflows" in can:  # advanced image workflows; models stay with model management
+        groups[1]["links"].append(("Image workflows", "/models/image-workflows"))
     if "manage-hosted" in can:  # the services elsewhere whose models are offered here
         groups[1]["links"].append(("Cloud APIs", "/cloud-apis"))
     if "manage-models" in can:
@@ -137,7 +139,9 @@ def navigation(path: str, can: list[str], machine: bool, services: PlatformServi
             active = "/benchmarks/runs"
         if active.startswith('/benchmarks/run/'):
             active = '/benchmarks/runs'
-    if path.startswith("/models/images"):
+    if path.startswith("/models/image-workflows"):
+        active = "/models/image-workflows"
+    elif path.startswith("/models/images"):
         active = "/models/images"
     elif path.startswith(("/chat/tools", "/chat/classifier", "/chat/images", "/chat/video", "/models/video", "/chat/extraction", "/chat/music", "/chat/sounds", "/chat/speech", "/chat/transcribe", "/models/audio")):
         active = "/" + "/".join(path.strip("/").split("/")[:2])

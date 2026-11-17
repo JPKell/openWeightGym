@@ -251,6 +251,35 @@ window.SuiteWorkflowGraph = (() => {
     return problems;
   }
 
+  /** A one-sampler graph from a simple per-model workflow (preset): its model, size, sampler settings and
+      negative prompt. LoRA strengths stay with the model's configuration and are noted on the canvas. */
+  function fromPreset(preset, catalogue, models) {
+    const settings = preset.settings || {}, model = models.find(one => one.id === preset.model) || null;
+    const family = model?.family, defaults = {...(catalogue.defaults[family] || {})}; delete defaults.basis;
+    const sampler = catalogue.sampler_aliases?.[settings.sampler] || settings.sampler;
+    const [width, height] = String(settings.size || '').split('x').map(Number);
+    const graph = {schema: 1, name: (preset.name || 'Workflow') + ' (advanced)', summary: 'Converted from the simple workflow “' + (preset.name || '') + '”.',
+      family: family || '', media: 'image', nodes: [], links: []};
+    const node = (type, values = {}, title = null) => {
+      const one = add(graph, catalogue, type, {values, models});
+      if (title) one.title = title;
+      return one;
+    };
+    const known = (name, value) => value !== undefined && value !== null && value !== '' && (catalogue.components.sampler.fields.find(field => field.name === name) ? true : false);
+    node('prompt'); node('model', {model: preset.model || ''}); node('seed', {mode: 'random'});
+    node('size', {width: width || settings.width || 1024, height: height || settings.height || 1024});
+    if (settings.negative_prompt) node('negative', {text: settings.negative_prompt});
+    const values = {...defaults};
+    for (const name of ['steps', 'scheduler', 'cfg_scale', 'guidance', 'strength']) if (known(name, settings[name])) values[name] = settings[name];
+    if (sampler && catalogue.samplers.includes(sampler)) values.sampler = sampler;
+    const base = node('sampler', values, 'Base');
+    if (settings.negative_prompt) connect(graph, catalogue, ['negative1', 'text'], [base.id, 'negative']);
+    node('output', {label: 'Final'});
+    if (settings.loras && Object.keys(settings.loras).length) node('note', {text: 'The simple workflow set LoRA strengths (' + Object.entries(settings.loras).map(([name, scale]) => name + ' ' + scale).join(', ') + '). Advanced workflows do not set LoRA strengths yet, so the model\'s configured strengths apply.'});
+    graph.links.forEach(link => { delete link.auto; });
+    return graph;
+  }
+
   const slug = name => (name || 'workflow').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'workflow';
 
   /** The API request a caller would send for this workflow's exposed inputs and overridable fields. */
@@ -285,5 +314,5 @@ window.SuiteWorkflowGraph = (() => {
   }
 
   return {spec, inputs, outputs, find, linksInto, linksFrom, reaches, destinations, sources, connect, disconnect, add,
-    insertAfter, remove, order, depths, lanes, earliestLane, moveToLane, clearLanes, modelOf, stages, validate, request, examples, slug};
+    insertAfter, remove, order, depths, fromPreset, lanes, earliestLane, moveToLane, clearLanes, modelOf, stages, validate, request, examples, slug};
 })();

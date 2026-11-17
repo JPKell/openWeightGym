@@ -1944,6 +1944,33 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(403, "Model management is required.")
         return JSONResponse({"nodes": await model_file_inventory(user)}, headers={"cache-control": "no-store"})
 
+    async def image_upscalers(request):
+        """Installed image upscaler files by file name and compute node, for workflow Upscale steps and hires passes."""
+        user = caller(key_of(request))
+        if user is None:
+            return error(401, "Missing or wrong API key.")
+        if not (user.can("manage-models") or user.can("manage-workflows")):
+            return error(403, "Model or workflow management is required.")
+        found = {}
+        for node in await model_file_inventory(user):
+            if node["name"] == "front" or not node.get("answering"):
+                continue
+            for file in node.get("files", []):
+                facts = file.get("facts") or {}
+                if file.get("moving") or (facts.get("image_identity") or {}).get("kind") != "upscaler":
+                    continue
+                name = Path(file.get("path", "")).name
+                if name:
+                    found.setdefault(name, set()).add(node["name"])
+        def label(name):
+            return re.sub(r"[_-]+", " ", Path(name).stem).strip() or name
+        def scale(name):
+            match = re.search(r"(?:^|[^0-9])([1-8])x|x([1-8])(?:[^0-9]|$)", name, re.I)
+            return int(match.group(1) or match.group(2)) if match else None
+        return JSONResponse({"upscalers": [{"id": name, "label": label(name), "scale": scale(name), "nodes": sorted(nodes)}
+                                           for name, nodes in sorted(found.items(), key=lambda item: item[0].casefold())]},
+                            headers={"cache-control": "no-store"})
+
     async def image_model_check(request):
         """Check a new image bundle using the owning nodes' cached header identities."""
         user = caller(key_of(request))
@@ -3574,6 +3601,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             Route("/turnstile/artifacts/{suffix:path}", artifact_proxy, methods=["GET", "POST"]),
                             Route("/turnstile/models", logical_models),
                             Route("/turnstile/models/files", model_files_available),
+                            Route("/turnstile/models/upscalers", image_upscalers),
                             Route("/turnstile/models/image-check", image_model_check, methods=["POST"]),
                             Route("/turnstile/models/install", install_model, methods=["POST"]),
                             Route('/turnstile/models/install/{number}/retry', retry_installation, methods=['POST']),

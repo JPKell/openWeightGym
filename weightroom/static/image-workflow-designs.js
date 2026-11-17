@@ -39,45 +39,8 @@
     $('workflow-published').checked = one.published; $('workflow-published').disabled = one.sample;
   }
 
-  /** Inputs a caller may set: exposed fields and overridable bounds, rendered as a form. */
-  function runInputs() {
-    const box = editorRoot.querySelector('[data-wf-run-inputs]'), graph = editor.graph();
-    const before = Object.fromEntries([...box.querySelectorAll('[data-key]')].map(input => [input.dataset.key, input.value]));
-    box.replaceChildren();
-    for (const node of graph.nodes) {
-      const definition = G.spec(catalogue, node.type);
-      for (const name of node.exposed || []) {
-        const field = (definition.fields || []).find(one => one.name === name); if (!field) continue;
-        box.append(input(node, field, node.title + (field.label === node.title ? '' : ' · ' + field.label), node.id + (node.type === 'load_image' ? '' : '.' + name), before));
-      }
-      for (const [name, range] of Object.entries(node.overridable || {})) {
-        const field = (definition.fields || []).find(one => one.name === name); if (!field) continue;
-        box.append(input(node, {...field, min: range[0], max: range[1]}, node.title + ' · ' + field.label + ' (' + range.join('–') + ')', node.id + '.' + name, before));
-      }
-    }
-    if (!box.children.length) box.append(Object.assign(document.createElement('p'), {className: 'small text-secondary mb-0', textContent: 'This workflow exposes nothing; it always runs with its saved values.'}));
-  }
-  function input(node, field, label, key, before) {
-    const wrap = document.createElement('div'), id = 'run-' + key.replace(/\W/g, '-');
-    wrap.className = 'wf-field' + (field.kind === 'textarea' ? ' wf-field-wide' : '');
-    const caption = document.createElement('label'); caption.className = 'form-label'; caption.htmlFor = id; caption.textContent = label;
-    let control;
-    if (field.kind === 'textarea') { control = document.createElement('textarea'); control.rows = 2; control.className = 'form-control'; }
-    else if (field.kind === 'choice' || field.kind === 'asset') {
-      control = document.createElement('select'); control.className = 'form-select';
-      (field.kind === 'asset' ? [['', 'Choose an image'], ...assets.map(one => [one.id, one.label])] : field.choices.map(one => [one, one])).forEach(([value, text]) => control.add(new Option(text, value)));
-    } else { control = document.createElement('input'); control.className = 'form-control'; control.type = field.kind === 'number' ? 'number' : 'text'; if (field.kind === 'number') { control.min = field.min; control.max = field.max; control.step = field.step ?? 'any'; } }
-    control.id = id; control.dataset.key = key;
-    control.value = before[key] ?? node.values[field.name] ?? '';
-    wrap.append(caption, control);
-    return wrap;
-  }
-
-  function apiExample() {
-    const one = workflows[current];
-    const sample = G.examples(editor.graph() && {...one.graph, ...editor.graph()}, catalogue, {name: one.graph.name, base: 'https://gym.example'});
-    editorRoot.querySelector('[data-wf-api-code]').textContent = sample[language];
-  }
+  function runInputs() { editor.runInputs(); }
+  function apiExample() { editor.apiExample(language, {name: workflows[current].graph.name, base: 'https://gym.example'}); }
 
   function plan() {
     const stages = editor.stages(), loads = stages.filter(stage => stage.load).length;
@@ -116,11 +79,8 @@
     event.preventDefault();
     if (running) return;
     const graph = editor.graph(), stages = editor.stages();
-    const values = Object.fromEntries([...editorRoot.querySelectorAll('[data-wf-run-inputs] [data-key]')].map(input => [input.dataset.key, input.value]));
-    for (const [key, value] of Object.entries(values)) {
-      const [id, name] = key.split('.'), node = graph.nodes.find(one => one.id === id), range = name && node?.overridable?.[name];
-      if (range && (Number(value) < range[0] || Number(value) > range[1])) { announce(`${node.title} · ${name} must be from ${range[0]} to ${range[1]}.`); return; }
-    }
+    let values;
+    try { values = editor.runValues(); } catch (error) { announce(error.message); return; }
     const seedNode = graph.nodes.find(node => node.type === 'seed');
     const seed = Number(values[(seedNode?.id || '') + '.value'] ?? seedNode?.values.value ?? Math.floor(Math.random() * 2 ** 31));
     const list = editorRoot.querySelector('[data-wf-stages]'), results = editorRoot.querySelector('[data-wf-results]');

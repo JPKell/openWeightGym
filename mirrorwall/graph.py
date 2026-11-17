@@ -312,7 +312,8 @@ SAMPLES = [
 def catalogue():
     """Everything the editor needs, as one JSON-ready object."""
     return {'components': COMPONENTS, 'order': list(COMPONENTS), 'port_types': PORT_TYPES, 'families': FAMILIES, 'defaults': DEFAULTS,
-            'samplers': list(NATIVE_SAMPLERS), 'schedulers': list(NATIVE_SCHEDULERS), 'hires_upscalers': list(HIRES_UPSCALERS), 'limits': LIMITS}
+            'samplers': list(NATIVE_SAMPLERS), 'schedulers': list(NATIVE_SCHEDULERS), 'hires_upscalers': list(HIRES_UPSCALERS),
+            'sampler_aliases': dict(_model.SAMPLER_ALIASES), 'limits': LIMITS}
 
 
 # ---- Validation: the server's copy of the editor's rules (weightroom/static/workflow-graph.js) ----

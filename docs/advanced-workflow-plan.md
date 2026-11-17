@@ -1,6 +1,7 @@
 # Advanced image workflows plan
 
-Status: proposal, 2026-11-17. Nothing here is implemented yet. The owner's interview answers
+Status: 2026-11-17 — phases 0–3 delivered (the live Stage lanes editor is at Models → Image
+workflows); Phase 4, execution and `workflow:` API calls, is next. The owner's interview answers
 are recorded in [Decisions](#decisions-interview-2026-11-17) and are reflected throughout.
 
 ## Goal

@@ -1,0 +1,40 @@
+{% extends "frame.html" %}
+{% from 'parts.html' import page_header, alert, confirm_two %}
+{% from 'workflow_editor_parts.html' import toolbar, palette, surface, inspector, problems, run_panel, templates %}
+{# Advanced image workflows, Stage lanes layout (02 selected). Data and saves go through /mirrorwall-api/graphs; see graphs.js. #}
+{% block title %}Image workflows · Models · openWeightGym{% endblock %}
+{% block scripts %}
+<link rel="stylesheet" href="/static/workflow-editor.css?v=2">
+<script src="/static/workflow-graph.js?v=2" defer></script><script src="/static/workflow-editor.js?v=2" defer></script>
+<script src="/mirrorwall-static/graphs.js?v=1" defer></script>
+{% endblock %}
+{% block main %}
+<div id="graphs" data-open="{{ open_graph }}" data-preset="{{ from_preset }}">
+{% call page_header('Image workflows', help='/docs/model-guides/image-workflows') %}
+<label class="visually-hidden" for="graph-choice">Workflow</label><select id="graph-choice" class="form-select form-select-sm wf-choice" disabled></select>
+<button class="btn btn-outline-secondary btn-sm" id="graph-new" type="button" disabled>New workflow</button>
+<button class="btn btn-outline-secondary btn-sm" id="graph-duplicate" type="button" disabled>Duplicate</button>
+<button class="btn btn-primary btn-sm" id="graph-save" type="button" disabled>Save version</button>
+{% endcall %}
+{% call alert('danger', role='alert', attrs={'id':'graph-error','hidden':''}) %}{% endcall %}
+<p id="graph-status" class="small text-secondary" role="status" aria-live="polite">Loading workflows…</p>
+<div class="wf-meta">
+<div><label class="form-label" for="graph-name">Workflow name <small class="text-secondary">API model name: <code id="graph-api-name"></code></small></label><input id="graph-name" class="form-control" maxlength="100" disabled></div>
+<div><label class="form-label" for="graph-summary">Summary</label><input id="graph-summary" class="form-control" maxlength="400" disabled></div>
+<div class="wf-meta-state"><span class="badge bg-blue-lt" id="graph-version"></span><span class="badge bg-green-lt" id="graph-published" hidden></span>
+<label class="visually-hidden" for="graph-versions">Saved versions</label><select id="graph-versions" class="form-select form-select-sm wf-choice" hidden></select>
+<button class="btn btn-outline-primary btn-sm" id="graph-publish" type="button" hidden>Publish</button>
+<button class="btn btn-outline-secondary btn-sm" id="graph-unpublish" type="button" hidden>Unpublish</button>
+<button class="btn btn-outline-danger btn-sm" id="graph-delete" type="button" hidden {{ confirm_two("Delete this workflow and all its versions? Images and job records it produced stay available.") }}>Delete</button></div>
+</div>
+<div class="wf-editor wf-workspace" id="graph-editor" data-wf-layout="lanes">
+<div class="wf-area-toolbar">{{ toolbar(views=('lanes','canvas','outline')) }}</div>
+<div class="wf-area-palette">{{ palette() }}</div>
+<div class="wf-area-surface">{{ surface() }}</div>
+<div class="wf-area-inspector">{{ inspector() }}</div>
+<div class="wf-area-problems">{{ problems() }}</div>
+<div class="wf-area-run">{{ run_panel(runs=false) }}</div>
+</div>
+</div>
+{{ templates() }}
+{% endblock %}

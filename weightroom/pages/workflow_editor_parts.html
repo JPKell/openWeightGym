@@ -34,13 +34,14 @@
 <div class="wf-problems" data-wf-problems aria-live="polite"></div>
 {% endmacro %}
 
-{# Exposed inputs, per-step progress, results and the matching API call. #}
-{% macro run_panel() %}
+{# Exposed inputs, per-step progress, results and the matching API call. Without `runs`, the panel
+   shows the caller's inputs and API call but explains that workflow execution is not available yet. #}
+{% macro run_panel(runs=true) %}
 <section class="wf-run" aria-labelledby="wf-run-title" data-wf-run>
 {{ section_title('Test run',id='wf-run-title',level=3,wrapper_class='mb-2') }}
 <p class="small text-secondary">Callers set only the fields marked “Callers set this” or “Callers may override”.</p>
 <form data-wf-run-form novalidate><div class="wf-run-inputs" data-wf-run-inputs></div>
-<div class="d-flex flex-wrap gap-2 align-items-center mt-3"><button class="btn btn-primary btn-sm" type="submit" data-wf-run-button>Run test</button><button class="btn btn-outline-secondary btn-sm" type="button" data-wf-run-stop hidden>Stop</button><span class="small text-secondary" data-wf-run-plan></span></div></form>
+<div class="d-flex flex-wrap gap-2 align-items-center mt-3">{% if runs %}<button class="btn btn-primary btn-sm" type="submit" data-wf-run-button>Run test</button><button class="btn btn-outline-secondary btn-sm" type="button" data-wf-run-stop hidden>Stop</button>{% endif %}<span class="small text-secondary" data-wf-run-plan></span></div>{% if not runs %}<p class="small text-secondary mt-2 mb-0" data-wf-run-unavailable>Test runs and <code>workflow:</code> API calls arrive with workflow execution. Until then, save and publish versions here; the run plan and API call below show what callers will send.</p>{% endif %}</form>
 <ol class="wf-stages" data-wf-stages aria-label="Run progress"></ol>
 <div class="wf-results" data-wf-results aria-label="Run outputs"></div>
 <details class="wf-api" data-wf-api><summary>Call this workflow from the API</summary>

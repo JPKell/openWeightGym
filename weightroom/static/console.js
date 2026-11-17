@@ -219,6 +219,8 @@ window.suiteNodeLabel = name => name === 'front' ? 'Control node' : name;
       ...(choices.clock === '12' ? {hour12:true} : {hourCycle:'h23'})}).format(date);
     return `${part('year')}-${part('month')}-${part('day')}, ${time}${withZone ? ' · ' + timeZone : ''}`;
   };
+  /** Format an instant with the account's time zone, clock and date preferences (for script-built text such as options). */
+  window.suiteFormatTime = format;
   const localInput = (date, timeZone = zone) => {
     const parts = new Intl.DateTimeFormat('en-CA', {timeZone, year:'numeric',month:'2-digit',day:'2-digit',
       hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(date);

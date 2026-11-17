@@ -414,6 +414,58 @@ window.SuiteWorkflowEditor = (() => {
       }
     }
 
+    /** The test-run form: inputs a caller may set (exposed fields and overridable bounds); typed values survive re-rendering. */
+    function runInputs() {
+      const box = $('run-inputs'); if (!box) return;
+      const before = Object.fromEntries([...box.querySelectorAll('[data-key]')].map(input => [input.dataset.key, input.value]));
+      box.replaceChildren();
+      for (const node of state.nodes) {
+        const definition = G.spec(catalogue, node.type);
+        for (const name of node.exposed || []) {
+          const field = (definition.fields || []).find(one => one.name === name); if (!field) continue;
+          box.append(runInput(node, field, node.title + (field.label === node.title ? '' : ' · ' + field.label), node.id + (node.type === 'load_image' ? '' : '.' + name), before));
+        }
+        for (const [name, range] of Object.entries(node.overridable || {})) {
+          const field = (definition.fields || []).find(one => one.name === name); if (!field) continue;
+          box.append(runInput(node, {...field, min: range[0], max: range[1]}, node.title + ' · ' + field.label + ' (' + range.join('–') + ')', node.id + '.' + name, before));
+        }
+      }
+      if (!box.children.length) box.append(make('p', 'This workflow exposes nothing; it always runs with its saved values.', 'small text-secondary mb-0'));
+    }
+    function runInput(node, field, label, key, before) {
+      const wrap = make('div', undefined, 'wf-field' + (field.kind === 'textarea' ? ' wf-field-wide' : '')), id = 'run-' + key.replace(/\W/g, '-');
+      const caption = make('label', label, 'form-label'); caption.htmlFor = id;
+      let control;
+      if (field.kind === 'textarea') { control = make('textarea', undefined, 'form-control'); control.rows = 2; }
+      else if (['choice', 'asset', 'upscaler'].includes(field.kind)) {
+        control = make('select', undefined, 'form-select');
+        (field.kind === 'asset' ? [['', 'Choose an image'], ...assets.map(one => [one.id, one.label])]
+          : field.kind === 'upscaler' ? (upscalers || []).map(one => [one.id, one.label]) : field.choices.map(one => [one, one])).forEach(([value, text]) => control.add(new Option(text, value)));
+      } else {
+        control = make('input', undefined, 'form-control'); control.type = field.kind === 'number' ? 'number' : 'text';
+        if (field.kind === 'number') { control.min = field.min; control.max = field.max; control.step = field.step ?? 'any'; }
+      }
+      control.id = id; control.dataset.key = key;
+      control.value = before[key] ?? node.values[field.name] ?? '';
+      wrap.append(caption, control);
+      return wrap;
+    }
+    /** Values typed into the test-run form, by caller key; an override outside its bounds raises with the reason. */
+    function runValues() {
+      const values = Object.fromEntries([...root.querySelectorAll('[data-wf-run-inputs] [data-key]')].map(input => [input.dataset.key, input.value]));
+      for (const [key, value] of Object.entries(values)) {
+        const [id, name] = key.split('.'), node = G.find(state, id), range = name && node?.overridable?.[name];
+        if (range && (Number(value) < range[0] || Number(value) > range[1])) throw new Error(`${node.title} · ${name} must be from ${range[0]} to ${range[1]}.`);
+      }
+      return values;
+    }
+    /** The API call for this workflow in `language` (curl or python). */
+    function apiExample(language, options = {}) {
+      const code = $('api-code'); if (!code) return '';
+      code.textContent = G.examples(state, catalogue, options)[language];
+      return code.textContent;
+    }
+
     nodesBox.addEventListener('click', event => { const card = event.target.closest('[data-node]'); if (card) select(card.dataset.node); });
     nodesBox.addEventListener('keydown', event => {
       const card = event.target.closest('[data-node]'); if (!card || event.target !== card) return;
@@ -534,6 +586,7 @@ window.SuiteWorkflowEditor = (() => {
       fit, setZoom, tidy,
       select, view, redraw: () => requestAnimationFrame(drawLinks), problems, render,
       stages: () => G.stages(state, catalogue, models),
+      runInputs, runValues, apiExample,
       selected: () => selected,
     };
   }

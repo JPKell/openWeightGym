@@ -123,6 +123,7 @@
     const p=profile(), rules=Profiles.spec(p.family), row=current();
     $('delete').hidden=!row || (row.published && !library.can_manage);
     $('delete').disabled=saving || loading;
+    if($('advanced')) { $('advanced').hidden=!row || video; if(row) $('advanced').href='/models/image-workflows?preset='+encodeURIComponent(row.id); }
     if(video && $('qualify')) $('qualify').disabled=!selected || !available() || saving || loading;
     const draft=drafts.get(key()) || baseline();
     $('workflow-fields').disabled=!selected || saving || loading;

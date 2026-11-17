@@ -57,8 +57,10 @@ separate from model management.
 - The shipped samples are read-only templates; save a copy to change one.
 - Removing a workflow keeps the images and job records it produced.
 
-The editor page and `workflow:<name>` API calls are not available yet. Until then the shipped
-samples can be compared in the Image workflows design preview (see Design previews).
+Build and publish them under **Models → Image workflows**; see
+[Image workflows](/docs/model-guides/image-workflows). **Open as advanced** in a simple workflow's
+actions converts a copy into a one-sampler graph. Running workflows and `workflow:<name>` API
+calls arrive with workflow execution.
 
 ## Limits and troubleshooting
 

@@ -100,6 +100,27 @@
 .wf-api > summary { cursor: pointer; font-weight: 600; }
 .wf-code { max-height: 300px; overflow: auto; padding: 10px; background: var(--bs-tertiary-bg); border: 1px solid var(--bs-border-color); border-radius: 6px; font-size: 12px; white-space: pre; }
 
+/* Stage lanes workspace (live page): palette strip above full-width lanes, inspector beside, test run below. */
+.wf-meta { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.4fr) auto; gap: 12px 16px; align-items: end; margin-bottom: 14px; }
+.wf-meta-state { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.wf-choice { width: auto; max-width: 320px; }
+.wf-workspace { display: grid; gap: 16px; grid-template-columns: minmax(0,1fr) 380px;
+  grid-template-areas: 'toolbar toolbar' 'palette palette' 'surface inspector' 'problems inspector' 'run run'; }
+.wf-area-toolbar { grid-area: toolbar; } .wf-area-palette { grid-area: palette; } .wf-area-surface { grid-area: surface; min-width: 0; }
+.wf-area-inspector { grid-area: inspector; max-height: 86vh; overflow: auto; } .wf-area-problems { grid-area: problems; } .wf-area-run { grid-area: run; }
+.wf-area-run > .wf-run, .wf-area-palette > .wf-palette { padding: 14px; border: 1px solid var(--bs-border-color); border-radius: 8px; background: var(--bs-body-bg); }
+.wf-workspace [data-wf-palette] { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.wf-workspace .wf-palette-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0; }
+.wf-workspace .wf-palette-item small { display: none; }
+@media (max-width: 1200px) { .wf-workspace { grid-template-columns: minmax(0,1fr) 340px; } }
+@media (max-width: 800px) {
+  .wf-meta { grid-template-columns: minmax(0,1fr); }
+  .wf-workspace { grid-template-columns: minmax(0,1fr); grid-template-areas: 'toolbar' 'problems' 'surface' 'inspector' 'palette' 'run'; }
+  .wf-area-inspector { max-height: none; }
+  .wf-choice { width: 100%; max-width: 100%; min-width: 0; }
+  .page-actions:has(.wf-choice) { min-width: 0; max-width: 100%; }
+}
+
 @media (max-width: 700px) {
   .wf-fields { grid-template-columns: minmax(0,1fr); }
   .wf-surface { max-height: 60vh; min-height: 360px; }

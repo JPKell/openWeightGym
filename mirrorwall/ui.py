@@ -56,7 +56,15 @@ def routes(for_people, page, ask, model_api):
 
     async def workflows(request, person):
         """Render versioned image workflow settings."""
-        return page(request, "mirrorwall_workflows.html", person, studio_manage="manage-models" in person.can)
+        return page(request, "mirrorwall_workflows.html", person, studio_manage="manage-models" in person.can,
+                    graph_manage="manage-workflows" in person.can)
+
+    async def graphs(request, person):
+        """Render the Stage lanes editor for advanced image workflows; data comes from /mirrorwall-api/graphs."""
+        if "manage-workflows" not in person.can:
+            return page(request, "refused.html", person, status=403, why="Your account may not manage image workflows.")
+        return page(request, "mirrorwall_graphs.html", person, open_graph=request.query_params.get("workflow", ""),
+                    from_preset=request.query_params.get("preset", ""))
 
     async def models(request, person):
         """Render image-only model management for authorized administrators."""
@@ -65,7 +73,7 @@ def routes(for_people, page, ask, model_api):
         video=request.url.path.startswith('/models/video')
         from mirrorwall.video import FAMILIES, defaults, limits
         profiles={family:{'label':family,'defaults':defaults({'sdcpp':{'family':family}}),'limits':limits({})} for family in FAMILIES}
-        return page(request, "mirrorwall_models.html", person, studio_manage=True,
+        return page(request, "mirrorwall_models.html", person, studio_manage=True, graph_manage=not video and "manage-workflows" in person.can,
                     media_kind='video' if video else 'image',video_profiles=profiles if video else {},
                     samplers=SAMPLERS,schedulers=SCHEDULERS)
 
@@ -275,6 +283,7 @@ def routes(for_people, page, ask, model_api):
             Route("/chat/images", for_people(studio)),
             Route("/models/images", for_people(models)),
             Route("/models/images/workflows", for_people(workflows)),
+            Route("/models/image-workflows", for_people(graphs)),
             Route("/mirrorwall-models", for_people(inventory)),
             Route("/mirrorwall-models", for_people(model_save), methods=["POST"]),
             Route("/mirrorwall-models/check", for_people(model_check), methods=["POST"]),

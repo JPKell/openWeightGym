@@ -592,6 +592,18 @@ class Front:
         """The caller's image models with their families, for workflow checks and access."""
         return [{'id':m['id'],'family':(m.get('image_workflow') or {}).get('family')} for m in await self.media_catalogue(user,'image')]
 
+    async def graph_upscalers(self,user):
+        """Installed upscaler files for a workflow manager, or None when the inventory cannot be read (checks are then skipped)."""
+        try:
+            answer=await self.batches.door.get('/turnstile/models/upscalers',headers={'authorization':'Bearer '+self.batches.internal_key(user.name),'x-turnstile-no-wake':'1'})
+        except Exception:
+            return None
+        return answer.json().get('upscalers',[]) if answer.status_code==200 else None
+
+    @staticmethod
+    def upscaler_names(upscalers):
+        return None if upscalers is None else [one['id'] for one in upscalers]
+
     def runnable(self,row,models):
         """A published workflow's caller view, when the caller may use every model it uses."""
         found=self.store.runnable_graph(row['api_name']) if row['published'] else None
@@ -607,8 +619,10 @@ class Front:
             return error(503,str(problem))
         manage=user.can('manage-workflows')
         if manage:
-            body={'workflows':[{**row,'problems':graph.problems(row['document'],models)} for row in self.store.graphs()],
-                  'templates':graph.SAMPLES,'catalogue':graph.catalogue()}
+            upscalers=await self.graph_upscalers(user)
+            names=self.upscaler_names(upscalers)
+            body={'workflows':[{**row,'problems':graph.problems(row['document'],models,names)} for row in self.store.graphs()],
+                  'templates':graph.SAMPLES,'catalogue':graph.catalogue(),'upscalers':upscalers}
         else:
             body={'workflows':[one for row in self.store.graphs() if (one:=self.runnable(row,models))]}
         return JSONResponse({**body,'models':models,'can_manage':manage},headers={'cache-control':'no-store'})
@@ -621,7 +635,8 @@ class Front:
         except ValueError as problem:
             return error(503,str(problem))
         if row and user.can('manage-workflows'):
-            return JSONResponse({**row,'problems':graph.problems(row['document'],models),'versions':self.store.graph_versions(row['id'])},
+            names=self.upscaler_names(await self.graph_upscalers(user))
+            return JSONResponse({**row,'problems':graph.problems(row['document'],models,names),'versions':self.store.graph_versions(row['id'])},
                                 headers={'cache-control':'no-store'})
         found=self.runnable(row,models) if row else None
         return JSONResponse(found,headers={'cache-control':'no-store'}) if found else error(404,'There is no such workflow.')
@@ -634,7 +649,7 @@ class Front:
             asked=await self.read_json(request)
             if not isinstance(asked,dict) or asked.keys()-{'id','version','document'}:
                 raise ValueError('Send id, version and document.')
-            document,problems=graph.check(asked.get('document'),await self.graph_models(user))
+            document,problems=graph.check(asked.get('document'),await self.graph_models(user),self.upscaler_names(await self.graph_upscalers(user)))
             row=self.store.save_graph(user.identity,document,asked.get('id'),asked.get('version'))
             return JSONResponse({**row,'problems':problems},201 if row['version']==1 else 200,headers={'cache-control':'no-store'})
         except (ValueError,TypeError) as problem:
@@ -655,7 +670,8 @@ class Front:
                 chosen=next((one for one in self.store.graph_versions(identifier) if one['version']==version),None)
                 if not chosen:
                     raise ValueError('There is no such version of this workflow.')
-                failing=[one['text'] for one in graph.problems(chosen['document'],await self.graph_models(user)) if one['level']=='error']
+                failing=[one['text'] for one in graph.problems(chosen['document'],await self.graph_models(user),
+                                                               self.upscaler_names(await self.graph_upscalers(user))) if one['level']=='error']
                 if failing:
                     raise ValueError('Fix these problems before publishing: '+' '.join(failing))
             return JSONResponse(self.store.publish_graph(identifier,version,expected),headers={'cache-control':'no-store'})
