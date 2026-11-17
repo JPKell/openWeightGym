@@ -193,7 +193,7 @@ def finished(browser, seconds=10):
     raise AssertionError("The bulk change did not finish: " + page[page.find("files-distributions"):][:800])
 
 
-def test_bulk_change_copies_to_cache_and_node_keeps_a_node_file_in_storage_and_removes_a_copy(library_desk):
+def test_bulk_change_copies_to_cache_and_node_keeps_a_node_file_in_storage_and_removes_a_copy(library_desk, monkeypatch):
     browser, compute, cache, storage, node = library_desk
     a = Path(gguf(storage / "llm" / "a.gguf", general__name="A", general__architecture="tiny"))
     used = Path(gguf(storage / "llm" / "b.gguf", general__name="B", general__architecture="tiny"))
@@ -227,6 +227,23 @@ def test_bulk_change_copies_to_cache_and_node_keeps_a_node_file_in_storage_and_r
     shown = boxes(browser.get("/files?tier=storage&complete=1").text)
     assert shown["a.gguf in Cache"]["ticked"] and shown["a.gguf in compute"]["ticked"] and not shown["d.gguf in compute"]["ticked"]
     assert shown["own.gguf in Storage"]["locked"] and not shown["own.gguf in compute"]["locked"]  # kept in storage, so removable
+
+    # A finished task leaves the list a day after it ends, or at once with Clear finished.
+    assert 'value="clear-finished"' in page
+    monkeypatch.setattr("turnstile.app.FINISHED_TASK_SECONDS", 0)
+    assert "Bulk change finished" not in browser.get("/files?tier=storage&complete=1").text
+    monkeypatch.undo()
+    cleared = browser.post("/files", data={"do": "clear-finished"})
+    assert "Finished tasks cleared." in cleared.text
+    page = browser.get("/files?tier=storage&complete=1").text
+    assert "Bulk change finished" not in page and 'value="clear-finished"' not in page
+
+
+def test_video_components_have_their_own_file_type():
+    from loadcoach.platform_services import file_kind
+    assert file_kind({"facts": {"what": "image", "image_identity": {"family": "wan2.2"}}}) == "video"
+    assert file_kind({"facts": {"what": "image", "image_identity": {"family": "flux"}}}) == "image"
+    assert file_kind({"what": "adapter", "facts": {}}) == "adapter" and file_kind({}) == "model"
 
 
 def test_a_refused_change_leaves_every_file_as_it_was(library_desk):

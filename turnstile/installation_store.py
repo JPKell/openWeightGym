@@ -44,10 +44,13 @@ class Installations:
 
     def recover(self):
         """Load retained installations and mark interrupted attempts as failed."""
-        jobs={id:json.loads(progress) for id,progress in self.db.execute('SELECT id,progress FROM model_installations').fetchall()}
-        for job in jobs.values():
+        rows=self.db.execute('SELECT id,progress,updated FROM model_installations').fetchall()
+        jobs={id:json.loads(progress) for id,progress,_ in rows}
+        for id,_,updated in rows:
+            job=jobs[id]
             if job['state'] not in TERMINAL:
                 job.update(state='failed',interrupted=True,why='Installation interrupted by a service restart. Retry to verify retained files and continue with the saved settings.')
+            job.setdefault('ended',updated)  # older records: when the Files page stops listing them
         self.checkpoint(jobs.values())
         return jobs
 

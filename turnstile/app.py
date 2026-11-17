@@ -163,6 +163,11 @@ class Settings:
             object.__setattr__(self, "machines", {nodes.LEGACY: legacy, **self.machines})
 
 
+# Task states that end a Files-page task: transfers and installs, and node-side conversions.
+FINISHED_TASKS = frozenset({"complete", "failed", "cancelled", "interrupted", "verified", "unverified"})
+FINISHED_TASK_SECONDS = 86400  # finished tasks leave the Files page a day after they end
+
+
 def load_settings(path: Path) -> Settings:
     """Read the control node's TOML file. Anything wrong with it stops startup with a message naming the cause."""
     told = read_settings(path)
@@ -1913,6 +1918,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     installation_store = Installations(stores.database('weightroom.accounts'))
     distributions: dict[str, dict] = installation_store.recover()
     distribution_tasks: set[asyncio.Task] = set()
+    tasks_cleared_at = 0.0  # Clear on Files hides tasks that finished before this
     installation_lock = asyncio.Lock()
     configuration_lock = asyncio.Lock()
     installation_reservations = {}
@@ -2218,14 +2224,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                         why = removed.json()["error"]["message"] if removed is not None else "it stopped answering"
                         raise ValueError(f"Copied to {destination}, but {source} kept its copy: {why}")
                     job.update(machine=destination, moved_from=source)
-                job.update(state="complete", path=placed["flags"]["model"])
+                job.update(state="complete", path=placed["flags"]["model"], ended=time.time())
                 facts_seen.clear()
                 log.add("model", "moved" if asked.get("move") else "installed", user.name, "console", name, machine=destination)
             except asyncio.CancelledError:
-                job.update(state='failed',interrupted=True,why='Installation interrupted by a service restart. Retry to verify retained files and continue with the saved settings.')
+                job.update(state='failed',interrupted=True,ended=time.time(),why='Installation interrupted by a service restart. Retry to verify retained files and continue with the saved settings.')
                 raise
             except (ValueError, OSError, httpx.HTTPError) as problem:
-                job.update(state="failed", why=str(problem))
+                job.update(state="failed", why=str(problem), ended=time.time())
                 if front_files.stopping.is_set():job['interrupted']=True
             finally:
                 claim_installation(prepared, -1)
@@ -2311,9 +2317,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 "front_enabled": any(front_file_roots().values()),
                 "store_available": bool(source['places']),
                 "cleanup": source.get("cleanup", {}),
-                "nodes": nodes, "distributions": [*shown_jobs(),
+                "nodes": nodes, "distributions": [{**job, "finished": job.get("state") in FINISHED_TASKS} for job in [*shown_jobs(),
                     *[{**job, 'machine': node['name'], 'source': node['name'], 'file': job['scope'],
-                       'kind': 'video-conversion' if job.get('kind')=='video-conversion' else 'classifier-conversion', 'targets': {}} for node in nodes for job in node['conversions']]]}
+                       'kind': 'video-conversion' if job.get('kind')=='video-conversion' else 'classifier-conversion', 'targets': {}}
+                      for node in nodes for job in node['conversions'] if shown_task(job)]]]}
 
     async def artifact_files(request: Request) -> Response:
         """The control node's files plus available storage at every configured compute node. `refresh=1` looks again first."""
@@ -2472,9 +2479,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             job["state"] = "copying"
             await asyncio.gather(*(distribute_one(user, source, relative, digest, node, job)
                                    for node in nodes if node["name"] in selected))
-            job["state"] = "failed" if any(one["state"] == "failed" for one in job["targets"].values()) else "complete"
+            job.update(state="failed" if any(one["state"] == "failed" for one in job["targets"].values()) else "complete",
+                       ended=time.time())
         except (OSError, ValueError, StopIteration) as problem:
-            job.update(state="failed", why=f"{type(problem).__name__}: {problem}")
+            job.update(state="failed", why=f"{type(problem).__name__}: {problem}", ended=time.time())
 
     async def distribute(request: Request) -> Response:
         """Copy one control node model file through each selected node's Spotter."""
@@ -2523,9 +2531,37 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return next((job for job in distributions.values() if job.get("kind") == "arrange" and job["state"] == "running"), None)
 
     def shown_jobs() -> list[dict]:
-        """Distributions, and bulk changes until ten minutes after they end."""
-        return [job for job in distributions.values()
-                if job.get("kind") != "arrange" or job["state"] == "running" or time.time() - job.get("ended", 0) < 600]
+        """Running file tasks, and finished ones for a day after they end unless an operator cleared them."""
+        return [job for job in distributions.values() if not job.get("cleared") and shown_task(job)]
+
+    def shown_task(job: dict) -> bool:
+        """Whether the Files page still lists a task: running, or finished within the last day and after the last clear."""
+        if job.get("state") not in FINISHED_TASKS:
+            return True
+        ended = job.get("ended") or job.get("completed_at") or job.get("updated_at") or job.get("created_at") or 0
+        return ended > max(time.time() - FINISHED_TASK_SECONDS, tasks_cleared_at)
+
+    async def distribution_clear(request: Request) -> Response:
+        """Remove finished file tasks from the Files page; running tasks and retry records stay."""
+        nonlocal tasks_cleared_at
+        user = caller(key_of(request))
+        if user is None:
+            return error(401, "Missing or wrong API key.")
+        if not user.can("manage-models"):
+            return error(403, "Your account may not manage model files.")
+        tasks_cleared_at = time.time()  # node-side conversions finished before now are no longer listed
+        cleared = 0
+        for number, job in list(distributions.items()):
+            if job.get("state") not in FINISHED_TASKS or job.get("cleared"):
+                continue
+            cleared += 1
+            if job.get("kind") == "model-install":
+                job["cleared"] = True  # kept for /models?install= links and retries
+            else:
+                del distributions[number]
+        installation_store.checkpoint(job for job in distributions.values() if job.get("kind") == "model-install")
+        log.add("file", "tasks-cleared", user.name, request.client.host if request.client else "?", cleared=cleared)
+        return JSONResponse({"cleared": cleared})
 
     async def arrange(request: Request) -> Response:
         """Make the files in the cache and on each node what the Files page's boxes say, in one background job.
@@ -3524,6 +3560,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                               for action in ("clear-cache", "consolidate-cache", "cleanup-nodes")],
                             Route("/turnstile/artifacts/distribute", distribute, methods=["POST"]),
                             Route("/turnstile/artifacts/distributions", distribution_list),
+                            Route("/turnstile/artifacts/distributions/clear", distribution_clear, methods=["POST"]),
                             Route("/turnstile/artifacts/arrange", arrange, methods=["POST"]),
                             Route("/turnstile/artifacts/{suffix:path}", artifact_proxy, methods=["GET", "POST"]),
                             Route("/turnstile/models", logical_models),

@@ -13,6 +13,15 @@ SERVICE_SETTINGS = {
     'allow_classifiers': 'classifiers',
 }
 SPEECH_TASKS = frozenset({'speech', 'clone', 'design', 'transcription', 'alignment', 'diarization'})
+VIDEO_FAMILIES = ('wan2.1', 'wan2.2', 'ltx2', 'hunyuan-video-1.5', 'minimax-h3')
+
+
+def file_kind(file):
+    """A model file's kind for filtering: video components by their detected family, otherwise what the file says it is."""
+    facts = file.get('facts') or {}
+    if (facts.get('image_identity') or {}).get('family') in VIDEO_FAMILIES:
+        return 'video'
+    return facts.get('what', file.get('what', 'model'))
 
 
 @dataclass(frozen=True)
@@ -62,8 +71,7 @@ class PlatformServices:
     def file_enabled(self, file):
         """Filter file metadata through the enabled kinds and audio tasks."""
         facts = file.get('facts') or {}
-        identity=facts.get('image_identity') or {}
-        if identity.get('family') in ('wan2.1','wan2.2','ltx2','hunyuan-video-1.5','minimax-h3') and not (self.images and self.videos):
+        if file_kind(file) == 'video' and not self.kind_enabled('video'):
             return False
         kind = facts.get('what', file.get('what'))
         if not self.kind_enabled(kind):

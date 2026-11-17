@@ -125,7 +125,7 @@ from weightroom.pagination import controls, pagination
 from engines import engine_for
 from engines.llama_cpp.model import FIRST_PLACE
 from weightroom import setting_labels, settings_views
-from loadcoach.platform_services import PlatformServices, SERVICE_SETTINGS
+from loadcoach.platform_services import PlatformServices, SERVICE_SETTINGS, file_kind
 from weightroom.model_settings import PARALLEL_FLAGS, UNUSABLE_MODEL_FLAGS, parallel_fields, usable_model_flags
 from loadcoach.cli import groups_cli, log_cli, users_cli
 from loadcoach.groups import read_group
@@ -5017,7 +5017,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
     # ---- files ------------------------------------------------------------------------------
 
-    file_types = (("", "All files"), ("model", "Models"), ("image", "Images"), ("audio", "Audio"), ("classifier", "Classifier"),
+    file_types = (("", "All files"), ("model", "Models"), ("image", "Images"), ("video", "Video"), ("audio", "Audio"), ("classifier", "Classifier"),
                   ("adapter", "Adapters"), ("projector", "Projectors"))
 
     def file_address(path: str) -> str:
@@ -5130,10 +5130,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if file_type:
             def matching(files):
                 """Filter rows after resolving model usage, cache copies and location totals."""
-                return [file for file in files if (file.get("facts") or {}).get("what", "model") == file_type]
+                return [file for file in files if file_kind(file) == file_type]
 
             found = {**found, "files": matching(found.get("files", [])),
-                     "library": [row for row in found.get("library", []) if row["what"] == file_type],
+                     "library": [row for row in found.get("library", []) if file_kind(row) == file_type],
                      "nodes": [{**node, "files": matching(node.get("files", []))} for node in found.get("nodes", [])]}
         selected_node = next((node for node in found.get("nodes", [])
                               if node["name"] == machine and node["name"] != "front"), None)
@@ -5154,6 +5154,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await refresh_files(person, form.get("back", ""))
         if action == "arrange":
             return await arrange_files(person, fields)
+        if action == "clear-finished":
+            answer = await ask("POST", "/turnstile/artifacts/distributions/clear", person.key)
+            if answer.status_code != 200:
+                return go("/files?failed=1&said=" + quote(answer.json()["error"]["message"]))
+            return go("/files?said=" + quote("Finished tasks cleared."))
         if action in ("transfer", "clean-unused"):
             body = {"cleanup": True} if action == "clean-unused" else {"transfer": {
                 "rows": fields.get("selected", []), "source": form.get("source", ""),

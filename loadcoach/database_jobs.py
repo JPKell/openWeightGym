@@ -134,7 +134,7 @@ class DatabaseJobs:
         with os.fdopen(descriptor, 'a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             row = self.read(identifier)
-            row.update(changes)
+            row.update(changes, updated_at=time.time())
             self.write(identifier, 'job.json', row)
             return row
 

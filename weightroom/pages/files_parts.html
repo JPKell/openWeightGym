@@ -82,6 +82,11 @@
 {% endmacro %}
 
 {% macro distributions_table(found) %}
+{% set finished = found.distributions|selectattr('finished')|list %}
+{% if finished %}<form method="post" action="/files" class="d-flex flex-wrap align-items-center justify-content-end gap-2 mb-2">
+  <small class="text-secondary">Finished tasks leave this list a day after they end.</small>
+  <button class="btn btn-outline-secondary btn-sm" name="do" value="clear-finished" title="Remove the {{ finished|length }} finished {{ 'task' if finished|length == 1 else 'tasks' }} from this list; running tasks stay">Clear finished</button>
+</form>{% endif %}
 {% for job in found.distributions if job.kind|default('') == 'arrange' %}{{ arrangement(job) }}{% endfor %}
 {% for job in found.distributions if job.kind|default('') in ('classifier-conversion','video-conversion') %}
 {% call alert('danger' if job.state == 'failed' else 'info', class_='mb-3', role='status') %}<strong>{{ job.file }}</strong> · {{ (job.machine)|node_label }} · {{ job.state }}{% if job.progress %} · {{ job.progress }}{% endif %}{% if job.error %}<p class="mb-0">{{ job.error }}</p>{% endif %}{% if job.parity %}<p class="mb-0">Parity: {{ 'verified' if job.parity.verified else 'unverified' }}{% if job.parity.reason %} · {{ job.parity.reason }}{% else %} · agreement {{ (100 * job.parity.argmax_agreement)|round(1) }}% · mean probability difference {{ job.parity.mean_absolute_probability_delta|round(4) }}{% endif %}</p>{% endif %}{% endcall %}

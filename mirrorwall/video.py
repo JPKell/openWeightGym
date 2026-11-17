@@ -2,10 +2,10 @@
 import math
 import re
 
+from loadcoach.platform_services import VIDEO_FAMILIES as FAMILIES
 from mirrorwall import model
 from mirrorwall.requests import encoded_image
 
-FAMILIES=('wan2.1','wan2.2','ltx2','hunyuan-video-1.5','minimax-h3')
 COMPONENTS=('vae','text_encoder','high_noise_diffusion_model','audio_vae','embeddings_connectors',
             'byt5','clip_vision','latent_upscaler','tae')
 RECIPES=('wan21-t2v','wan21-i2v','wan21-flf2v','wan21-vace','wan22-ti2v-5b','wan22-t2v','wan22-i2v',
