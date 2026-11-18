@@ -23,6 +23,16 @@ comparison and viewing controls sit below the image, followed by links to the ot
 **Library** keeps the larger thumbnail grid and batch actions. **Queue** shows one compact row
 per job with status, progress and pause/stop controls below the main viewer.
 
+**Compare** shows every image of one run side by side, such as a parameter sweep or several images
+of one prompt. Choose the run under **Run**, or select **Compare** on its **Queue** row; opening
+Compare with no run chosen shows your newest sweep. The grid works as in
+[Sampler comparison](/docs/model-guides/sampler-comparison#compare-results): **Zoom** enlarges every
+image around the same point, **Lock position** holds that point still, **Image size** sets the tile
+width (this browser remembers it), and ticking the box under images then **Selected only** shows
+just those. **Filter** lists each setting the run varied, for example its seeds and steps, and
+hides every image that used an unticked value. Each image shows the values it varied under it.
+Temporary runs keep no lines, so they cannot be compared.
+
 The queue finishes all images and sweep variations in a job before starting the next job for
 that model. Jobs run in parallel only on different models that are already loaded; a job that
 needs another model loaded waits for the current job to finish. Pausing releases the model's

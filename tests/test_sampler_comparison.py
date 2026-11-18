@@ -52,10 +52,10 @@ def comparison(studio, monkeypatch):
         done = 0
         while (limit is None or done < limit) and (line := store.next_line(number)):
             body = line['body']
-            if body['sampler'] == 'lcm':
+            if body.get('sampler') == 'lcm':
                 store.keep(number, line['line'], 400, '', {'error': {'message': 'The runtime does not offer the sampler lcm.'}})
             else:
-                colour = (len(body['sampler']) * 20 % 255, len(body['scheduler']) * 30 % 255, 90)
+                colour = (len(body.get('sampler', '')) * 20 % 255, len(body.get('scheduler', '')) * 30 % 255, body['seed'] * 40 % 255)
                 front.store.save(owner, png_bytes(Image.new('RGB', (64, 64), colour)), kind='output', filename='out.png', job=number,
                                  metadata={'seed': body['seed'], 'batch_line': str(line['line']), 'settings': body})
                 store.keep(number, line['line'], 200, '', {'data': []})
@@ -163,34 +163,34 @@ def test_page_runs_a_comparison_and_zooms_every_image_to_the_same_region(compari
         assert len(body['references']) == 1 and body['request']['reference_megapixels'] == 0.1 and body['request']['strength'] == 0.75
         expect(page.locator('#sc-status')).to_contain_text('Running · 2 of 6 done · 1 failed')
         # One continuous grid in run order, with no per-scheduler sets.
-        expect(page.locator('#sc-grid > .sc-tile')).to_have_count(6)
-        expect(page.locator('.sc-tile [data-scheduler]')).to_have_text(['karras'] * 3 + ['beta'] * 3)
-        first = page.locator('.sc-tile').first
+        expect(page.locator('#sc-grid > .cg-tile')).to_have_count(6)
+        expect(page.locator('.cg-tile [data-axis=scheduler]')).to_have_text(['karras'] * 3 + ['beta'] * 3)
+        first = page.locator('.cg-tile').first
         expect(first.locator('figcaption')).to_contain_text('euler · karras')
         expect(first.locator('[data-detail]')).to_have_text('seed 1234 · 28 steps · CFG 4.5')
-        expect(page.locator('.sc-tile').nth(2)).to_have_attribute('data-state', 'failed')
-        expect(page.locator('.sc-tile').nth(2)).to_contain_text('does not offer the sampler lcm')
-        expect(page.locator('.sc-tile').nth(3)).to_have_attribute('data-state', 'running')
+        expect(page.locator('.cg-tile').nth(2)).to_have_attribute('data-state', 'failed')
+        expect(page.locator('.cg-tile').nth(2)).to_contain_text('does not offer the sampler lcm')
+        expect(page.locator('.cg-tile').nth(3)).to_have_attribute('data-state', 'running')
         run(held['number'])
         expect(page.locator('#sc-status')).to_contain_text('Comparison complete: 4 of 6 done · 2 failed', timeout=8000)
         expect(page.locator('#sc-pause')).to_be_hidden()
         # Zoom: every image shows the same region, at full resolution.
         page.locator('#sc-zoom').fill('4')
         expect(page.locator('#sc-zoom-value')).to_have_text('4×')
-        frame = page.locator('.sc-tile').nth(1).locator('.sc-frame')
+        frame = page.locator('.cg-tile').nth(1).locator('.cg-frame')
         frame.scroll_into_view_if_needed()
         box = frame.bounding_box()
         page.mouse.move(box['x'] + box['width'] * .25, box['y'] + box['height'] * .75)
-        focus = page.evaluate("['--sc-x','--sc-y'].map(name => parseFloat(getComputedStyle(document.getElementById('sc-grid')).getPropertyValue(name)))")
+        focus = page.evaluate("['--cg-x','--cg-y'].map(name => parseFloat(getComputedStyle(document.getElementById('sc-grid')).getPropertyValue(name)))")
         assert focus == [pytest.approx(25, abs=1), pytest.approx(75, abs=1)]
-        origins = page.locator('.sc-tile[data-state=done] img').evaluate_all('images => images.map(image => getComputedStyle(image).transformOrigin)')
+        origins = page.locator('.cg-tile[data-state=done] img').evaluate_all('images => images.map(image => getComputedStyle(image).transformOrigin)')
         assert len(set(origins)) == 1 and len(origins) == 4
-        assert page.locator('.sc-tile[data-state=done] img').first.get_attribute('src').endswith('/content')
+        assert page.locator('.cg-tile[data-state=done] img').first.get_attribute('src').endswith('/content')
         frame.focus(); page.keyboard.press('ArrowRight')
-        assert page.evaluate("parseFloat(getComputedStyle(document.getElementById('sc-grid')).getPropertyValue('--sc-x'))") == pytest.approx(focus[0] + 5)
+        assert page.evaluate("parseFloat(getComputedStyle(document.getElementById('sc-grid')).getPropertyValue('--cg-x'))") == pytest.approx(focus[0] + 5)
         # Lock position: the pointer no longer moves the region; a click does.
         page.locator('#sc-lock').check()
-        here = "['--sc-x','--sc-y'].map(name => parseFloat(getComputedStyle(document.getElementById('sc-grid')).getPropertyValue(name)))"
+        here = "['--cg-x','--cg-y'].map(name => parseFloat(getComputedStyle(document.getElementById('sc-grid')).getPropertyValue(name)))"
         frame.scroll_into_view_if_needed()
         box = frame.bounding_box()  # ticking the box may have scrolled the grid
         locked = page.evaluate(here)
@@ -204,7 +204,7 @@ def test_page_runs_a_comparison_and_zooms_every_image_to_the_same_region(compari
         # Image size and full-width results.
         page.locator('#sc-size').fill('400')
         expect(page.locator('#sc-size-value')).to_have_text('400 px')
-        assert page.locator('.sc-tile').first.bounding_box()['width'] >= 400 or width < 600
+        assert page.locator('.cg-tile').first.bounding_box()['width'] >= 400 or width < 600
         before = page.locator('#sc-grid').bounding_box()['width']
         page.locator('#sc-hide-settings').click()
         expect(page.locator('#sc-form')).to_be_hidden()
@@ -217,7 +217,7 @@ def test_page_runs_a_comparison_and_zooms_every_image_to_the_same_region(compari
         page.locator('#sc-hide-settings').click()
         expect(page.locator('#sc-form')).to_be_visible()
         page.locator('#sc-earlier').select_option(index=1)
-        expect(page.locator('.sc-tile')).to_have_count(6)
+        expect(page.locator('.cg-tile')).to_have_count(6)
         # Filter: hidden until asked for; lists only this run's schedulers and samplers.
         expect(page.locator('#sc-filter')).to_be_hidden()
         page.locator('#sc-filter-toggle').click()
@@ -225,35 +225,35 @@ def test_page_runs_a_comparison_and_zooms_every_image_to_the_same_region(compari
         expect(page.locator('#sc-filter-schedulers .form-check-label')).to_have_text(['karras', 'beta'])
         expect(page.locator('#sc-filter-samplers .form-check-label')).to_have_text(['euler', 'dpm++2m', 'lcm'])
         page.locator('#sc-filter-samplers input[value="lcm"]').uncheck()
-        expect(page.locator('.sc-tile:visible')).to_have_count(4)
+        expect(page.locator('.cg-tile:visible')).to_have_count(4)
         page.locator('#sc-filter-schedulers input[value="beta"]').uncheck()
-        expect(page.locator('.sc-tile:visible')).to_have_count(2)
+        expect(page.locator('.cg-tile:visible')).to_have_count(2)
         expect(page.locator('#sc-filter-count')).to_have_text('Showing 2 of 6 images')
         expect(page.locator('#sc-filter-toggle')).to_have_text('Filter · 2/6')
-        page.locator('[data-sc-filter-none="sampler"]').click()
-        expect(page.locator('.sc-tile:visible')).to_have_count(0)
+        page.locator('[data-cg-filter-none="sampler"]').click()
+        expect(page.locator('.cg-tile:visible')).to_have_count(0)
         page.locator('#sc-filter-reset').click()
-        expect(page.locator('.sc-tile:visible')).to_have_count(6)
+        expect(page.locator('.cg-tile:visible')).to_have_count(6)
         page.locator('#sc-filter-toggle').click()
         expect(page.locator('#sc-filter')).to_be_hidden()
         # Select two and show only those.
-        page.locator('.sc-tile').nth(0).locator('[data-pick]').check()
-        page.locator('.sc-tile').nth(4).locator('[data-pick]').check()
+        page.locator('.cg-tile').nth(0).locator('[data-pick]').check()
+        page.locator('.cg-tile').nth(4).locator('[data-pick]').check()
         page.locator('#sc-selected-only').check()
-        expect(page.locator('.sc-tile:visible')).to_have_count(2)
+        expect(page.locator('.cg-tile:visible')).to_have_count(2)
         # The comparison can be reopened later.
         page.reload()
         page.locator('#sc-earlier').select_option(index=1)
-        expect(page.locator('.sc-tile')).to_have_count(6)
+        expect(page.locator('.cg-tile')).to_have_count(6)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         # Delete run asks twice, then removes the run and its images; Clear all has nothing left.
         expect(page.locator('#sc-delete-run')).to_be_enabled()
         page.locator('#sc-delete-run').click()
         expect(page.locator('#sc-delete-run')).to_have_text('Delete this run and its images?')
-        expect(page.locator('.sc-tile')).to_have_count(6)
+        expect(page.locator('.cg-tile')).to_have_count(6)
         page.locator('#sc-delete-run').click()
         expect(page.locator('#sc-status')).to_have_text('Deleted the comparison and its images.')
-        expect(page.locator('.sc-tile')).to_have_count(0)
+        expect(page.locator('.cg-tile')).to_have_count(0)
         expect(page.locator('#sc-earlier option')).to_have_count(1)
         expect(page.locator('#sc-delete-run')).to_be_disabled()
         expect(page.locator('#sc-clear-runs')).to_be_disabled()

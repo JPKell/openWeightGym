@@ -404,6 +404,10 @@
         pause.title=row.status==='paused'?'Resume remaining images':'Pause after the current image';
         pause.onclick=safe(async()=>{await api('jobs/'+encodeURIComponent(row.id),{action:row.status==='paused'?'resume':'pause'});await refresh();});
         stop.onclick=safe(async()=>{await api('jobs/'+encodeURIComponent(row.id),{action:'cancel'});await refresh();});
+        const compare=fragment.querySelector('[data-compare]');  // a run of more than one saved image opens in the Compare view
+        compare.hidden=!window.SuiteComparisonGrid?.comparable(row);
+        compare.setAttribute('aria-label','Compare the images of this run');
+        compare.onclick=()=>{document.dispatchEvent(new CustomEvent('weightroom:image-compare',{detail:{id:row.id}}));setView('compare');};
         $('jobs').append(fragment);
       });
     }
@@ -436,6 +440,7 @@
       $('temporary-wrap').hidden = !state.can_unlogged;
       state.references.forEach(row => { if (row.width) sizes[row.id] = {width: row.width, height: row.height}; });
       renderPresets(); renderGallery(); renderJobs(); renderReferences(); update();
+      document.dispatchEvent(new CustomEvent('weightroom:image-jobs',{detail:{jobs:state.jobs}}));
     } catch (error) { refreshProblem = true; message(error.message); } finally { polling = false; }
   }
   function dialog(title, content) { $('dialog-title').textContent = title; $('dialog-content').replaceChildren(content); $('dialog').showModal(); }
@@ -506,6 +511,7 @@
     for(const button of all('[data-mw-view]')){const active=button.dataset.mwView===view;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));}
     if(view==='gallery')selectImage(selected);
     if(galleryChanged)root.scrollIntoView({block:'start'});
+    document.dispatchEvent(new CustomEvent('weightroom:image-view',{detail:{view}}));
   }
   function setTool(tool) {
     const mode=tool==='resize'?'resize':'generate';
@@ -680,6 +686,7 @@
     if(!root.isConnected||$('dialog').open||document.querySelector('dialog[open]'))return;
     if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();setView('generate');$('form').requestSubmit();return;}
     if(event.ctrlKey||event.metaKey||event.altKey||event.shiftKey)return;
+    if(root.dataset.view==='compare')return;  // the comparison grid has its own keys: arrows move the shared zoom
     if(event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable=false]),summary'))return;
     if(event.target.closest('button,a')&&!event.target.closest('.ig-viewer,.mw-thumb,[data-mw-view]'))return;
     const gallery=root.dataset.view==='gallery';

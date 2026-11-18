@@ -52,6 +52,7 @@ and the rest of the run continues.
   as it can.
 - **Hide settings** gives the results the full page width. **Show settings** brings them back
   unchanged. This browser remembers both choices.
+- The same grid compares any run of more than one image under **Image generation → Compare**.
 - **Earlier comparisons** reopens a previous run, including one that is still running.
 - **Delete run** deletes the chosen run and the images it made. **Clear all** does the same for
   every finished comparison. Both ask you to select the button a second time. Stop a running

@@ -1,7 +1,7 @@
 /* Sampler comparison (Models → Sampler comparison). One prompt runs through every chosen scheduler × sampler as one
    ordinary image job (/mirrorwall-api/jobs with a sampler/scheduler sweep); results are read per line from
    /mirrorwall-api/jobs/<id>/lines into one continuous grid. Models that take reference images get them on every line.
-   The viewer's zoom applies one focus point to every image, so each shows the same region. */
+   The results use the shared comparison grid (comparison-grid.js): one zoom for every image, size, selection and filter. */
 (() => {
   'use strict';
   const root = document.getElementById('samplers');
@@ -9,7 +9,8 @@
   const $ = id => document.getElementById('sc-' + id), P = window.SuiteImageProfiles;
   const limit = Number(root.dataset.limit) || 512;
   let runs = new Map();  // earlier comparison id -> status
-  let models = [], saved = [], references = [], job = null, timer = null, tiles = new Map(), focus = {x: 50, y: 50}, zoom = 1;
+  let models = [], saved = [], references = [], job = null, timer = null;
+  const grid = window.SuiteComparisonGrid.create({prefix: 'sc', store: 'sampler-comparison'});
   const drafts = new Map();  // per model: the form and its reference images as you left them, in page memory
   const sizes = {};  // reference asset id -> {width, height}
 
@@ -164,7 +165,7 @@
   async function open(identifier, settings = null) {
     clearTimeout(timer);
     job = {id: identifier, status: 'in_progress', settings};
-    tiles = new Map(); $('grid').replaceChildren(); resetFilter();
+    grid.reset(['scheduler', 'sampler'], ['sampler', 'scheduler']);  // filter by scheduler then sampler; captions name the sampler first
     $('earlier').value = identifier;
     await refresh();
   }
@@ -178,7 +179,7 @@
     if (runs.has(job.id)) runs.set(job.id, found.status); else if (!running(found.status)) reloadRuns();
     runButtons();
     let next = found.lines.find(line => line.state === 'waiting');
-    for (const line of found.lines) draw(line, running(found.status) && found.status !== 'paused' && line === next, found.progress);
+    for (const line of found.lines) grid.line(line, {active: running(found.status) && found.status !== 'paused' && line === next, progress: found.progress});
     const done = found.lines.filter(line => line.state === 'done').length, failed = found.lines.filter(line => line.state === 'failed').length;
     const summary = `${done} of ${found.lines.length} done` + (failed ? ` · ${failed} failed` : '');
     $('pause').hidden = $('stop').hidden = !running(found.status);
@@ -192,99 +193,12 @@
     count();
   }
 
-  function draw(line, active, progress) {
-    let tile = tiles.get(line.line);
-    if (!tile) {  // one continuous grid, in run order: each scheduler's samplers follow the previous scheduler's
-      tile = document.getElementById('sc-tile-template').content.firstElementChild.cloneNode(true);
-      tile.dataset.line = line.line;
-      tile.dataset.samplerValue = line.sampler; tile.dataset.schedulerValue = line.scheduler;
-      offer('scheduler', line.scheduler); offer('sampler', line.sampler);
-      tile.querySelector('[data-sampler]').textContent = line.sampler;
-      tile.querySelector('[data-scheduler]').textContent = line.scheduler;
-      tile.querySelector('[data-pick]').setAttribute('aria-label', `Select ${line.sampler} with ${line.scheduler}`);
-      $('grid').append(tile);
-      tiles.set(line.line, tile);
-    }
-    const state = line.state === 'waiting' && active ? 'running' : line.state;
-    tile.dataset.state = state;
-    const frame = tile.querySelector('.sc-frame'), image = tile.querySelector('img'), placeholder = tile.querySelector('[data-placeholder]');
-    frame.setAttribute('aria-label', `${line.sampler} with ${line.scheduler}` + (state === 'failed' ? ', failed' : state === 'done' ? '' : ', not finished'));
-    tile.querySelector('[data-detail]').textContent = `seed ${line.seed ?? '—'} · ${line.steps} steps` + (line.cfg_scale !== undefined && line.cfg_scale !== null ? ` · CFG ${line.cfg_scale}` : '');
-    if (line.state === 'done' && image.dataset.asset !== line.asset_id) {
-      image.dataset.asset = line.asset_id;
-      image.dataset.thumbnail = '/mirrorwall-api/assets/' + encodeURIComponent(line.asset_id) + '/thumbnail';
-      image.dataset.full = '/mirrorwall-api/assets/' + encodeURIComponent(line.asset_id) + '/content';
-      image.src = zoom > 1 ? image.dataset.full : image.dataset.thumbnail;
-      image.alt = `${line.sampler} with ${line.scheduler}, seed ${line.seed}`;
-      image.hidden = false; placeholder.hidden = true;
-      if (line.width && line.height) $('grid').style.setProperty('--sc-aspect', line.width + ' / ' + line.height);
-    } else if (line.state !== 'done') {
-      placeholder.hidden = false;
-      placeholder.textContent = state === 'failed' ? (line.error || 'Failed') : state === 'running' ? (progress?.stage === 'queued' ? 'Waiting for the GPU' : 'Generating' + (progress?.step ? ` · step ${progress.step}` : '')) : 'Waiting';
-    }
-    filter();
-  }
-
-  /** One focus point and zoom for every image: the same region of each, side by side. */
-  function setZoom(value) {
-    zoom = Math.min(8, Math.max(1, value));
-    $('zoom').value = zoom; $('zoom-value').textContent = zoom + '×';
-    $('grid').style.setProperty('--sc-zoom', zoom);
-    for (const image of $('grid').querySelectorAll('img[data-full]')) {
-      const wanted = zoom > 1 ? image.dataset.full : image.dataset.thumbnail;
-      if (image.getAttribute('src') !== wanted) image.src = wanted;
-    }
-  }
-  function setFocus(x, y) {
-    focus = {x: Math.min(100, Math.max(0, x)), y: Math.min(100, Math.max(0, y))};
-    $('grid').style.setProperty('--sc-x', focus.x + '%'); $('grid').style.setProperty('--sc-y', focus.y + '%');
-  }
-  /** Image size: the smallest tile width; the grid fits as many per row as it can. */
-  function setSize(pixels) {
-    $('size').value = pixels; $('size-value').textContent = pixels + ' px';
-    $('grid').style.setProperty('--sc-tile', pixels + 'px');
-    keep('size', pixels);
-  }
   /** Hide settings gives the results the whole width; the settings and their drafts stay as they were. */
   function setWide(wide) {
     $('form').hidden = wide; $('layout').toggleAttribute('data-wide', wide);
     $('hide-settings').textContent = wide ? 'Show settings' : 'Hide settings';
     $('hide-settings').setAttribute('aria-pressed', String(wide));
-    keep('wide', wide);
-  }
-  // Viewer layout is a per-browser convenience; the page works the same without storage.
-  function keep(key, value) { try { localStorage.setItem('sampler-comparison:' + key, JSON.stringify(value)); } catch {} }
-  function kept(key) { try { return JSON.parse(localStorage.getItem('sampler-comparison:' + key)); } catch { return null; } }
-  /** Filter: the run's own schedulers and samplers, each showing or hiding every image that used it. */
-  function offer(kind, value) {
-    const list = $(`filter-${kind}s`);
-    if ([...list.querySelectorAll('input')].some(input => input.value === value)) return;
-    const choice = document.getElementById('sc-filter-template').content.firstElementChild.cloneNode(true);
-    const input = choice.querySelector('input'); input.name = 'filter-' + kind; input.value = value;
-    choice.querySelector('.form-check-label').textContent = value;
-    list.append(choice);
-    $('filter-toggle').disabled = false;
-  }
-  const shown = kind => new Set([...$(`filter-${kind}s`).querySelectorAll('input:checked')].map(input => input.value));
-  function resetFilter() {
-    $('filter-schedulers').replaceChildren(); $('filter-samplers').replaceChildren();
-    $('filter-toggle').disabled = true; showFilter(false); $('filter-count').textContent = '';
-  }
-  function showFilter(open) {
-    $('filter').hidden = !open;
-    $('filter-toggle').setAttribute('aria-expanded', String(open));
-    $('filter-toggle').classList.toggle('active', open);
-  }
-  function filter() {
-    const only = $('selected-only').checked, schedulers = shown('scheduler'), samplers = shown('sampler');
-    let visible = 0;
-    for (const tile of tiles.values()) {
-      tile.hidden = (only && !tile.hasAttribute('data-picked')) || !schedulers.has(tile.dataset.schedulerValue) || !samplers.has(tile.dataset.samplerValue);
-      if (!tile.hidden) visible++;
-    }
-    $('filter-count').textContent = tiles.size ? `Showing ${visible} of ${tiles.size} image${tiles.size === 1 ? '' : 's'}` : '';
-    const narrowed = visible < tiles.size && !only;
-    $('filter-toggle').textContent = narrowed ? `Filter · ${visible}/${tiles.size}` : 'Filter';
+    grid.keep('wide', wide);
   }
 
   async function control(action) {
@@ -317,7 +231,7 @@
   }
   function closeRun(identifiers) {
     if (!job || !identifiers.includes(job.id)) return;
-    clearTimeout(timer); job = null; tiles = new Map(); $('grid').replaceChildren(); resetFilter(); count();
+    clearTimeout(timer); job = null; grid.reset(); count();
   }
   async function deleteRun() {
     const identifier = $('earlier').value; if (!identifier) return;
@@ -363,52 +277,12 @@
     $('clear-runs').addEventListener('click', clearRuns);
     $('pause').addEventListener('click', () => control(job?.status === 'paused' ? 'resume' : 'pause'));
     $('stop').addEventListener('click', () => control('cancel'));
-    $('zoom').addEventListener('input', () => setZoom(Number($('zoom').value)));
-    $('size').addEventListener('input', () => setSize(Number($('size').value)));
     $('hide-settings').addEventListener('click', () => setWide($('form').hidden === false));
-    $('selected-only').addEventListener('change', filter);
-    $('filter-toggle').addEventListener('click', () => showFilter($('filter').hidden));
-    $('filter').addEventListener('change', filter);
-    $('filter-reset').addEventListener('click', () => { $('filter').querySelectorAll('input').forEach(input => { input.checked = true; }); filter(); });
-    root.querySelectorAll('[data-sc-filter-all],[data-sc-filter-none]').forEach(button => button.addEventListener('click', () => {
-      const kind = button.dataset.scFilterAll || button.dataset.scFilterNone;
-      $(`filter-${kind}s`).querySelectorAll('input').forEach(input => { input.checked = Boolean(button.dataset.scFilterAll); });
-      filter();
-    }));
-    const grid = $('grid');
-    // The pointer moves the shared focus unless Lock position is on; then only a click (or the arrow keys) moves it.
-    const point = event => {
-      const frame = event.target.closest('.sc-frame'); if (!frame || zoom <= 1) return;
-      const box = frame.getBoundingClientRect();
-      setFocus((event.clientX - box.left) / box.width * 100, (event.clientY - box.top) / box.height * 100);
-    };
-    grid.addEventListener('pointermove', event => { if (!$('lock').checked) point(event); });
-    grid.addEventListener('click', event => { if ($('lock').checked) point(event); });
-    $('lock').addEventListener('change', () => { $('grid').dataset.locked = String($('lock').checked); });
-    grid.addEventListener('wheel', event => {
-      if (!event.target.closest('.sc-frame') || !event.ctrlKey) return;  // Ctrl + wheel zooms; plain scrolling still scrolls
-      event.preventDefault(); setZoom(zoom + (event.deltaY < 0 ? .5 : -.5));
-    }, {passive: false});
-    grid.addEventListener('keydown', event => {
-      if (!event.target.classList.contains('sc-frame')) return;
-      const moves = {ArrowLeft: [-5, 0], ArrowRight: [5, 0], ArrowUp: [0, -5], ArrowDown: [0, 5]};
-      if (moves[event.key]) { event.preventDefault(); if (zoom === 1) setZoom(2); setFocus(focus.x + moves[event.key][0], focus.y + moves[event.key][1]); }
-      else if (event.key === '+' || event.key === '=') { event.preventDefault(); setZoom(zoom + .5); }
-      else if (event.key === '-') { event.preventDefault(); setZoom(zoom - .5); }
-      else if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); const pick = event.target.closest('.sc-tile').querySelector('[data-pick]'); pick.click(); }
-    });
-    grid.addEventListener('change', event => {
-      if (!event.target.matches('[data-pick]')) return;
-      event.target.closest('.sc-tile').toggleAttribute('data-picked', event.target.checked);
-      filter();
-    });
   }
 
   async function start() {
     wire();
-    const size = Number(kept('size'));
-    setSize(size >= 80 && size <= 800 ? size : 180);
-    setWide(kept('wide') === true);
+    setWide(grid.kept('wide') === true);
     $('seed').value = randomSeed();
     try {
       const state = await api('state');

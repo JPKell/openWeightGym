@@ -1,0 +1,34 @@
+{# Image comparison grid shared by Sampler comparison and the Image generation Compare view: one zoom and focus point
+   for every image, an image-size slider, Lock position, Selected only and a filter over the values a run varied.
+   Behaviour in comparison-grid.js (SuiteComparisonGrid); layout in comparison.css. `prefix` names every ID. #}
+{% from 'parts.html' import card %}
+
+{% macro comparison_tools(prefix, hide_settings='') -%}
+<div class="cg-tools">
+<label class="form-label mb-0 small" for="{{ prefix }}-zoom">Zoom <output id="{{ prefix }}-zoom-value" for="{{ prefix }}-zoom">1×</output></label>
+<input id="{{ prefix }}-zoom" type="range" class="form-range cg-zoom" min="1" max="8" step="0.5" value="1">
+<label class="form-check form-check-inline mb-0 small" title="Keep the zoomed region still while the pointer moves; click an image to move it"><input class="form-check-input" type="checkbox" id="{{ prefix }}-lock"><span class="form-check-label">Lock position</span></label>
+<label class="form-check form-check-inline mb-0 small"><input class="form-check-input" type="checkbox" id="{{ prefix }}-selected-only"><span class="form-check-label">Selected only</span></label>
+<button type="button" class="btn btn-sm btn-outline-secondary" id="{{ prefix }}-filter-toggle" aria-expanded="false" aria-controls="{{ prefix }}-filter" disabled>Filter</button>
+<label class="form-label mb-0 small" for="{{ prefix }}-size">Image size <output id="{{ prefix }}-size-value" for="{{ prefix }}-size">180 px</output></label>
+<input id="{{ prefix }}-size" type="range" class="form-range cg-size" min="80" max="800" step="10" value="180">
+{% if hide_settings %}<button type="button" class="btn btn-sm btn-outline-secondary" id="{{ prefix }}-hide-settings" aria-controls="{{ hide_settings }}" aria-pressed="false">Hide settings</button>{% endif %}
+</div>
+{%- endmacro %}
+
+{# The viewer card: help, the filter (one group per varied setting, built by the script) and the grid. #}
+{% macro comparison_viewer(prefix, title='Results', help='', hide_settings='', class_='', before='') %}
+{% call card(title, class_=('cg-viewer ' ~ class_)|trim, actions=comparison_tools(prefix, hide_settings), header_id=prefix ~ '-viewer-title', attrs={'aria-labelledby': prefix ~ '-viewer-title'}) %}
+{{ before }}
+<p class="small text-secondary" id="{{ prefix }}-viewer-help">{{ help }} With zoom above 1×, point at any image, or focus one and use the arrow keys: every image shows the same region. Lock position keeps that region still; click an image to move it. Tick the box under an image to select it, then Selected only shows just those.</p>
+<div id="{{ prefix }}-filter" class="cg-filter" hidden>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><span class="small text-secondary" id="{{ prefix }}-filter-count" aria-live="polite"></span><button type="button" class="btn btn-sm btn-link px-0" id="{{ prefix }}-filter-reset">Show all</button></div>
+<div id="{{ prefix }}-filter-groups"></div>
+</div>
+<div id="{{ prefix }}-grid" class="cg-grid" aria-live="off"></div>
+{% endcall %}
+<template id="{{ prefix }}-filter-group-template"><fieldset class="cg-filter-group"><legend class="small fw-semibold mb-1 d-flex align-items-center gap-2"><span data-title></span> <button type="button" class="btn btn-sm btn-link p-0" data-cg-filter-all>All</button><button type="button" class="btn btn-sm btn-link p-0" data-cg-filter-none>None</button></legend><div class="cg-choices" data-choices></div></fieldset></template>
+<template id="{{ prefix }}-filter-template"><label class="form-check cg-choice"><input class="form-check-input" type="checkbox" checked><span class="form-check-label"></span></label></template>
+<template id="{{ prefix }}-tile-template"><figure class="cg-tile" data-state="waiting"><div class="cg-frame" tabindex="0" role="img"><img alt="" hidden draggable="false"><span class="cg-placeholder" data-placeholder>Waiting</span></div>
+<figcaption><label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-pick><span class="form-check-label" data-caption></span></label><span class="small text-secondary d-block" data-detail></span></figcaption></figure></template>
+{% endmacro %}

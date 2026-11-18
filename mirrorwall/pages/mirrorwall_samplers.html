@@ -1,14 +1,17 @@
 {% extends "frame.html" %}
 {% from 'parts.html' import page_header, alert, card, form_section, form_actions, confirm_two %}
 {% from 'generation_design_parts.html' import reference_row %}
+{% from 'comparison_parts.html' import comparison_viewer %}
 {# Sampler comparison: one prompt through every chosen scheduler × sampler, as one ordinary image job; results in a
    grid with a zoom that shows the same region of every image. Behaviour in samplers.js; layout in samplers.css. #}
 {% block title %}Sampler comparison · Models · openWeightGym{% endblock %}
 {% block scripts %}
 <link rel="stylesheet" href="/static/generation.css?v=2">
-<link rel="stylesheet" href="/mirrorwall-static/samplers.css?v=6">
+<link rel="stylesheet" href="/static/comparison.css?v=1">
+<link rel="stylesheet" href="/mirrorwall-static/samplers.css?v=7">
 <script src="/mirrorwall-static/image-profiles.js?v=2" defer></script>
-<script src="/mirrorwall-static/samplers.js?v=6" defer></script>
+<script src="/static/comparison-grid.js?v=1" defer></script>
+<script src="/mirrorwall-static/samplers.js?v=7" defer></script>
 {% endblock %}
 {% block main %}
 <div id="samplers" data-samplers="{{ samplers|join(',') }}" data-schedulers="{{ schedulers|join(',') }}" data-limit="{{ limit }}">
@@ -71,31 +74,8 @@
 {% endcall %}
 {% endcall %}
 </form>
-{% set viewer_tools %}<div class="sc-tools">
-<label class="form-label mb-0 small" for="sc-zoom">Zoom <output id="sc-zoom-value" for="sc-zoom">1×</output></label>
-<input id="sc-zoom" type="range" class="form-range sc-zoom" min="1" max="8" step="0.5" value="1">
-<label class="form-check form-check-inline mb-0 small" title="Keep the zoomed region still while the pointer moves; click an image to move it"><input class="form-check-input" type="checkbox" id="sc-lock"><span class="form-check-label">Lock position</span></label>
-<label class="form-check form-check-inline mb-0 small"><input class="form-check-input" type="checkbox" id="sc-selected-only"><span class="form-check-label">Selected only</span></label>
-<button type="button" class="btn btn-sm btn-outline-secondary" id="sc-filter-toggle" aria-expanded="false" aria-controls="sc-filter" disabled>Filter</button>
-<label class="form-label mb-0 small" for="sc-size">Image size <output id="sc-size-value" for="sc-size">180 px</output></label>
-<input id="sc-size" type="range" class="form-range sc-size" min="80" max="800" step="10" value="180">
-<button type="button" class="btn btn-sm btn-outline-secondary" id="sc-hide-settings" aria-controls="sc-form" aria-pressed="false">Hide settings</button>
-</div>{% endset %}
-{% call card('Results', class_='sc-viewer', actions=viewer_tools, header_id='sc-viewer-title', attrs={'aria-labelledby': 'sc-viewer-title'}) %}
-<p class="small text-secondary" id="sc-viewer-help">Run a comparison or open an earlier one. With zoom above 1×, point at any image, or focus one and use the arrow keys: every image shows the same region. Lock position keeps that region still; click an image to move it. Tick the box under an image to select it for side-by-side comparison.</p>
-<div id="sc-filter" class="sc-filter" hidden>
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><span class="small text-secondary" id="sc-filter-count" aria-live="polite"></span><button type="button" class="btn btn-sm btn-link px-0" id="sc-filter-reset">Show all</button></div>
-{% for kind, title in (('scheduler', 'Schedulers'), ('sampler', 'Samplers')) %}
-<fieldset class="sc-filter-group"><legend class="small fw-semibold mb-1 d-flex align-items-center gap-2">{{ title }} in this run <button type="button" class="btn btn-sm btn-link p-0" data-sc-filter-all="{{ kind }}">All</button><button type="button" class="btn btn-sm btn-link p-0" data-sc-filter-none="{{ kind }}">None</button></legend>
-<div class="sc-choices" id="sc-filter-{{ kind }}s"></div></fieldset>
-{% endfor %}
-</div>
-<div id="sc-grid" class="sc-grid" aria-live="off"></div>
-{% endcall %}
+{{ comparison_viewer('sc', help='Run a comparison or open an earlier one.', hide_settings='sc-form', class_='sc-viewer') }}
 </div>
 </div>
 <template id="sc-reference-template">{{ reference_row() }}</template>
-<template id="sc-filter-template"><label class="form-check sc-choice"><input class="form-check-input" type="checkbox" checked><span class="form-check-label"></span></label></template>
-<template id="sc-tile-template"><figure class="sc-tile" data-state="waiting"><div class="sc-frame" tabindex="0" role="img"><img alt="" hidden draggable="false"><span class="sc-placeholder" data-placeholder>Waiting</span></div>
-<figcaption><label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-pick><span class="form-check-label"><strong data-sampler></strong> · <span data-scheduler></span></span></label><span class="small text-secondary d-block" data-detail></span></figcaption></figure></template>
 {% endblock %}
