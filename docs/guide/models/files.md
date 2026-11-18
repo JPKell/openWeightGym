@@ -24,6 +24,8 @@ See [Video models](/docs/model-guides/video-models) for component requirements a
 
 ## Limits and troubleshooting
 
+Every folder in the models and storage roots is a location: the standard `llm`, `adapters`, `projectors`, `image`, `audio`, `encoders` and `classifier`, plus any other folder already there, such as `video`. `video` is searched as deeply as `image`, and its files are read as image and video components. A folder added to a node's root appears after that node restarts; on the control node it appears on the next Refresh. Only recognised model formats are listed, so a folder holding other data shows as an empty location.
+
 Downloads arrive in storage; active cache copies are promoted for use. A move preserves sources until destination copies succeed, and storage originals stay protected. **Clean unused copies** removes only eligible cache/compute copies backed by storage. Cleanup refuses unavailable usage evidence rather than guessing that a file is unused. A shared cache/storage directory has no separate cache to clear.
 
 Deletion is permanent and requires the current unused-file checks. Check the selected copy and all node usage before confirming it. Metadata is evidence read from the file, not a guarantee that its configuration will load.

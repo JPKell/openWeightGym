@@ -26,7 +26,7 @@ def image_asset(path):
     file = Path(path)
     if 'classifier' in file.parts:
         return False
-    return tokenizer_asset(file) or file.suffix.lower() in ('.safetensors', '.pth') or 'image' in file.parts or ('encoders' in file.parts and _image_encoder(file))
+    return tokenizer_asset(file) or file.suffix.lower() in ('.safetensors', '.pth') or 'image' in file.parts or 'video' in file.parts or ('encoders' in file.parts and _image_encoder(file))
 
 
 def _image_encoder(file):

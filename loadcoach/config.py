@@ -226,20 +226,35 @@ def config_from(path: Path, data: dict, file: dict) -> Config:
     return checked(config, path)
 
 
+MODEL_FOLDERS = ("llm", "adapters", "projectors", "image", "audio", "encoders", "classifier")
+
+
+def root_folders(root: Path) -> tuple[str, ...]:
+    """The standard model folders under a root, then every other folder already in it, such as video."""
+    try:
+        found = sorted(entry.name for entry in root.iterdir() if entry.is_dir() and not entry.name.startswith(".")
+                       and entry.name not in MODEL_FOLDERS and entry.name != "lost+found")
+    except OSError:
+        found = []
+    return MODEL_FOLDERS + tuple(found)
+
+
 def model_places(models_folder, places, models_storage_folder="") -> dict[str, str]:
-    """The active-cache destinations, plus an optional complete storage library."""
+    """The active-cache destinations, plus an optional complete storage library.
+
+    Each root holds the standard folders, and every other folder already in it is a place too."""
     if models_storage_folder and (not isinstance(models_storage_folder, str) or not models_storage_folder.startswith("/")):
         raise ValueError("models_storage_folder must be a full path")
     if models_folder:
         if not isinstance(models_folder, str) or not models_folder.startswith("/"):
             raise ValueError("models_folder must be a full path")
         root = Path(models_folder)
-        made = {name: str(root / name) for name in ("llm", "adapters", "projectors", "image", "audio", "encoders", "classifier")}
+        made = {name: str(root / name) for name in root_folders(root)}
     else:
         made = dict(places)
     if models_storage_folder:
         root = Path(models_storage_folder)
-        made.update({f"storage_{name}": str(root / name) for name in ("llm", "adapters", "projectors", "image", "audio", "encoders", "classifier")})
+        made.update({f"storage_{name}": str(root / name) for name in root_folders(root)})
     return made
 
 

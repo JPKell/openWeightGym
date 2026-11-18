@@ -70,7 +70,7 @@ from loadcoach.capture import answer_text, request_text, said_wrong
 from loadcoach.config import NO_STORAGE, Config, checked, data_folder, read_settings, shared_places, storage_places
 from loadcoach.setting_catalog import changeable_for, retired_for, validate_patch
 from loadcoach.settings import CHANGEABLE, NOW, Changes, front_programs, program_name, said
-from loadcoach.files import SPARE, carry, model_files_in, room, sha256_of
+from loadcoach.files import NESTED_DEPTH, NESTED_PLACES, SPARE, carry, model_files_in, room, sha256_of
 from loadcoach.file_index import NODE_INDEX, FileIndex, tier_of
 from loadcoach.gguf import facts, goes_with, read_metadata
 from loadcoach.log import Log, token_counts
@@ -1447,7 +1447,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     def place_of(path: str) -> str | None:
         """The name of the place a file is in: its own folder, or the folder above that. None if it is in neither."""
         target=Path(path).resolve()
-        return next((name for name, folder in places().items() if Path(folder).resolve() in list(target.parents)[:6 if Path(folder).name in ('image', 'audio', 'classifier') else 2]), None)
+        return next((name for name, folder in places().items() if Path(folder).resolve() in list(target.parents)[:NESTED_DEPTH if Path(folder).name in NESTED_PLACES else 2]), None)
 
     def said_by(path: str) -> dict:
         """What a .gguf file says about itself, read once and remembered until the file changes."""

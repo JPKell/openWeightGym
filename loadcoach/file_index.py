@@ -26,7 +26,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from loadcoach.files import model_files_in
+from loadcoach.files import NESTED_DEPTH, NESTED_PLACES, model_files_in
 
 VERSION = 1
 NODE_INDEX = "files-index.json"  # LoadCoach's data folder, on each node
@@ -79,7 +79,7 @@ def listed_in(folder: Path, path: Path) -> bool:
         depth = len(path.resolve().relative_to(folder.resolve()).parts)
     except ValueError:
         return False
-    maximum = 2 if folder.name == 'classifier' and path.suffix.lower() == '.gguf' else 6 if folder.name in ('image', 'audio', 'encoders', 'classifier') else 2
+    maximum = 2 if folder.name == 'classifier' and path.suffix.lower() == '.gguf' else NESTED_DEPTH if folder.name in NESTED_PLACES else 2
     return supported(path) and depth <= maximum
 
 

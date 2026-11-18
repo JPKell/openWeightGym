@@ -15,6 +15,9 @@ from pathlib import Path
 
 SPARE = 2**30  # a file is only carried to a drive that will still have this much free afterwards
 PIECE = 16 * 2**20  # how much is copied at a time, and so how often the progress moves on
+# Places whose models are bundles of nested component folders, looked through this many folders deep.
+NESTED_PLACES = ('image', 'video', 'audio', 'encoders', 'classifier')
+NESTED_DEPTH = 6
 
 
 def model_files_in(folder: str) -> list[Path]:
@@ -24,8 +27,8 @@ def model_files_in(folder: str) -> list[Path]:
     if root.name == 'classifier':
         return sorted(file for file in root.rglob('*') if file.is_file() and not file.is_symlink() and supported(file)
                       and len(file.relative_to(root).parts) <= (2 if file.suffix.lower() == '.gguf' else 6))
-    if root.name in ('image', 'audio', 'encoders', 'classifier'):
-        return sorted(file for file in root.rglob('*') if file.is_file() and not file.is_symlink() and supported(file) and len(file.relative_to(root).parts)<=6)
+    if root.name in NESTED_PLACES:
+        return sorted(file for file in root.rglob('*') if file.is_file() and not file.is_symlink() and supported(file) and len(file.relative_to(root).parts)<=NESTED_DEPTH)
     return sorted(file for pattern in ('*','*/*') for file in root.glob(pattern) if file.is_file() and not file.is_symlink() and supported(file))
 
 

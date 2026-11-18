@@ -710,7 +710,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None) -> St
             return error(400, "place, relative, size and sha256 are required.")
         parts = Path(relative).parts if isinstance(relative, str) else ()
         from mirrorwall.assets import supported
-        depth = 6 if place in settings.places and Path(settings.places[place]).name in ("image", "audio", "encoders") else 2
+        from loadcoach.files import NESTED_DEPTH, NESTED_PLACES
+        depth = NESTED_DEPTH if place in settings.places and Path(settings.places[place]).name in NESTED_PLACES else 2
         if (place not in settings.places or not 1 <= len(parts) <= depth or Path(relative).is_absolute()
                 or any(part in ("", ".", "..") for part in parts) or not supported(str(Path(settings.places.get(place, "/")) / relative))):
             return error(400, "The destination must be a supported model file inside a configured place.")

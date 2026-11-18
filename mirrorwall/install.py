@@ -124,7 +124,7 @@ class VideoConversions(ClassifierJobs):
         from mirrorwall.components import identify
         from loadcoach.host_memory import memory_snapshot
         source=Path(path).resolve()
-        roots=[Path(folder).resolve() for folder in self.places().values() if folder and Path(folder).name=='image']
+        roots=[Path(folder).resolve() for folder in self.places().values() if folder and Path(folder).name in ('image','video')]
         if not any(source.is_relative_to(root) for root in roots) or source.suffix.lower()!='.safetensors' or not source.is_file():
             raise ValueError('Choose a safetensors file inside this node’s image/video component library.')
         detected=await __import__('asyncio').to_thread(identify,str(source),roots)

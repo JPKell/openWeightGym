@@ -309,18 +309,37 @@ def test_gpu_ram_offload_policy_is_explicit_in_server_environment():
 def test_models_folder_defines_standard_image_and_audio_places():
     assert model_places('/srv/models', {'old': '/elsewhere'}) == {
         'llm': '/srv/models/llm', 'adapters': '/srv/models/adapters',
-        'projectors': '/srv/models/projectors', 'image': '/srv/models/image', 'audio': '/srv/models/audio', 'encoders':'/srv/models/encoders'}
+        'projectors': '/srv/models/projectors', 'image': '/srv/models/image', 'audio': '/srv/models/audio', 'encoders':'/srv/models/encoders',
+        'classifier': '/srv/models/classifier'}
     assert model_places('', {'fast': '/models'}) == {'fast': '/models'}
     assert model_places('/srv/cache', {}, '/mnt/library') == {
         'llm': '/srv/cache/llm', 'adapters': '/srv/cache/adapters', 'projectors': '/srv/cache/projectors',
         'storage_llm': '/mnt/library/llm', 'storage_adapters': '/mnt/library/adapters',
         'storage_projectors': '/mnt/library/projectors', 'image': '/srv/cache/image', 'storage_image': '/mnt/library/image',
         'audio': '/srv/cache/audio', 'storage_audio': '/mnt/library/audio',
-        'encoders':'/srv/cache/encoders','storage_encoders':'/mnt/library/encoders'}
+        'encoders':'/srv/cache/encoders','storage_encoders':'/mnt/library/encoders',
+        'classifier': '/srv/cache/classifier', 'storage_classifier': '/mnt/library/classifier'}
     with pytest.raises(ValueError, match='full path'):
         model_places('relative/models', {})
     with pytest.raises(ValueError, match='full path'):
         model_places('/srv/cache', {}, 'relative/library')
+
+
+def test_every_folder_in_a_models_root_is_a_place(tmp_path):
+    from loadcoach.files import model_files_in
+    cache, storage = tmp_path / 'cache', tmp_path / 'storage'
+    for folder in (cache / 'video', storage / 'video' / 'wan', storage / 'voice', storage / '.hidden'):
+        folder.mkdir(parents=True)
+    (storage / 'video' / 'wan' / 'transformer' ).mkdir()
+    (storage / 'video' / 'wan' / 'transformer' / 'model.safetensors').write_bytes(b'x')
+    (storage / 'video' / 'ltx.safetensors').write_bytes(b'x')
+    places = model_places(str(cache), {}, str(storage))
+    assert places['video'] == str(cache / 'video') and places['storage_video'] == str(storage / 'video')
+    assert places['storage_voice'] == str(storage / 'voice') and 'voice' not in places
+    assert not any('hidden' in name for name in places)
+    assert list(places)[:7] == ['llm', 'adapters', 'projectors', 'image', 'audio', 'encoders', 'classifier']
+    assert [file.relative_to(storage / 'video').as_posix() for file in model_files_in(places['storage_video'])] == [
+        'ltx.safetensors', 'wan/transformer/model.safetensors']
 
 
 def test_cpu_process_ram_and_inventory_are_real(fake_llama_server):
