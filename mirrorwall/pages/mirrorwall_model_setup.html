@@ -20,6 +20,7 @@
 {% endcall %}
 {% call form_section('Hardware', 'This node') %}
 {{ hardware('mw', legacy='image') }}
+<div id="mw-alone-why" class="col-12 form-hint" hidden></div>
 <div class="col-12" data-image-split><label for="mw-split" class="form-label">Split strategy</label><select id="mw-split" name="split_mode" class="form-select"><option value="single">One GPU</option><option value="components">Separate components</option><option value="layer">Diffusion layers</option><option value="row">Diffusion rows</option></select><div class="form-hint">Multiple GPUs require a matching split strategy.</div></div>
 {{ number('mw-ram', 'Host RAM cap', 'MiB', 2048, 131072, 8192, required=true) }}
 {{ number('mw-threads', 'CPU threads', '', 1, 32, 4, required=true) }}

@@ -71,7 +71,8 @@ An SDXL model entry can load an optional **ControlNet** so image workflows can g
 with a control image. Choose the ControlNet file in the component checklist; it must be an SDXL
 ControlNet (an SD 1.x one is refused), in the original or diffusers layout. The checklist offers
 `diffusers/controlnet-canny-sdxl-1.0` for edge guidance. A ControlNet stays loaded beside the model
-and adds its weights to the memory used, so only an exclusive entry (**Keep GPUs to itself**) may have one.
+and adds its weights to the memory used, so only an exclusive entry (**Keep GPUs to itself**) may have one. Choosing a ControlNet turns
+**Keep GPUs to itself** on and locks it until the ControlNet is cleared.
 Make a separate exclusive entry for the same checkpoint when you also want a shared one. An entry
 loads one ControlNet, so match the workflow's control kind to it: a canny ControlNet for edges, a
 depth one for depth maps.

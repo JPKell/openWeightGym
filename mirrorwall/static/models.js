@@ -54,7 +54,15 @@
     delete profile.layer_weights;
     const gpus = SuiteHardware.read('mw', profile.split_mode === 'single' ? 1 : 2);
     if (gpus === 0) profile.split_mode = 'single';
-    return {engine:'sdcpp', flags:{model:$('diffusion').value.trim(),'ctx-size':0}, sdcpp:profile, gpus, alone:video || $('alone').checked};
+    return {engine:'sdcpp', flags:{model:$('diffusion').value.trim(),'ctx-size':0}, sdcpp:profile, gpus, alone:video || Boolean(profile.components.control_net) || $('alone').checked};
+  }
+  /** Video models and an SDXL ControlNet are admitted alone: lock "Keep GPUs to itself" on and say why. */
+  function syncExclusive() {
+    const why = video ? 'Video models always keep their GPUs to themselves.'
+      : $('control_net').value.trim() ? 'A ControlNet adds memory beside the model, so the model keeps its GPUs to itself.' : '';
+    if (why) $('alone').checked = true;
+    $('alone').disabled = Boolean(why);
+    $('alone-why').textContent = why; $('alone-why').hidden = !why;
   }
   function familyDefaults() {
     return Profiles.spec($('family').value).defaults;
@@ -107,7 +115,7 @@
         const where = one.machine ? ' on ' + suiteNodeLabel(one.machine) : '';
         const use = element('button', 'Use ' + one.path.split('/').pop() + where, 'btn btn-outline-success btn-sm'); use.type = 'button';
         use.title = (one.machine ? one.machine + ' · ' : '') + one.path + (one.tier === 'storage' ? ' (storage)' : '');
-        use.onclick = () => { choose(input, one.path, one.machine); recheck(0); }; actions.append(use);
+        use.onclick = () => { choose(input, one.path, one.machine); syncExclusive(); recheck(0); }; actions.append(use);
       }
       if (slot.get) {
         const get = element('a', 'Get ' + slot.get.file.split('/').pop() + ' from ' + slot.get.repository, 'btn btn-outline-secondary btn-sm');
@@ -177,6 +185,7 @@
       document.querySelector('[data-hardware-prefix="mw"] [data-hardware-mode]:checked')?.dispatchEvent(new Event('change',{bubbles:true}));
       $('lora-rows').replaceChildren(); saved.loras.forEach(one=>addLora(one.name,one));
     }
+    syncExclusive();
     familyHelp();
     recheck(0);
   }
@@ -296,6 +305,7 @@
   $('model-form').addEventListener('input',remember);
   $('model-form').addEventListener('change',remember);
   $('family').onchange = () => setFamily($('family').value);
+  if (!video) $('control_net').addEventListener('change', syncExclusive);
   [...SLOTS, 'loras'].forEach(name => { $(name).addEventListener('input', () => recheck()); $(name).addEventListener('change', () => recheck(0)); });
   $('model-form').onsubmit = async event => {
     event.preventDefault();
