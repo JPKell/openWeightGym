@@ -15,6 +15,7 @@ from starlette.routing import Route
 from loadcoach import observability as observation
 from mirrorwall.requests import checked_request,MAX_REQUEST_BYTES
 from mirrorwall import graph,graph_run,stream
+from mirrorwall.model import SWEEP_FIELDS
 
 IMAGE_PATHS=("/v1/images/generations","/v1/images/edits")
 COMPARISON_IMAGES=512
@@ -343,7 +344,7 @@ class Front:
         if not isinstance(references,list) or len(references)>8:
             raise ValueError('Use at most eight reference images.')
         sweep=asked.get('sweep',{})
-        if not isinstance(sweep,dict) or sweep.keys()-{'seed','steps','guidance','cfg_scale','width','height','sampler','scheduler'}:
+        if not isinstance(sweep,dict) or sweep.keys()-{key for key,_ in SWEEP_FIELDS}:
             raise ValueError('Unsupported sweep field.')
         if any(not isinstance(values,list) or not values or len(values)>32 or len(set(map(str,values)))!=len(values) for values in sweep.values()):
             raise ValueError('Each sweep requires 1–32 different values.')

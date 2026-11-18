@@ -35,11 +35,11 @@
 {% endcall %}
 {% endmacro %}
 
-{% macro sweep(live=false) %}
+{% macro sweep(live=false,fields=()) %}
 {% call card('Explore variations',class_='ig-sweep',hint='Compare one setting at a time. Keep the seed fixed for useful comparisons.') %}
 <label class="form-check mb-3"><input type="checkbox" class="form-check-input" id="{{ dom('sweep-enabled',live) }}"><span class="form-check-label">Enable parameter sweep</span></label>
 <div class="row g-2"><div class="col-sm-5"><label class="form-label" for="{{ dom('sweep-axis',live) }}">Vary</label><select class="form-select" id="{{ dom('sweep-axis',live) }}"><option value="seed">Seed</option><option value="steps">Steps</option><option value="guidance" data-sweep-guidance>Guidance</option><option value="cfg_scale" data-sweep-cfg>CFG scale</option></select></div><div class="col-sm-7"><label class="form-label" for="{{ dom('sweep-values',live) }}">Values · comma separated</label><input id="{{ dom('sweep-values',live) }}" class="form-control" value="42, 43, 44" placeholder="42, 43, 44"></div></div><p class="form-text mb-0" id="{{ dom('sweep-summary',live) }}">3 values × 1 image = 3 images</p>
-{% if live %}<details class="mt-3"><summary class="small">Multiple axes · JSON</summary><label class="form-label mt-2" for="mw-sweep">Parameter lists</label><textarea id="mw-sweep" class="form-control font-monospace" rows="2" placeholder='{"seed":[42,43],"steps":[20,28]}'></textarea><p class="form-text">Overrides the simple sweep. Maximum 128 images per job.</p></details>{% endif %}
+{% if live %}<details class="mt-3"><summary class="small">Multiple axes · JSON</summary><label class="form-label mt-2" for="mw-sweep">Parameter lists</label><textarea id="mw-sweep" class="form-control font-monospace" rows="2" placeholder='{"seed":[42,43],"steps":[20,28]}'></textarea><p class="form-text">Overrides the simple sweep. Maximum 128 images per job; a sampler or scheduler sweep allows up to 512.</p>{% if fields %}<p class="form-text mb-1" id="mw-sweep-keys-label">Valid keys · each a list of 1–32 different values</p><ul class="list-unstyled form-text mb-0" aria-labelledby="mw-sweep-keys-label">{% for key,what in fields %}<li><code>{{ key }}</code> {{ what }}</li>{% endfor %}</ul>{% endif %}</details>{% endif %}
 {% endcall %}
 {% endmacro %}
 

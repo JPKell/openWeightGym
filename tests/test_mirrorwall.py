@@ -175,6 +175,16 @@ def test_adult_previews_require_global_permission_and_each_users_opt_in(desk,mon
     assert api.post(setting,headers=plain,json={'image_adult_previews':True}).status_code==403
 
 
+def test_the_json_sweep_lists_every_key_the_server_accepts(desk):
+    from mirrorwall.model import SWEEP_FIELDS
+    browser, switch, users = desk
+    sign_in(browser, 'jordan')
+    text = browser.get('/chat/images').text
+    keys = text.split('id="mw-sweep-keys-label"', 1)[1].split('</ul>', 1)[0]
+    assert all(f'<code>{key}</code>' in keys for key, _ in SWEEP_FIELDS)
+    assert [key for key, _ in SWEEP_FIELDS] == ['seed', 'steps', 'guidance', 'cfg_scale', 'width', 'height', 'sampler', 'scheduler']
+
+
 def test_browser_pages_assets_and_mutations_require_current_identity_and_origin(desk):
     browser, switch, users = desk
     assert browser.get('/chat/images', follow_redirects=False).status_code == 303

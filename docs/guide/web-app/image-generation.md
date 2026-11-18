@@ -40,7 +40,7 @@ deletes a saved image. Image details (model, seed, size, steps, sampler, schedul
 | **Sampling steps**, **Prompt guidance**, **CFG scale** | Controls vary by model family; use only those offered. |
 | **Seed** | Reuse a seed when comparing a parameter change. |
 | **Composite mask · PNG** | White or transparent areas take the generated result; other areas preserve the first reference. The mask blends after generation. |
-| **Set up a parameter sweep** | Open **Explore variations** and choose **Vary** and **Values · comma separated**. Advanced users can supply **Multiple axes · JSON**. |
+| **Set up a parameter sweep** | Open **Explore variations** and choose **Vary** and **Values · comma separated**. Advanced users can supply **Multiple axes · JSON**, which lists its valid keys: `seed`, `steps`, `guidance`, `cfg_scale`, `width`, `height`, `sampler` and `scheduler`, each with 1–32 different values. |
 | **Temporary · no retained history** | Available only when your account and current compute policy permit no-log generation; temporary references need a temporary job. |
 
 **MOSS-Image Base / SFT** offers CFG, negative prompts and text layout controls. For its required components and starting settings, see [MOSS-Image setup](/docs/model-guides/image-models#moss-image).
