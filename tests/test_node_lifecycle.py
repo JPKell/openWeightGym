@@ -201,3 +201,17 @@ def test_offline_node_pills_and_lifecycle_controls_work_in_browser(metadata_fron
         expect(page.locator("#node-lifecycle")).to_contain_text("rig is active")
         assert not errors
         browser.close()
+
+
+def test_retired_nodes_leave_every_node_list_but_stay_configured():
+    from turnstile.tasks import TaskRecords
+    machines = Machines(["compute", "rig"], None, now=lambda: 1000)
+    tasks = TaskRecords.__new__(TaskRecords)
+    tasks._names = lambda: machines.names
+    machines.change_state("rig", "retired", "jordan")
+    assert machines.names == ["compute"] and tasks.names == ["compute"]
+    assert machines.configured == ["compute", "rig"] and machines.all_names() == ["compute", "rig"]
+    assert [row["name"] for row in machines.report()] == ["compute"]
+    assert {row["name"]: row["configured"] for row in machines.report(True)} == {"compute": True, "rig": True}
+    machines.change_state("rig", "active", "jordan")  # still configured, so it may return
+    assert machines.names == ["compute", "rig"] and tasks.names == ["compute", "rig"]

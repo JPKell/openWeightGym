@@ -102,7 +102,7 @@ class Machines:
     """Configured compute nodes, cached availability and placement metadata."""
     def __init__(self, names, ask, every: float = 10.0, now=time.time, ask_telemetry=None, store=None):
         """`names` are the machines' names. `ask(name, path)` is the machine's answer, parsed, or None if it did not answer."""
-        self.names, self.ask, self.every, self.now = list(names), ask, every, now
+        self.configured, self.ask, self.every, self.now = list(names), ask, every, now
         self.ask_telemetry, self.store = ask_telemetry, store
         self.seen: dict[str, dict] = {}
         self.checked: set[str] = set()
@@ -128,10 +128,24 @@ class Machines:
         """Replace the live node-poll interval."""
         self._every = value
 
+    @property
+    def names(self) -> list[str]:
+        """Configured nodes that are not retired: the ones checks, inventories and saves may ask.
+
+        A retired node is never looked for; `configured` and `all_names()` keep it for
+        lifecycle management and history.
+        """
+        return [name for name in self.configured if self.state(name) != "retired"]
+
+    @names.setter
+    def names(self, value):
+        """Replace the configured node list."""
+        self.configured = list(value)
+
     def all_names(self) -> list[str]:
         """Include retained registrations so an uninstalled, offline node can be retired."""
         known = {name for host in self.known_hosts.values() for name in host["machines"]}
-        return list(dict.fromkeys([*self.names, *sorted(known | self.lifecycle.keys())]))
+        return list(dict.fromkeys([*self.configured, *sorted(known | self.lifecycle.keys())]))
 
     def state(self, name: str) -> str:
         """Read the operator's lifecycle choice independently of reachability."""
@@ -139,7 +153,7 @@ class Machines:
 
     def enabled(self, name: str) -> bool:
         """Only configured, active nodes may receive new work or wake requests."""
-        return name in self.names and self.state(name) == "active"
+        return name in self.configured and self.state(name) == "active"
 
     @property
     def active_names(self) -> list[str]:
@@ -152,7 +166,7 @@ class Machines:
             raise ValueError("Unknown compute node.")
         if state not in ("active", "disabled", "retired"):
             raise ValueError("Choose active, disabled or retired.")
-        if state == "active" and name not in self.names:
+        if state == "active" and name not in self.configured:
             raise ValueError("Pair or configure this node again before enabling it.")
         at = self.now()
         if self.store is not None:
@@ -233,7 +247,7 @@ class Machines:
                 self.store.execute("INSERT INTO machine_telemetry (fingerprint, at, numbers) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
                                    (fingerprint, telemetry["at"], json.dumps(series(telemetry))))
                 self.last_saved[fingerprint] = self.now()
-        names = [name for name in self.names if self.state(name) != "retired"]
+        names = self.names
         outcomes = await asyncio.gather(*(one(name) for name in names), return_exceptions=True)
         for name, outcome in zip(names, outcomes):
             if isinstance(outcome, Exception):
@@ -246,14 +260,12 @@ class Machines:
         """Every machine, with its last facts and their age. `ready` means it answered within three polls."""
         out = []
         for name in self.all_names() if include_retired else self.names:
-            if not include_retired and self.state(name) == "retired":
-                continue
             found = self.seen.get(name)
             age = None if found is None or found["at"] is None else max(0.0, self.now() - found["at"])
             state = UNKNOWN if age is None else READY if age <= 3 * self.every else SILENT
             telemetry_age = None if found is None or found.get("telemetry_at") is None else max(0.0, self.now() - found["telemetry_at"])
             out.append({"name": name, "state": state, "age": age, "telemetry_age": telemetry_age,
-                        "lifecycle": self.state(name), "configured": name in self.names,
+                        "lifecycle": self.state(name), "configured": name in self.configured,
                         "accepting_work": self.enabled(name),
                         "lifecycle_changed": self.lifecycle.get(name),
                         **({k: v for k, v in found.items() if k != "at"} if found else {})})

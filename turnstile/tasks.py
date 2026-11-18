@@ -49,13 +49,18 @@ class TaskRecords:
         `destination_allowed()` says whether a caller may name the node (Settings → General).
         """
         self.batches, self.users, self.log, self.evidence = batches, users, log, evidence
-        self.ask, self.dispatch, self.names = ask, dispatch, names
+        self.ask, self.dispatch, self._names = ask, dispatch, names
         self.destination_allowed = destination_allowed
         self.wake_node = wake_node
         self.working = {}  # outgoing requests; loss/restart never rebinds their machine
         self.publication_cursor = ''
         migrate(batches.db.database, batches.db, "turnstile.benchmark_tasks", TASK_RECORDS)
         self.grants = ScheduleGrants(batches.db, users)
+
+    @property
+    def names(self) -> list[str]:
+        """Current node names: `names()` when given a callable, so retired nodes drop out live."""
+        return list(self._names() if callable(self._names) else self._names)
 
     def get(self, number):
         """Read one task record and its retained execution metadata."""

@@ -229,3 +229,15 @@ def test_a_move_copies_verifies_and_only_then_removes_the_source(fleet, removal)
     else:
         assert job['state'] == 'failed' and 'compute kept its copy' in job['why']
         assert 'qwen' in two.models['compute']
+
+
+def test_a_retired_node_is_not_looked_for_when_saving_shared_settings(fleet):
+    front, headers, two = fleet
+    front.app.state.machines.change_state('rig', 'retired', 'manager')
+    before = deepcopy(two.models['rig'])
+    changed = {**two.models['compute']['qwen'], 'order': 4}
+    answer = front.post('/turnstile/machines/compute/model-api/models/qwen', headers=headers, json=changed)
+    assert answer.status_code == 200, answer.text
+    assert two.models['compute']['qwen']['order'] == 4 and two.models['rig'] == before
+    catalogue = front.get('/turnstile/models', headers=headers).json()
+    assert 'rig' not in catalogue.get('nodes', {}) and 'rig' not in catalogue.get('unavailable_machines', [])

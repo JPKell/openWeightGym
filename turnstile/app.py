@@ -1055,7 +1055,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return error(503, f'Asked {name} to wake; waiting for the node to answer before submitting scheduled work.', {'retry-after': '15'})
 
     task_records = TaskRecords(batch_work.store, users, log, routing.evidence, ask_compute,
-                               dispatch_probe, list(settings.machines), scheduled_node_ready,
+                               dispatch_probe, lambda: machines.names, scheduled_node_ready,
                                destination_allowed=lambda: live('turnstile',
                                    'allow_caller_to_specify_destination', settings.allow_caller_to_specify_destination) is True)
     task_records.locations = model_locations
@@ -1746,7 +1746,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
     async def combined_view(request: Request, user: User, path: str) -> Response:
         """A caller sees retained deployments and answering machines' active work."""
-        names = machines.active_names if path == "/v1/models" else [name for name in machines.names if machines.state(name) != "retired"]
+        names = machines.active_names if path == "/v1/models" else machines.names
         answers = await asyncio.gather(*(ask_live(user, "GET", path, machine=name, prime=path == "/v1/models", passive=passive(request))
                                          for name in names))
         found = {name: answer.json() for name, answer in zip(names, answers) if answer is not None and answer.status_code == 200}
@@ -2816,7 +2816,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             return error(401, "Missing or wrong API key.")
         if not user.can("manage-models"):
             return error(403, "Your account may not add, change and remove models.")
-        names = list(settings.machines)
+        names = list(machines.names)
         answers = await asyncio.gather(*(ask_live(user, "GET", "/loadcoach/models", machine=name, passive=passive(request))
                                          for name in names))
         detailed = {name: answer.json() for name, answer in zip(names, answers) if answer is not None and answer.status_code == 200}
@@ -2901,8 +2901,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """Retry queued roots without waking nodes, rechecking the saving account's authority."""
         async with publication_lock:
             for name in machines.names:
-                if machines.state(name) == "retired":
-                    continue
                 pending = pending_file_settings(name)
                 if not pending:
                     continue
@@ -3360,7 +3358,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if not user.can('manage-settings'):
             return error(403, 'Database operations require manage-settings.')
         name = node(request.path_params['name'])
-        if name not in machines.names or name not in settings.machines:
+        if name not in machines.configured or name not in settings.machines:
             return error(404, 'That compute node is not configured.')
         if machines.state(name) == 'retired':
             return error(409, 'This node is retired; its databases are not queried.')
