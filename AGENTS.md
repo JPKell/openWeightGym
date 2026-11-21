@@ -37,11 +37,13 @@ when choosing documentation work.
 
 The [app-builder API brief](docs/guide/api/app-builder.md) is handed whole to outside developers
 and AI agents, so it must stay exact. Update it in the same commit as any client-facing `/v1/` or
-`/owg/` route, a request-field allowlist, a response shape, an error code or a client header,
-including routes dispatched inside Turnstile's `pass_on` or LoadCoach's `/v1/{path:path}` proxy.
+`/owg/` route, a request-field allowlist, a query parameter, a response shape, an error code or
+a request or response header, including routes dispatched inside Turnstile's `pass_on` or
+LoadCoach's `/v1/{path:path}` proxy.
 Run `rtk proxy .venv/bin/pytest tests/test_api_guide.py`: it fails when the endpoint index, field
-lists or examples drift from the code. Add an internal route to its `NOT_FOR_APPS` with a reason
-rather than to the brief.
+lists, query parameters, header names or examples drift from the code. Add an internal route to
+its `NOT_FOR_APPS` with a reason rather than to the brief; name an inter-service `x-…` header in
+the brief's "must not send" list, and a browser-only request header in `NOT_APP_HEADERS`.
 
 ### Template index
 

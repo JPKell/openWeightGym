@@ -22,8 +22,12 @@ every declared route.
 - Pick a model by its `capabilities` before calling an endpoint: chat models for chat and
   Responses, `embedding: true` models for embeddings, `rerank: true` models for reranking, and
   image, video or audio models for those endpoints. A model refuses work of another kind with 400.
-- Unknown request fields are **refused, not ignored**, on the image, video, audio, rerank,
-  classifier, file and batch endpoints. Send only the fields listed for that endpoint.
+- Unknown request fields are **refused, not ignored**, on Responses and on the image, video,
+  audio, rerank, classifier, extraction, file and batch endpoints. Send only the fields listed for
+  that endpoint. Chat, completions and embeddings are passed to the model's engine instead (see
+  [Chat](#app-chat)).
+- Every request field, query parameter and header an app may send is listed on this page. A name
+  that is not listed here is not part of the client contract.
 - Images, audio and video are sent **inline** (base64 or data URLs) or as multipart uploads.
   Remote URLs and server file paths are refused.
 - Treat every non-2xx response as an error object, as described in [Errors](#app-errors). Do not
@@ -43,15 +47,17 @@ every declared route.
 Send `Authorization: Bearer API_KEY` on every request. A key is created under
 **My account → API keys** and carries its account's model access, abilities, spending limits and
 sensitivity ceiling. Keep it in the app's configuration or secret store, never in source or logs.
-A missing or invalid key returns 401 `Missing or wrong API key.`
+A missing or invalid key returns 401 `Missing or wrong API key.` A client that cannot set
+headers may put the key in the address as `?key=API_KEY` instead; prefer the header, because
+addresses end up in logs and browser history.
 
 Some features need an ability on the account: tool calls need `use-tools`, unlogged requests need
 `unlogged`, and high priority needs `high`. The [abilities reference](/docs/system/abilities)
 explains each one.
 
-To send work to one named compute node, add `?node=NAME` to the URL (or a `"node"` field in a
-JSON body). This works only where the administrator allows callers to choose a destination; leave
-it out to let the server choose.
+To send work to one named compute node, add `?node=NAME` to the URL, the `X-Suite-Node: NAME`
+header, or a `"node"` field where an endpoint's fields list it. This works only where the
+administrator allows callers to choose a destination; leave it out to let the server choose.
 
 ## Models {#app-models}
 
@@ -160,6 +166,26 @@ identifier returned when it was created.
 `POST /v1/chat/completions` and `POST /v1/completions` are OpenAI-shaped and passed to the
 model's engine, so the usual OpenAI and llama.cpp sampling fields apply (`temperature`, `top_p`,
 `max_tokens`, `stop`, `seed` and so on). An engine may ignore a sampling field it lacks.
+`POST /v1/embeddings` is passed on the same way. The server uses `model`, `stream` and the token
+budget to route and admit the request, and checks tools, images and structured output against the
+model's capabilities (below). The body otherwise reaches llama.cpp's
+[server API](https://github.com/ggml-org/llama.cpp/tree/master/tools/server#api-endpoints)
+unchanged, except `lora`, which the server replaces with the adapters the model is configured
+with.
+
+Two kinds of chat model accept less:
+
+**Strata chat fields:** `model`, `messages`, `max_tokens`, `max_completion_tokens`, `stream`, `stream_options`, `temperature`, `top_p`, `top_k`, `min_p`, `seed`, `stop`, `reasoning_effort`
+
+A model on the experimental Strata engine refuses any other field, and takes only `system`,
+`user` and `assistant` messages with text content.
+
+**Agent chat fields:** `model`, `messages`, `stream`, `reasoning_effort`, `n`
+
+A model whose `owned_by` is `adaptor` is an agent run by a plugin. It runs its own tools, so it
+refuses `tools`, `tool_choice`, `functions` and `function_call`; `n` must be 1. Any other field is
+dropped and named in the `X-Suite-Ignored-Parameters` response header. Its session headers are
+under [Headers](#app-headers).
 
 ```json
 {"model": "qwen3-8b", "messages": [{"role": "user", "content": "Say hello."}], "max_tokens": 64}
@@ -193,6 +219,54 @@ controls and text, JSON or schema formatting.
   with optional `allowed_tools`. Other MCP servers are refused. Function tools run in the app.
 - Refused: `background`, remote image or file URLs, automatic truncation and other OpenAI
   resource parameters.
+
+**Responses fields:** `model`, `input`, `instructions`, `text`, `store`, `stream`, `max_output_tokens`, `temperature`, `top_p`, `previous_response_id`, `background`, `truncation`, `tools`, `tool_choice`, `parallel_tool_calls`
+
+`model` is required. `input` is a string or 1–100 input items. `max_output_tokens` is 1–32768,
+`temperature` 0–2 and `top_p` 0–1. `background` may only be `false` and `truncation` only
+`"disabled"`. `previous_response_id` names a stored response of this account.
+
+**Responses message item fields:** `type`, `role`, `content`, `id`, `status`
+
+`type` is `message` (the default); `role` is `user`, `assistant`, `system` or `developer`.
+`content` is a string or a list of parts: `{"type": "input_text", "text": ...}` (or
+`output_text`), or an image part:
+
+**Responses image part fields:** `type`, `image_url`, `detail`
+
+`type` is `input_image`; `image_url` is a `data:image/png`, `jpeg` or `webp` base64 URL;
+`detail` is `auto` (default), `low` or `high`.
+
+**Responses function_call item fields:** `type`, `id`, `status`, `call_id`, `name`, `arguments`
+
+**Responses function_call_output item fields:** `type`, `id`, `call_id`, `output`
+
+**Responses mcp_approval_response item fields:** `type`, `id`, `approval_request_id`, `approve`, `reason`
+
+A `function_call` item replays a call the model made (`call_id` 1–128 characters, `arguments` a
+JSON string); `function_call_output` returns the app's result as a string. An
+`mcp_approval_response` answers an approval request of a server-run tool.
+
+**Responses text format fields:** `type`, `name`, `schema`, `strict`, `description`
+
+`text` is `{"format": {...}}`: `{"type": "text"}`, `{"type": "json_object"}`, or `json_schema`
+with a `name` (1–64 characters), a `schema` and an optional boolean `strict`.
+
+**Responses function tool fields:** `type`, `name`, `description`, `parameters`, `strict`
+
+**Responses MCP tool fields:** `type`, `server_label`, `server_url`, `allowed_tools`, `require_approval`
+
+A function tool has `type: "function"`; `tool_choice` is `auto`, `none`, `required` or
+`{"type": "function", "name": ...}`. An MCP tool has `type: "mcp"` and `server_label: "toollocker"`;
+`server_url` is `/mcp` (the default) or `/mcp/SET` on this server. `allowed_tools` lists at most 128
+tool names. `require_approval` is `never` (default), `always`, or `{"never": {"tool_names": [...]}}`
+/ `{"always": {"tool_names": [...]}}`. Server-run tools need a logged request, and approvals need
+`store: true`.
+
+**JSON Schema keywords:** `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `description`, `title`, `minimum`, `maximum`, `minLength`, `maxLength`, `minItems`, `maxItems`, `pattern`
+
+These are the keywords allowed in a Responses `json_schema`, a Responses function tool's
+`parameters` and a custom extraction `schema`. Chat completions pass their schema to the engine.
 
 OpenAI Assistants, Conversations, Realtime and fine-tuning are not implemented.
 
@@ -291,6 +365,10 @@ choice. Each question has a `type`, `instructions` and, depending on the type, `
 
 **Classifier fields:** `model`, `state`, `messages`, `questions`, `files`, `images`, `node`
 
+**Classifier question fields:** `type`, `instructions`, `criteria`
+
+**Classifier noul criteria fields:** `true`, `false`
+
 ```json
 {"model": "classifier-small", "state": "The order arrived broken and support never replied.",
  "questions": {"sentiment": {"type": "choice", "instructions": "Overall sentiment",
@@ -299,7 +377,17 @@ choice. Each question has a `type`, `instructions` and, depending on the type, `
 ```
 
 A chat completion to a classifier model with a `response_format.json_schema` whose properties are
-enums, booleans or bounded integers is answered the same way.
+enums, booleans or bounded integers is answered the same way. Such a request takes only these
+fields, and its schema and properties only these keys:
+
+**Classifier chat fields:** `model`, `messages`, `response_format`, `stream`, `logprobs`, `top_logprobs`, `node`
+
+**Classifier schema fields:** `type`, `properties`, `required`, `additionalProperties`, `title`, `description`
+
+**Classifier property fields:** `type`, `enum`, `description`, `minimum`, `maximum`, `title`, `x-levels`
+
+`x-levels` is an extension on an integer property: a list of 2–10 level descriptions, scored from
+`minimum` (default 0) upward.
 
 ## Images and image workflows {#app-images}
 
@@ -321,9 +409,24 @@ each image up to 20 MiB, as PNG, JPEG or WebP, base64 or a data URL.
   account's library.
 - `"stream": true` returns events; each finished image arrives as an
   `image_generation.completed` event with `b64_json`.
-- `advanced` holds engine-specific sampling extensions. The
-  [Image generation guide](/docs/web-app/image-generation) lists them and the families each
+- `references` (or `image`, not both) is a list of input images and `mask` one image; `loras` is
+  `{"ADAPTER": scale}` for at most 16 of the model's configured adapters; `upscale` is a factor
+  of 1–4; `detail_resize` is `{"width": W, "height": H}`, the exact final size of an SDXL
+  resize-and-detail pass; `metadata` is the caller's own record.
+- `advanced`, `control` and `upscale_with` take these keys. `advanced` needs an exclusive model
+  entry, and its `slg` and `hires` values are objects of their own. The
+  [Image generation guide](/docs/web-app/image-generation) describes each and the families it
   applies to.
+
+**Image advanced fields:** `clip_skip`, `eta`, `img_cfg`, `flow_shift`, `shifted_timestep`, `custom_sigmas`, `slg`, `hires`, `vae_tiling`, `cache_mode`, `cache_option`
+
+**Image slg fields:** `scale`, `layer_start`, `layer_end`, `layers`
+
+**Image hires fields:** `upscaler`, `scale`, `steps`, `denoising_strength`
+
+**Image control fields:** `image`, `strength`, `edges`
+
+**Image upscale_with fields:** `upscaler`, `factor`, `tile`
 
 **Workflows:** `GET /v1/workflows` lists published multi-step workflows with their `id`
 (`workflow:NAME`), inputs, overridable fields and bounds, outputs and models. Run one by sending
@@ -334,6 +437,9 @@ its `id` as the `model` of an image request, with `workflow_inputs` for exposed 
  "workflow_inputs": {"base.steps": 30}}
 ```
 
+**Workflow call fields:** `model`, `prompt`, `negative_prompt`, `size`, `seed`, `n`, `image`, `workflow_inputs`, `stream`, `user`, `response_format`, `output_format`, `quality`, `background`, `moderation`
+
+A workflow call takes only these fields; its other settings come from the workflow.
 `workflow:NAME@VERSION` runs one published version. Each output in `data` has its `output`
 label, `step`, `seed`, size and `asset_id`. The
 [Image workflows guide](/docs/model-guides/image-workflows#calling-a-workflow-from-the-api)
@@ -357,7 +463,13 @@ Video is asynchronous: create a job, poll it, then download the clip.
    `?variant=thumbnail` for its poster.
 
 Dimensions, frame rate, frames and seconds are bounded by the model's profile. Input images are
-inline or owned asset IDs. The [Video generation guide](/docs/web-app/video-generation) lists
+inline or owned asset IDs. `loras` is `{"ADAPTER": strength}` for at most 16 configured adapters;
+`soundtrack`, `vae_tiling`, `temporal_tiling`, `hires`, `stream` and `live_previews` are booleans.
+
+**Video poster fields:** `b64_json`
+
+`POST /v1/videos/{id}/poster` takes exactly that: a base64 image to use as a finished clip's
+poster when the server could not make one. The [Video generation guide](/docs/web-app/video-generation) lists
 the differences from the retired OpenAI Videos API.
 
 ## Audio {#app-audio}
@@ -387,8 +499,9 @@ spoken `script` of up to 500 lines, each with its own voice.
 
 **Script fields:** `model`, `script`, `seed`, `gap`, `options`, `stream`, `user`
 
-Each script line has `text` and optional `voice`, `voice_audio`, `voice_text` and
-`instructions`. Which modes and options a model takes depends on its family; an unsupported
+**Script line fields:** `text`, `voice`, `voice_audio`, `voice_text`, `instructions`
+
+Each script line needs `text`; the others are optional. Which modes and options a model takes depends on its family; an unsupported
 combination returns 400 naming what the model accepts. The [Music and sounds](/docs/web-app/music-sounds)
 and [Speech](/docs/web-app/speech) guides describe the families.
 
@@ -398,7 +511,11 @@ Batches run many requests durably, in the OpenAI Batch format.
 
 1. Write a JSONL file, one request per line:
    `{"custom_id": "a1", "method": "POST", "url": "/v1/chat/completions", "body": {...}}`.
-2. Upload it with `POST /v1/files` as a multipart form with `purpose=batch` and `file`.
+2. Upload it with `POST /v1/files` as a multipart form, with `purpose` set to `batch` and the
+   JSONL file as `file`:
+
+**File upload form fields:** `purpose`, `file`
+
 3. `POST /v1/batches` with the returned file `id`:
 
 **Batch fields:** `input_file_id`, `endpoint`, `completion_window`, `metadata`
@@ -422,8 +539,8 @@ Extraction reads text, receipts, tables or custom fields from an image with a vi
 keeps the result for review. These endpoints are on the model API listener.
 
 1. `GET /owg/extraction-models` lists the models this account may use for extraction.
-2. Upload the image: `POST /owg/extraction-assets` as a multipart form with an `image` file. The
-   response's `id` is the `asset_id`.
+2. Upload the image: `POST /owg/extraction-assets` as a multipart form with exactly one file
+   part named `image` (or `file`). The response's `id` is the `asset_id`.
 3. Submit a job with `POST /owg/extractions`:
 
 **Extraction fields:** `asset_id`, `task`, `model`, `node`, `output_format`, `instructions`, `detail`, `schema`, `keep_breaks`, `mark_unclear`, `temporary`, `retry_of`
@@ -437,7 +554,20 @@ keeps the result for review. These endpoints are on the model API listener.
 
 `task` is `describe`, `text` (default), `receipt`, `table` or `custom`; `custom` needs a JSON
 `schema`. `output_format` is `plain` (default), `layout`, `markdown`, `json` or `csv`; CSV is
-for receipts and tables only. `detail` is `concise` or `detailed`. The
+for receipts and tables only. `detail` is `concise` or `detailed`. `schema` uses the
+[JSON Schema keywords](#app-chat) listed under Responses. `temporary: true` keeps the job for a day
+instead of 30 days; `retry_of` names an earlier extraction of this account to retry. Send an `Idempotency-Key` header (at most
+120 printable characters, no spaces) so a resent submit returns the first job instead of a second.
+
+**Extraction preset fields:** `name`, `spec`
+
+`POST /owg/extraction-presets` saves `spec`, which takes the extraction fields above except
+`asset_id`.
+
+**Extraction review fields:** `revision`, `data`, `reviewed`
+
+`PATCH /owg/extractions/{id}/review` saves corrected `data` against the job's current integer
+`revision` (a stale revision returns 409), with `reviewed` true or false. The
 [Image extraction guide](/docs/web-app/image-extraction) covers review and exports.
 
 ## Errors {#app-errors}
@@ -464,24 +594,102 @@ Show `message` to the user. Branch on the status and `code`, not on the message 
 
 A stream that started with 200 can still end early. Check for a final chunk or terminal event.
 
+## Query parameters {#app-query}
+
+Two parameters work on any endpoint: `key` (the API key, when the client cannot send
+`Authorization`) and `node` (the compute node to use, where callers may choose). The endpoints
+below read these as well; an endpoint not listed takes no other query parameters.
+
+| Endpoint | Parameters | Values |
+|---|---|---|
+| `GET /v1/videos` | `after`, `limit`, `order` | `after` is the last job ID of the previous page; `limit` 1–100 (default 20); `order` `asc` or `desc` (default) |
+| `GET /v1/videos/{id}/content` | `variant` | `video` (default, WebM) or `thumbnail` (the poster) |
+| `GET /v1/responses/{id}/input_items` | `after`, `limit`, `order` | As for videos, with item IDs |
+| `GET /owg/extractions` | `cursor` | The previous page's `next_cursor` |
+| `GET /owg/extractions/{id}/export` | `format`, `revision` | `format` is an output format (default the job's); `revision=original` exports the result before corrections |
+| `GET /owg/extraction-assets/{id}` | `prepared` | `1` downloads the PNG the model was sent instead of the original upload |
+| `GET /owg/docs/catalogue` | `offset` | Paging offset, in steps of 20 (`next_offset`) |
+| `GET /owg/docs/search` | `q`, `scope`, `limit` | Query text; a section slug from the catalogue; 1–10 results |
+| `GET /owg/docs/article` | `url`, `anchor`, `offset` | An article `url` from the catalogue or a search hit; an optional section `anchor`; a character `offset` for long articles |
+
+A documentation request with an unknown or repeated parameter is refused with 400.
+
 ## Headers {#app-headers}
 
-Every response carries `X-Request-ID`. Model responses also carry `X-LoadCoach-Request-ID`, the
-request number administrators see under **Model requests**. Log both with errors.
-`X-LoadCoach-Context-Tokens` on a chat or completion answer is the window it was served with.
+Header names are case-insensitive. Every header an app may send is in the first two tables; the
+third lists what responses carry. The fourth names the server's own headers so they are not
+mistaken for options.
 
-Optional request headers an app may use:
+**Standard headers an app sends**
+
+| Header | Use |
+|---|---|
+| `Authorization: Bearer API_KEY` | Every request ([Addresses and authentication](#app-connect)) |
+| `Content-Type` | `application/json`, or `multipart/form-data` for uploads and the OpenAI SDK's image and audio forms |
+| `Idempotency-Key` | On `POST /owg/extractions` (at most 120 printable characters, no spaces) and on agent chat models (1–128 characters): a resend with the same key returns the first result; reusing it with a different body returns 409 |
+| `Range` | A byte range of `GET /v1/videos/{id}/content`; 416 when it cannot be served |
+| `traceparent` | Optional W3C trace context, adopted when valid |
+| `User-Agent` | Shown beside the key's sessions under **My account → API keys** |
+| `Mcp-Session-Id` | MCP clients on the tools listener; groups the session's calls when no trace is sent |
+
+**openWeightGym headers an app may send**
 
 | Header | Effect |
 |---|---|
-| `X-Suite-Application: my-app` | Labels the app's requests in usage and logs (letters, digits, `.` `_` `:` `-`, up to 128) |
-| `X-LoadCoach-Trace: job-42` | Groups related calls as one piece of work |
-| `X-LoadCoach-Priority: high` | `high`, `normal` or `low`; high needs the `high` ability |
+| `X-Suite-Application: my-app` | Labels the app's requests in usage and logs (letters, digits, `.` `_` `:` `-`, up to 128). Invalid labels are not recorded; it grants nothing |
+| `X-Suite-Node: NAME` | The compute node to use, as `?node=NAME` does |
+| `X-LoadCoach-Trace: job-42` | Groups related calls as one piece of work (1–128 letters, digits, `.` `-` `_` `:`). A trace keeps its highest sensitivity |
+| `X-LoadCoach-Priority: high` | `high`, `normal` or `low` admission order; high needs the `high` ability |
 | `X-LoadCoach-Sensitivity: sensitive` | `normal`, `sensitive` or `restricted`, within the account's allowance; non-normal work stays local |
-| `X-LoadCoach-Log: off` | Keeps no record, where the account has `unlogged`; not with trace or sensitivity headers |
-| `X-Turnstile-No-Wake: 1` | Fail fast instead of waking an asleep node |
+| `X-LoadCoach-Log: off` | Keeps no record, where the account has `unlogged`. No other value; not with trace or sensitivity headers, hosted models or offload |
+| `X-Turnstile-No-Wake: 1` | Fail fast with 503 instead of waking an asleep node |
+| `X-LoadCoach-Offload: MODEL` | A hosted model the server may use instead when the local one would wait, subject to access, sensitivity and spending policy |
+| `X-LoadCoach-Require-Model-ID`, `X-LoadCoach-Require-Fingerprint`, `X-LoadCoach-Require-Build` | Sent together (each 1–256 characters, from an earlier answer's `X-LoadCoach-Model-ID`, `X-LoadCoach-Configured-Fingerprint` and `X-LoadCoach-Build`), they pin the exact local model, settings and engine build; a mismatch returns 409 before inference |
+| `X-LoadCoach-Require-Model-Name: NAME` | Requires this exact local model name on any node; hosted models and offload are refused |
+| `X-LoadCoach-Lock: TOKEN` | Runs on GPUs the caller reserved with `POST /loadcoach/lock` (the `lock` ability; an operator tool, not needed by apps) |
+| `X-Suite-Session-Mode` | Agent chat models only: `fresh` (default) or `persistent` |
+| `X-Suite-Session-ID` | Agent chat models only: resume a persistent session returned earlier |
+| `X-ToolLocker-Sets: a,b` | MCP clients: limit the tools listed to these comma-separated tool sets, within the account's permissions |
 
-[Headers](/docs/api/headers) explains the full set, including model identity guards.
+**Response headers an app may read**
+
+| Header | Meaning |
+|---|---|
+| `X-Request-ID` | On every response. Log it with errors |
+| `X-LoadCoach-Request-ID` | The request number administrators see under **Model requests**; absent for unlogged work |
+| `X-LoadCoach-Context-Tokens` | The context window a chat or completion answer was served with ([Context windows](#app-context)) |
+| `X-LoadCoach-Model-ID`, `X-LoadCoach-Configured-Fingerprint`, `X-LoadCoach-Fingerprint`, `X-LoadCoach-Build` | Identity of the local model that answered: its ID, the fingerprint of its settings as configured and as started, and the engine build. Send the first three back as the `Require` headers to pin them |
+| `X-LoadCoach-Answered`, `X-LoadCoach-Answered-ID`, `X-LoadCoach-Answered-Fingerprint` | The local model that answered, after any role pick: its name, ID and settings fingerprint |
+| `X-LoadCoach-Role`, `X-LoadCoach-Picked`, `X-LoadCoach-Because` | For a role: the role, the model it picked and why |
+| `X-LoadCoach-Node`, `X-Turnstile-Node` | The node that answered, or the node that did not |
+| `X-Turnstile` | `compute-off` or `busy` on a 503 that came from the gateway rather than the model |
+| `X-LoadCoach-Outcome` | How compute ended a request it refused or could not load |
+| `X-LoadCoach-Estimated-Wait`, `X-LoadCoach-Estimate-Basis` | Advisory queue wait in seconds (or `unknown`) and how it was estimated |
+| `X-LoadCoach-Hosted`, `X-LoadCoach-Service` | A hosted model answered: its name and provider |
+| `X-Suite-Allowance` | JSON list of spending allowances near their limit (`scope`, `name`, `recorded`, `allowance`, `remaining`, `reset_at`), when the administrator warns instead of blocking |
+| `X-Suite-Ignored-Parameters` | Agent chat models: the comma-separated fields that were dropped |
+| `X-Suite-Image-Temporary`, `X-Suite-Audio-Temporary` | `1` when the generated file is not kept in the library |
+| `X-Suite-Retained` | `1` when a listing was answered from the last known state because a node did not answer |
+| `X-Suite-Data-Owner` | The control node answered from its own records |
+| `X-Suite-Proof` | Signature of a worker's answer, checked by the gateway; apps can ignore it |
+| `Retry-After` | Seconds to wait, on 429 and 503 |
+| `X-Content-Type-Options`, `X-Accel-Buffering` | Standard `nosniff` and stream buffering hints |
+
+**Server headers an app must not send**
+
+These pass between openWeightGym's own services. The gateway strips or ignores them from
+clients, or they need a signature an app cannot make; sending one does nothing useful.
+`X-Suite-Statement`, `X-Suite-Client-Origin`, `X-Suite-Schedule`, `X-Suite-User-ID`,
+`X-Suite-Instance`, `X-Suite-Model`, `X-Suite-Profile`, `X-Suite-Request-ID`, `X-Suite-Adaptor`,
+`X-Suite-Signature`, `X-Suite-Dump-Method`, `X-Suite-Image-Owner`, `X-Suite-Audio-Owner`,
+`X-LoadCoach-For`, `X-LoadCoach-Role-Context`, `X-LoadCoach-From`, `X-LoadCoach-Agent`,
+`X-LoadCoach-Proxy-Seen`, `X-LoadCoach-Task`, `X-LoadCoach-Probe-ID`, `X-LoadCoach-Image-Owner`,
+`X-LoadCoach-Upscaler-Path`, `X-MirrorWall-Job`, `X-MirrorWall-Line`, `X-MirrorWall-Intermediate`,
+`X-SoundRoom-Job`, `X-SoundRoom-Line`, `X-Hermes-Session-Key`, `X-Twilio-Signature`,
+`X-Weightroom-Form-Return`, `X-Turnstile-Report-Cache` and `X-Forwarded-For`. Roles are chosen
+with the `model` field, never a header.
+
+[Headers](/docs/api/headers) explains each in more depth.
 
 ## Related
 

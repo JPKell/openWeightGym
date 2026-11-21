@@ -126,12 +126,14 @@ guide and developer docstring. Check **Docs → Gaps** when choosing documentati
 
 The app-builder API brief is the exception to "link instead of restating": it is copied whole to
 external developers and AI agents, so it states each client endpoint, request-field list, response
-shape, error and client header itself. Change it in the same commit as any of those, including
+shape, error, query parameter and header itself. Change it in the same commit as any of those, including
 routes dispatched inside Turnstile's `pass_on` or LoadCoach's `/v1/{path:path}` proxy, which the
 generated inventory cannot see. [API brief checks](../tests/test_api_guide.py) compare its endpoint
 index with declared and dispatched routes and its `**… fields:**` lines with the validators'
-allowlists, and run its examples through the real validators and gateway. List a route an app
-should not call in that test's `NOT_FOR_APPS`, with the reason. [Docs help checks](../tests/test_docs_help.py) exercise the small fake-model smoke set and question-only gap privacy; [Docs tool checks](../tests/test_docs_tools.py) cover caller proof and source visibility.
+allowlists (nested ones included), require every `x-…` header literal in the services and every
+header or query parameter a client handler reads to be named, and run its examples through the real validators and gateway. List a route an app
+should not call in that test's `NOT_FOR_APPS`, and a console-only request header in
+`NOT_APP_HEADERS`, each with the reason. [Docs help checks](../tests/test_docs_help.py) exercise the small fake-model smoke set and question-only gap privacy; [Docs tool checks](../tests/test_docs_tools.py) cover caller proof and source visibility.
 Run `rtk proxy .venv/bin/pytest tests/test_documentation.py tests/test_docs_library.py tests/test_docs_coverage.py tests/test_source_docs.py tests/test_doc_markdown.py tests/test_docs_designs.py tests/test_api_guide.py`,
 plus Docs browser checks and UI consistency checks for UI changes. [API example checks](../tests/test_docs_examples.py) execute the published payloads against isolated gateway/console routes. `scripts/docs-coverage.py` prints
 the same coverage report. Guide metadata uses TOML in a leading `<!--docs` comment; public prose can
