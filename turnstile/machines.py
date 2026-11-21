@@ -60,8 +60,11 @@ def logical_catalogue(found: dict[str, dict]) -> list[dict]:
         choices.sort(key=lambda item: (order.get(item[0], len(order)), item[0], item[1].get("id", "")))  # nodes in configured order
         machine, canonical = choices[0]
         locations = [{"machine": name, **{key: model[key] for key in
-                      ("id", "model_id", "fingerprint", "content_sha256", "embedding", "context_tokens", "build", "engine_id", "capabilities", "chat_template_caps") if key in model}}
+                      ("id", "model_id", "fingerprint", "content_sha256", "embedding", "context_tokens", "context", "loaded_context",
+                       "build", "engine_id", "capabilities", "chat_template_caps") if key in model}}
                      for name, model in choices]
+        # The window a copy is loaded with belongs to its node, so it is said only in its location.
+        canonical = {key: value for key, value in canonical.items() if key != "loaded_context"}
         listed.append({**canonical, "logical_id": "sha256:" + canonical["content_sha256"] if canonical.get("content_sha256") else "",
                        "machines": [one["machine"] for one in locations], "locations": locations})
     return sorted(listed, key=lambda model: (

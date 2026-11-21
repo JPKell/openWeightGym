@@ -164,13 +164,48 @@ def test_model_examples_run_through_the_gateway(fake_llama_server, tmp_path, mon
         assert embedder['embedding'] is True and embedder['context_tokens'] > 0
         assert not {'embedding', 'rerank'} & next(one for one in listed['data'] if one['id'] == 'chat').keys()
         assert next(one for one in listed['data'] if one['id'] == 'rank')['rerank'] is True
-        missing = caller.get('http://front:8442/v1/models/nope', headers=headers)
-        assert missing.status_code == 404 and missing.json()['error']['code'] == 'model_not_found'
+        assert caller.get('http://front:8442/v1/models/nope', headers=headers).status_code == 404
+        unknown = caller.post('http://front:8442/v1/chat/completions', json={**by('messages'), 'model': 'nope'}, headers=headers)
+        assert unknown.status_code == 404 and unknown.json()['error']['code'] == 'model_not_found'
         for path, key, name in (('/v1/chat/completions', 'messages', 'chat'), ('/v1/responses', 'store', 'chat'),
                                 ('/v1/embeddings', 'encoding_format', 'embed'), ('/v1/rerank', 'documents', 'rank')):
             response = caller.post('http://front:8442' + path, json={**by(key), 'model': name}, headers=headers)
             assert response.status_code == 200, (path, response.text)
             assert response.headers['x-request-id'] and response.headers['x-loadcoach-request-id']
+            if path == '/v1/chat/completions':  # while it is loaded: each model here takes both cards
+                assert response.headers['x-loadcoach-context-tokens'] == '2048'
+                chat = next(one for one in caller.get('http://front:8442/v1/models', headers=headers).json()['data'] if one['id'] == 'chat')
+                assert chat['context'] == {'guaranteed': 2048, 'max': 2048} and 'loaded_context' not in chat
+                assert chat['locations'][0]['loaded_context'] == 2048
         assert caller.get('http://front:8442/v1/workflows', headers=headers).json() == {'object': 'list', 'data': []}
         refused = caller.get('http://front:8442/v1/models', headers={'authorization': 'Bearer wrong'})
         assert refused.status_code == 401 and refused.json()['error']['message'] == 'Missing or wrong API key.'
+
+
+def test_thinking_section_matches_the_code():
+    """Each claim of the Thinking section rests on one source fact; this fails when one changes."""
+    written = text()
+    assert '"chat_template_kwargs": {"enable_thinking": false}' in written and '"reasoning_effort"' in written
+    # Responses builds its chat request from an allowlist without `reasoning`, so the brief says it is refused.
+    assert 'reasoning' not in literal_set(function('turnstile/responses.py', 'chat_request'), 'model')
+    assert '`reasoning` output item' in written and 'reasoning_tokens' in written
+    responses = (ROOT / 'turnstile/responses.py').read_text(encoding='utf-8')
+    assert "message.get('reasoning_content')" in responses and "'reasoning_tokens'" in responses
+    # Strata accepts only disabled thinking; llama.cpp passes both fields through and reports template capabilities.
+    assert 'sent.pop("chat_template_kwargs") != {"enable_thinking": False}' in (ROOT / 'engines/strata/adapter.py').read_text(encoding='utf-8')
+    assert '"chat_template_caps"' in (ROOT / 'turnstile/machines.py').read_text(encoding='utf-8')  # carried per location
+    assert 'reasoning_effort_levels' in (ROOT / 'engines/llama_cpp/adapter.py').read_text(encoding='utf-8')
+    for flag in ('reasoning', 'reasoning-effort', 'reasoning-budget', 'reasoning-format', 'chat-template-kwargs'):
+        assert f'`{flag}`' in written and f'"{flag}"' in (ROOT / 'turnstile/model_configuration.py').read_text(encoding='utf-8')
+
+
+def test_thinking_example_is_accepted_by_the_gateway(fake_llama_server, tmp_path, monkeypatch):
+    body = next(body for body in examples() if 'chat_template_kwargs' in body)
+    monkeypatch.chdir(tmp_path)
+    with gateway(fake_llama_server, models={'chat': model('chat.gguf')}) as caller:
+        headers = add_user(caller, 'thinker', 'admin')
+        answer = caller.post('http://front:8442/v1/chat/completions', json={**body, 'model': 'chat'}, headers=headers)
+        assert answer.status_code == 200, answer.text
+        assert json.loads(answer.json()['body'])['chat_template_kwargs'] == {'enable_thinking': False}  # reached the engine unchanged
+        refused = caller.post('http://front:8442/v1/responses', json={'model': 'chat', 'input': 'hi', 'reasoning': {'effort': 'low'}}, headers=headers)
+        assert refused.status_code == 400 and refused.json()['error']['code'] == 'unsupported_parameter'

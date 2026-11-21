@@ -63,10 +63,14 @@ openWeightGym facts:
  "data": [{"id": "qwen3-8b", "object": "model", "owned_by": "loadcoach",
            "capabilities": {"chat": true, "streaming": true, "embeddings": false, "images": false,
                             "json_schema": true},
-           "machines": ["gpu-1"], "locations": [{"machine": "gpu-1", "enabled": true}]},
+           "context": {"guaranteed": 8192, "max": 32768},
+           "machines": ["gpu-1", "gpu-2"],
+           "locations": [{"machine": "gpu-1", "enabled": true, "context": {"guaranteed": 8192, "max": 32768},
+                          "loaded_context": 20480},
+                         {"machine": "gpu-2", "enabled": true, "context": {"guaranteed": 8192, "max": 32768}}]},
           {"id": "nomic-embed", "object": "model", "owned_by": "loadcoach",
            "capabilities": {"chat": false, "embeddings": true},
-           "embedding": true, "context_tokens": 8192,
+           "embedding": true, "context_tokens": 8192, "context": {"guaranteed": 8192, "max": 8192},
            "machines": ["gpu-1"], "locations": [{"machine": "gpu-1", "enabled": true}]}],
  "available_machines": ["gpu-1"], "unavailable_machines": []}
 ```
@@ -76,12 +80,18 @@ openWeightGym facts:
 - `embedding: true` marks an embedding model and `rerank: true` a reranker. Like every other
   top-level mark, these keys are absent rather than false on other models. These models serve
   only their own endpoint.
-- `context_tokens` appears on embedding models: the most tokens one input may have. Chat models
-  do not report a context window here; a prompt that is too long is refused with 400.
+- `context` is the model's per-request window, in tokens: a request within `guaranteed` always
+  fits, and none can exceed `max`. The server loads the largest window that has room, so the
+  window in use lies between the two. Prompt and answer (`max_tokens`) share it.
+- `loaded_context`, in a location, is the window of the copy running on that node now. It is
+  absent where the model is not loaded or the node did not answer. It is a snapshot: the model
+  may be reloaded with another window before the next request. See
+  [Context windows](#app-context).
+- `context_tokens` appears on embedding models: the most tokens one input may have, equal to
+  `context.guaranteed`.
 - `unavailable_machines` lists nodes that did not answer. Their models may still be listed and
   can be requested; the server may wake an asleep node, which takes time.
-- `GET /v1/models/NAME` returns one entry, or 404 with `code: "model_not_found"` and the list of
-  permitted names in `message`.
+- `GET /v1/models/NAME` returns one entry, or 404 when the account may not use that name.
 
 ## Endpoint index {#app-endpoints}
 
@@ -185,6 +195,67 @@ controls and text, JSON or schema formatting.
   resource parameters.
 
 OpenAI Assistants, Conversations, Realtime and fine-tuning are not implemented.
+
+## Context windows {#app-context}
+
+A chat or completion request is served with a window between the model's `context.guaranteed`
+and `context.max`. Every answer says which in its `X-LoadCoach-Context-Tokens` header.
+
+- A request that needs more than the loaded window, but not more than `max`, makes the server
+  reload the idle model with a larger window when there is room now. The server counts the
+  prompt roughly, about three bytes per token, plus `max_tokens`. The reload adds a load's
+  delay to that request; the model then stays at the larger window.
+- When there is no room, the server does not wait or stop anyone else's work. The engine judges
+  the prompt against the loaded window, and a prompt that does not fit is refused at once with
+  400 `context_too_small`. The error carries `loaded_context` and `max_context`:
+
+```json
+{"error": {"code": "context_too_small", "type": "exceed_context_size_error", "loaded_context": 20480, "max_context": 32768,
+           "message": "the request exceeds the available context size, try increasing it. qwen3-8b is loaded with a 20480-token window now and allows up to 32768; shorten the request, or retry when there is room to load it larger."}}
+```
+
+When `loaded_context` is less than `max_context`, the app may shorten the request or retry
+later. When they are equal, only a shorter request fits. Keep prompts within `guaranteed` when an
+answer must not depend on what else is loaded.
+
+## Thinking (reasoning) {#app-thinking}
+
+Some models think before they answer. Whether they do is set per model by the administrator, and
+a chat or completion request may change it for itself.
+
+**Model default.** A model's settings may include llama-server's `reasoning` (`on`, `off` or
+`auto`), `reasoning-effort`, `reasoning-budget` (0 turns thinking off), `reasoning-format` and
+`chat-template-kwargs`. Requests that say nothing use them.
+
+**Per request, on `POST /v1/chat/completions` and `/v1/completions`.** Both fields go to the
+engine unchanged:
+
+- `"chat_template_kwargs": {"enable_thinking": false}` turns thinking off (or `true` on) for
+  models whose chat template has that switch, such as Qwen3. A template without it ignores the
+  field. The Strata engine accepts only `{"enable_thinking": false}`.
+- `"reasoning_effort": "low"` chooses how hard the model thinks, for templates that support it.
+  `"none"` asks for no thinking.
+
+```json
+{"model": "qwen3-8b", "messages": [{"role": "user", "content": "Say hello."}],
+ "chat_template_kwargs": {"enable_thinking": false}}
+```
+
+**Discover support** in `GET /v1/models`. While a copy is loaded on a node, that node's location
+carries `chat_template_caps`, as the running engine reports them. Examples are
+`supports_reasoning_effort` and `reasoning_effort_levels` (lowest to highest). Where the model is
+not loaded, or the engine is older, the field is absent. Nothing in the
+API says whether a template has an `enable_thinking` switch; sending it is harmless when not.
+
+**Read the thinking.** When the model's reasoning format separates it, the thinking is
+`choices[0].message.reasoning_content`, and `choices[0].delta.reasoning_content` in a stream.
+Otherwise it stays inside `content`, often between `<think>` tags. Responses returns it as a
+`reasoning` output item whose `summary` holds the text, and counts it in
+`usage.output_tokens_details.reasoning_tokens`. Responses does not accept a `reasoning`
+parameter (400 `unsupported_parameter`): a Responses request thinks as the model's settings say.
+
+Thinking tokens count against `max_tokens` and the [context window](#app-context). A
+low `max_tokens` can end an answer during its thinking, leaving `content` empty.
 
 ## Embeddings, reranking and classifiers {#app-vectors}
 
@@ -374,7 +445,7 @@ for receipts and tables only. `detail` is `concise` or `detailed`. The
 Errors are JSON objects in the OpenAI shape:
 
 ```json
-{"error": {"message": "There is no permitted model with that name. Available: qwen3-8b", "type": "invalid_request_error", "code": "model_not_found"}}
+{"error": {"message": "The model 'qwen3-9b' does not exist. Available: qwen3-8b", "type": "loadcoach_error", "code": "model_not_found"}}
 ```
 
 Show `message` to the user. Branch on the status and `code`, not on the message text.
@@ -382,6 +453,7 @@ Show `message` to the user. Branch on the status and `code`, not on the message 
 | Status | Meaning | What the app should do |
 |---|---|---|
 | 400 | Invalid input: an unknown field, a value out of range or a model of the wrong kind | Fix the request; do not retry it unchanged |
+| 400 `context_too_small` | The prompt and answer exceed the loaded window | Shorten it, or retry later if `loaded_context` < `max_context` ([Context windows](#app-context)) |
 | 401 | Missing, wrong, revoked or expired key | Ask for a new key |
 | 403 | The account lacks the model, ability or sensitivity level | Explain; do not retry |
 | 404 | No such model, or a record that is missing or not this account's | Refresh `GET /v1/models` or the list |
@@ -396,6 +468,7 @@ A stream that started with 200 can still end early. Check for a final chunk or t
 
 Every response carries `X-Request-ID`. Model responses also carry `X-LoadCoach-Request-ID`, the
 request number administrators see under **Model requests**. Log both with errors.
+`X-LoadCoach-Context-Tokens` on a chat or completion answer is the window it was served with.
 
 Optional request headers an app may use:
 

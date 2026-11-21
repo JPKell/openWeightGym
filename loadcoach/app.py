@@ -107,6 +107,49 @@ HOP_HEADERS = {
     "transfer-encoding",
     "upgrade",
 }
+# Text generation, whose window a long request may grow and whose overflow refusal is explained.
+TEXT_PATHS = ("/v1/chat/completions", "/v1/completions")
+
+
+def context_range(settings: dict | None) -> dict | None:
+    """A llama.cpp model's per-request window: always admitted at `guaranteed`, at most `max`.
+
+    Fitting loads the largest measured size that has room, so the window actually served lies
+    between them; each answer's X-LoadCoach-Context-Tokens header says which it was.
+    """
+    if not settings or engine_for(settings).id != 'llama_cpp':
+        return None
+    flags = settings.get('flags', {})
+    if type(flags.get('ctx-size')) is not int:
+        return None
+    guaranteed = request_context({**flags, 'ctx-size': settings.get('min_context', flags['ctx-size'])})
+    most = request_context(flags)
+    return {'guaranteed': guaranteed, 'max': most} if guaranteed and most else None
+
+
+def context_refusal(raw: bytes, name: str, loaded: int | None, window: dict | None) -> bytes | None:
+    """The engine's prompt-too-long refusal, kept as it is and told the loaded and maximum windows.
+
+    `type` stays llama-server's `exceed_context_size_error`, which the console's chat store
+    matches; `code` becomes `context_too_small` so a client can branch on it.
+    """
+    try:
+        said = json.loads(raw)
+    except ValueError:
+        return None
+    problem = said.get('error') if isinstance(said, dict) else None
+    if not isinstance(problem, dict) or not (problem.get('type') == 'exceed_context_size_error'
+                                             or 'exceeds the available context' in str(problem.get('message', ''))):
+        return None
+    most = (window or {}).get('max')
+    words = str(problem.get('message') or 'The request exceeds the available context size').rstrip('. ')
+    if loaded and most and loaded < most:
+        words += (f'. {name} is loaded with a {loaded}-token window now and allows up to {most}; '
+                  'shorten the request, or retry when there is room to load it larger.')
+    elif loaded:
+        words += f'. {loaded} tokens is the largest window {name} allows; shorten the request.'
+    return json.dumps({'error': {**problem, 'message': words, 'type': problem.get('type') or 'exceed_context_size_error',
+                                 'code': 'context_too_small', 'loaded_context': loaded, 'max_context': most}}).encode()
 
 
 @dataclass(eq=False)
@@ -380,6 +423,11 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             configured = library.get(name)
             minimum_flags = {**configured['flags'], 'ctx-size': configured.get('min_context', configured['flags']['ctx-size'])}
             marks['context_tokens'] = request_context(minimum_flags)
+        # The window range, and the window of the copy running now: what the next request would get without a reload.
+        marks['context'] = context_range(library.get(name))
+        running = runner.serving(name, library.get(name)) if marks['context'] else None
+        if running and running.ready and not running.dead() and runner.answers(running, library.get(name)):
+            marks['loaded_context'] = request_context(running.settings['flags'])
         return {"id": name, "object": "model", "created": created, "owned_by": "loadcoach",
                 **{key: value for key, value in marks.items() if value}, "order": library.place(name)}
 
@@ -535,6 +583,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         settings: dict | None = None,
         work: dict | None = None,
         validate_settings=None,
+        context: int = 0,
     ) -> Ticket | Response:
         """Wait in line on this request's behalf. Returns the ticket, or the response that ends it."""
         asked = request.headers.get("x-loadcoach-priority")
@@ -558,6 +607,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             observe=flight.diagnostics.stage if flight and flight.diagnostics else None,
             work=work,
             validate_settings=validate_settings,
+            context=context,
         )
         if flight:
             flight.ticket = ticket
@@ -806,7 +856,10 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 await tasks.probes.yield_to_foreground()
                 await runner.look()
             await paced()
-            ticket = await take_turn(request, user, name, flight=flight, settings=settings, work=None if media or selected_engine.capabilities(settings).get('image_generation') else waits.workload(asked), validate_settings=validate_settings)
+            work = None if media or selected_engine.capabilities(settings).get('image_generation') else waits.workload(asked)
+            # Room the answer needs: the prompt by the same rough count as role checks, plus any requested output.
+            needs = (work['prompt_tokens'] + (work['output_tokens'] or 0)) if work and work['prompt_tokens'] and request.url.path in TEXT_PATHS else 0
+            ticket = await take_turn(request, user, name, flight=flight, settings=settings, work=work, validate_settings=validate_settings, context=needs)
         except asyncio.CancelledError:
             ended('hung up', 499)
             raise
@@ -925,6 +978,21 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if flight.diagnostics:
             flight.diagnostics.stage('response')
 
+        # A prompt longer than the loaded window: the engine's refusal is read whole, so the caller is
+        # also told the loaded and maximum windows. The log keeps the engine's own words.
+        prefetched = shown = None
+        if (upstream.status_code == 400 and request.url.path in TEXT_PATHS and 'json' in flight.kind
+                and 'content-encoding' not in upstream.headers):
+            try:
+                prefetched = b''.join([piece async for piece in upstream.aiter_raw()])
+            except (httpx.HTTPError, httpx.StreamClosed):
+                prefetched = b''
+            shown = context_refusal(prefetched, name, admitted_context, context_range(ticket.settings))
+
+        async def once(content):
+            """Yield an already-read body as the one chunk of the answer."""
+            yield content
+
         complete, broke, timed_out = False, "", False
         media_capture = media.Capture(upstream.headers.get('content-type', ''),**({'max_event':704*2**20} if request.url.path.startswith('/v1/videos/') else {})) if media else None
 
@@ -934,7 +1002,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             """Stream upstream output and release the connection and admission ticket on exit."""
             nonlocal complete, broke, timed_out
             try:
-                async for chunk in upstream.aiter_raw():
+                async for chunk in (once(prefetched) if prefetched is not None else upstream.aiter_raw()):
                     if flight.diagnostics:
                         flight.diagnostics.chunk(chunk, flight.kind, 'content-encoding' not in upstream.headers)
                     if not quiet:
@@ -943,7 +1011,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                         else:
                             flight.pieces.append(chunk)
                             flight.whole.extend(chunk)
-                    yield chunk
+                    yield shown if shown is not None else chunk
                 complete = True
             except (httpx.HTTPError, httpx.StreamClosed) as problem:  # the connection to the model server broke
                 if not flight.stopped_by:  # `stop` closed the connection under us: end quietly
@@ -1004,6 +1072,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             headers['x-loadcoach-model-id'] = going['model_id']
         if configured:  # the model as configured, which is what a guard pins; x-loadcoach-fingerprint is the server as started
             headers['x-loadcoach-configured-fingerprint'] = configured
+        if admitted_context:  # the window this request was served with, between the model's guaranteed and maximum windows
+            headers['x-loadcoach-context-tokens'] = str(admitted_context)
         return StreamingResponse(answer(), status_code=upstream.status_code, headers=headers)
 
     def status_for(user: User) -> dict:

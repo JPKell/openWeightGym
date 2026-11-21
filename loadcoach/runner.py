@@ -25,7 +25,7 @@ from typing import Callable
 import httpx
 
 from loadcoach.config import Config
-from loadcoach.models import LAUNCH_FAILURE_PREFIX, Models, at_context, base, contexts, kin_base
+from loadcoach.models import LAUNCH_FAILURE_PREFIX, Models, at_context, base, contexts, kin_base, request_context
 from loadcoach.waiting import estimate
 from loadcoach.host_memory import memory_snapshot, resident_mib
 from loadcoach.processes import ProcessGroup, adopt_orphans
@@ -178,6 +178,7 @@ class Ticket:
     work: dict | None = None  # inferred prompt/output counts only; None for administrative work
     validate_settings: Callable[[dict], None] | None = field(default=None, repr=False)
     estimate: dict | None = None  # the admission snapshot, never a resource reservation
+    context: int = 0  # inferred tokens a text request needs; may grow an idle server's window, never refuses
 
 
 class Runner:
@@ -850,6 +851,29 @@ class Runner:
             gone = [*gone,*idle[:count-limit]]
         return selected,cards,gone
 
+    def grow(self, ticket: Ticket, server: Server, settings: dict, taken: set[str]) -> tuple[dict, tuple[str, ...], list[Server]] | None:
+        """A plan to reload an idle server with a larger window for a request that needs more, or None.
+
+        Only a ready, idle, unheld llama.cpp server whose measured range offers more than it was
+        loaded with is reconsidered, and only when a strictly larger window can be placed now:
+        its own memory, free memory and stale idle models count, as for any load. Nothing is
+        stopped until that plan exists. Otherwise the request runs on the server as it is and the
+        engine judges the length, so an estimate never refuses or delays work.
+        """
+        if not (ticket.context and ticket.may_load and server.model == ticket.model and server.ready
+                and not self.busy(server) and not self.pinned(server) and engine_for(settings).id == 'llama_cpp'
+                and self.models.calibrated(ticket.model, settings)):
+            return None
+        loaded = request_context(server.settings['flags']) or 0
+        if loaded >= ticket.context or loaded >= (request_context(settings['flags']) or 0):
+            return None
+        placed = self.fit(ticket.model, settings, taken)
+        if placed is None or (request_context(placed[0]['flags']) or 0) <= loaded:
+            return None
+        self.note('model', 'growing', model=ticket.model,
+                  why=f'a request needs about {ticket.context} tokens; it was loaded with {loaded}')
+        return placed
+
     def _fit(self, model: str, settings: dict, taken: set[str], *, configured: dict | None = None) -> tuple[dict, tuple[str, ...], list[Server]] | None:
         """Prefer maximum context, evicting only stale idle models, then try smaller measured sizes.
 
@@ -1195,6 +1219,8 @@ class Runner:
                         every = [*server.settings.get("adapters", {}).values(), *self.lacks(server, settings)]
                         loading = settings | {"adapters": {adapter["file"]: adapter for adapter in every}}
                     server = None  # idle, so it is loaded afresh below, in its own place
+                if server and (grown := self.grow(ticket, server, loading, taken)):
+                    server = self.load(ticket.model, *grown)
                 if server is None and not ticket.may_load:
                     self.waiting.remove(ticket)
                     ticket.error = Refusal(403, f"{ticket.model} is not loaded, and your group may not load models.")

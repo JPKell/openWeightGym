@@ -7058,6 +7058,24 @@ There is no interpolation or extrapolation: only observed contexts are selected.
 that cannot fit even with empty cards remains configured and its failure remains visible;
 requests use a smaller successful point. Forget measurements to retry failed points after a
 machine change. If telemetry cannot be read, the successful load keeps its cards to itself.
+
+#### What callers are told, and growing for a long request
+
+`/v1/models` gives each llama.cpp model `context: {guaranteed, max}`, per-request windows (divided
+across parallel slots, as `request_context()` does) at the minimum and the maximum. Each location
+adds `loaded_context` while a matching copy is ready on that node. Turnstile keeps it out of the
+merged entry and drops it for nodes answering from retained data. Every chat or completion
+answer carries `X-LoadCoach-Context-Tokens`, the window that served it.
+
+A chat or completion ticket carries `context`: the prompt by the rough byte count of
+`waiting.workload()` plus any requested output. When that exceeds the window of a ready, idle,
+unheld, calibrated llama.cpp copy, `Runner.grow()` asks `fit()` for a plan. Only a strictly
+larger window replaces the copy, through the ordinary `load()`. Its own memory, free memory and
+stale idle models count as room; nothing is stopped before the plan exists. Otherwise the request
+runs on the copy as it is. The estimate never refuses or delays work, and a grown copy stays large.
+A `growing` model event records each reload. The engine judges the actual length: its
+`exceed_context_size_error` refusal keeps that type and gains `code: context_too_small`,
+`loaded_context` and `max_context` for the caller, while the log keeps the engine's words.
 Multi-card models with an explicit positive `tensor-split` can share using their measured
 per-card sizes. Automatic splits still require empty cards because their division changes
 with the available memory.

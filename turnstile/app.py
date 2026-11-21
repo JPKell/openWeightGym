@@ -1780,6 +1780,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             listed = [model for model in listed if platform().model_enabled(model)]
             missing = sorted(name for name, answer in zip(names, answers)
                              if answer is None or answer.status_code != 200 or answer.headers.get("x-suite-retained"))
+            for model in listed:  # a retained answer says what was loaded once, not now
+                for location in model.get("locations", []):
+                    if location["machine"] in missing:
+                        location.pop("loaded_context", None)
             return JSONResponse(routing.with_roles({"object": "list", "data": listed,
                                                     "unavailable_machines": missing,
                                                     "available_machines": sorted(set(names) - set(missing))}))

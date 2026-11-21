@@ -160,3 +160,63 @@ def test_fixed_multicard_split_shrinks_beside_recent_models():
     old.idle_since -= 181
     plan = runner.fit("new", settings, set())
     assert plan[0]["flags"]["ctx-size"] == 10000 and plan[2] == [old]
+
+
+LONG = [{"role": "user", "content": "abcd " * 7000}]  # 7000 fake tokens; about 11700 by the rough byte count
+
+
+def test_an_idle_model_grows_its_window_for_a_long_request_when_room_frees(fake_llama_server, fake_cards):
+    models = {"new": adaptive(), "old": model("old.gguf", ["GPU0"], mib=6000)}
+    with gateway(fake_llama_server, models, nvidia_smi=fake_cards[0], model_idle_minutes=.02, max_wait=10) as caller:
+        assert context(ask(caller, "new")) == 10000
+        caller.post("/loadcoach/unload")
+        old = ask(caller, "old").json()
+        smaller = ask(caller, "new")  # the old model is still recent, so the window shrinks to fit beside it
+        assert context(smaller) == 6000 and smaller.headers["x-loadcoach-context-tokens"] == "6000"
+        listed = next(one for one in caller.get("http://front:8442/v1/models").json()["data"] if one["id"] == "new")
+        assert listed["context"] == {"guaranteed": 2000, "max": 10000} and "loaded_context" not in listed
+        assert listed["locations"][0]["loaded_context"] == 6000
+        assert ask(caller, "new").json()["pid"] == smaller.json()["pid"]  # a short request never reloads
+        time.sleep(1.3)  # now the old model is stale and its memory counts as room
+        grown = ask(caller, "new", messages=LONG)
+        assert grown.status_code == 200, grown.text
+        assert context(grown) == 10000 and grown.headers["x-loadcoach-context-tokens"] == "10000"
+        assert grown.json()["pid"] != smaller.json()["pid"] and not alive(old["pid"])
+        assert ask(caller, "new").json()["pid"] == grown.json()["pid"]  # it stays large; no reload back
+        growing = caller.get("/loadcoach/events", params={"kind": "model", "what": "growing"}).json()["events"]
+        assert len(growing) == 1 and "loaded with 6000" in growing[0]["why"]
+
+
+def test_a_long_request_without_room_is_refused_with_both_windows_and_nothing_reloads(fake_llama_server, fake_cards):
+    models = {"new": adaptive(), "old": model("old.gguf", ["GPU0"], mib=6000)}
+    with gateway(fake_llama_server, models, nvidia_smi=fake_cards[0], model_idle_minutes=3) as caller:
+        assert context(ask(caller, "new")) == 10000
+        caller.post("/loadcoach/unload")
+        old = ask(caller, "old").json()
+        smaller = ask(caller, "new")
+        assert context(smaller) == 6000
+        began = time.monotonic()
+        refused = ask(caller, "new", messages=LONG)
+        assert time.monotonic() - began < 5  # refused at once, not left waiting for room
+        problem = refused.json()["error"]
+        assert refused.status_code == 400 and problem["code"] == "context_too_small"
+        assert problem["type"] == "exceed_context_size_error"  # what the console's chat store recognizes
+        assert (problem["loaded_context"], problem["max_context"]) == (6000, 10000)
+        assert "loaded with a 6000-token window now and allows up to 10000" in problem["message"]
+        assert refused.headers["x-loadcoach-context-tokens"] == "6000"
+        assert ask(caller, "new").json()["pid"] == smaller.json()["pid"] and alive(old["pid"])
+        endings = caller.get("/loadcoach/events", params={"kind": "request", "limit": 10}).json()["events"]
+        logged = next(one for one in endings if one.get("status") == 400)
+        assert logged["why"] == "the request exceeds the available context size, try increasing it"  # the engine's own words
+
+
+def test_context_range_and_refusal_shapes():
+    from loadcoach.app import context_range, context_refusal
+    assert context_range({"flags": {"model": "m.gguf", "ctx-size": 8192, "parallel": 2}, "min_context": 4096}) == {"guaranteed": 2048, "max": 4096}
+    assert context_range({"flags": {"model": "m.gguf", "ctx-size": 8192}}) == {"guaranteed": 8192, "max": 8192}
+    assert context_range({"engine": "sdcpp", "flags": {}, "sdcpp": {}}) is None
+    raw = json.dumps({"error": {"code": 400, "message": "the request exceeds the available context size", "type": "exceed_context_size_error"}}).encode()
+    at_most = json.loads(context_refusal(raw, "m", 8192, {"guaranteed": 8192, "max": 8192}))["error"]
+    assert at_most["code"] == "context_too_small" and "largest window m allows" in at_most["message"]
+    assert context_refusal(b'{"error": {"message": "bad grammar"}}', "m", 8192, None) is None
+    assert context_refusal(b"not json", "m", 8192, None) is None

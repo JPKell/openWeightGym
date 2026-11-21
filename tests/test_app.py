@@ -195,6 +195,7 @@ def test_the_models_endpoints_match_openai(fake_llama_server, tmp_path):
         assert entry.pop('engine_id') == 'llama_cpp'
         assert entry.pop('capabilities')['native_probes'] is True
         assert entry.pop('order') == 10
+        assert entry.pop('context') == {'guaranteed': 2048, 'max': 2048}  # the per-request window range
         entry.pop("fingerprint", None), entry.pop("build", None)
         assert entry.pop("content_sha256", None) in (None, hashlib.sha256(b"").hexdigest())  # the weights file's SHA-256, once it was read through
     assert listed == {
