@@ -113,6 +113,7 @@ Each fact has one home:
 | Using a page or workflow | `docs/guide/<section>/<topic>.md` | Discovered TOML front matter; `covers` supplies the page map. |
 | Installation and operation | Existing installation/operations sections and package READMEs | Relative `include` stubs with optional named `parts`; never copy their text. |
 | Routes, methods, summaries and access | Route declarations and handler docstrings | Generated API endpoints. |
+| Client contract for app builders | [App-builder API brief](guide/api/app-builder.md), checked by [test_api_guide.py](../tests/test_api_guide.py) | One self-contained page for outside developers and AI agents. |
 | Setting keys, defaults and meanings | `settings/defaults/*.toml` comments and catalogue labels | Generated settings reference; never live settings values. |
 | Abilities | Ability definitions | Generated abilities reference. |
 | Modules, classes and functions | Allowlisted source docstrings | Code references; `SOURCES` remains an explicit security boundary. |
@@ -121,8 +122,17 @@ Each fact has one home:
 Update the affected guide in the **same commit** as a page, route, ability or setting change.
 Generated pages need no edits: fix their source descriptions. Link to generated entries instead of
 restating defaults, endpoint lists or abilities. A limit defined only in code may be explained in its
-guide and developer docstring. Check **Docs → Gaps** when choosing documentation work. [Docs help checks](../tests/test_docs_help.py) exercise the small fake-model smoke set and question-only gap privacy; [Docs tool checks](../tests/test_docs_tools.py) cover caller proof and source visibility.
-Run `rtk proxy .venv/bin/pytest tests/test_documentation.py tests/test_docs_library.py tests/test_docs_coverage.py tests/test_source_docs.py tests/test_doc_markdown.py tests/test_docs_designs.py`,
+guide and developer docstring. Check **Docs → Gaps** when choosing documentation work.
+
+The app-builder API brief is the exception to "link instead of restating": it is copied whole to
+external developers and AI agents, so it states each client endpoint, request-field list, response
+shape, error and client header itself. Change it in the same commit as any of those, including
+routes dispatched inside Turnstile's `pass_on` or LoadCoach's `/v1/{path:path}` proxy, which the
+generated inventory cannot see. [API brief checks](../tests/test_api_guide.py) compare its endpoint
+index with declared and dispatched routes and its `**… fields:**` lines with the validators'
+allowlists, and run its examples through the real validators and gateway. List a route an app
+should not call in that test's `NOT_FOR_APPS`, with the reason. [Docs help checks](../tests/test_docs_help.py) exercise the small fake-model smoke set and question-only gap privacy; [Docs tool checks](../tests/test_docs_tools.py) cover caller proof and source visibility.
+Run `rtk proxy .venv/bin/pytest tests/test_documentation.py tests/test_docs_library.py tests/test_docs_coverage.py tests/test_source_docs.py tests/test_doc_markdown.py tests/test_docs_designs.py tests/test_api_guide.py`,
 plus Docs browser checks and UI consistency checks for UI changes. [API example checks](../tests/test_docs_examples.py) execute the published payloads against isolated gateway/console routes. `scripts/docs-coverage.py` prints
 the same coverage report. Guide metadata uses TOML in a leading `<!--docs` comment; public prose can
 wrap private paragraphs in `<!-- audience: admin -->` / `<!-- /audience -->`. An explicit heading

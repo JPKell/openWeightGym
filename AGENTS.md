@@ -35,6 +35,14 @@ Never update frozen plans/history as current instructions. Run `scripts/docs-cov
 checks in [Documentation maintenance](docs/agents.md#documentation-maintenance); review Docs → Gaps
 when choosing documentation work.
 
+The [app-builder API brief](docs/guide/api/app-builder.md) is handed whole to outside developers
+and AI agents, so it must stay exact. Update it in the same commit as any client-facing `/v1/` or
+`/owg/` route, a request-field allowlist, a response shape, an error code or a client header,
+including routes dispatched inside Turnstile's `pass_on` or LoadCoach's `/v1/{path:path}` proxy.
+Run `rtk proxy .venv/bin/pytest tests/test_api_guide.py`: it fails when the endpoint index, field
+lists or examples drift from the code. Add an internal route to its `NOT_FOR_APPS` with a reason
+rather than to the brief.
+
 ### Template index
 
 | Element | Canonical source |
