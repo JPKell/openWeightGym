@@ -1372,7 +1372,10 @@ Browsers give a page the microphone only over HTTPS. `scripts/front-https.sh`, r
 serves the console at `https://front.home.arpa` with no outside service: a home CA in `~/ca` on
 compute signs a certificate for the control node (its key never leaves compute, and its name constraint lets
 it sign only `*.home.arpa` and LAN addresses), and nginx on the control node (installed if missing) answers
-on the LAN address's port 443 and passes to the console on `127.0.0.1:8440`. Once HTTPS answers,
+on the LAN address's port 443 and passes to the console on `127.0.0.1:8440`. It serves HTTP/2
+(`http2 on;` from nginx 1.25.1, the `listen … http2` flag before), because a browser opens at most six
+HTTP/1.1 connections to one site and every console tab keeps a live stream on one, so a sixth tab
+would wait for another to close; the final check says which protocol answered. Once HTTPS answers,
 it sets the console's top-level `host = "127.0.0.1"` and `secure = true` (backup
 `weightroom.toml.before-https`); `KEEP_HTTP=1` skips that. Run it again within 30 days of the
 certificate's end (825 days) to sign a new one. By hand: a router DNS record for the name, a fixed

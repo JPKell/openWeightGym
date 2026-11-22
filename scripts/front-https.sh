@@ -50,6 +50,15 @@ ssh "$FRONT" 'dpkg -s nginx >/dev/null 2>&1 || { sudo apt-get update && sudo apt
               sudo install -d -m 700 /etc/nginx/tls'
 ssh "$FRONT" "sudo sh -c 'umask 077; cat > /etc/nginx/tls/$NAME.key'" < "$NAME.key"
 ssh "$FRONT" "sudo sh -c 'cat > /etc/nginx/tls/$NAME.crt'" < "$NAME.crt"
+# A browser keeps at most six HTTP/1.1 connections to one site, and every open console tab holds a live
+# stream on one of them, so a sixth tab can wait for another to close (QA-044). HTTP/2 shares one connection.
+# nginx 1.25.1 moved it from the listen line to its own directive; older releases take the listen flag.
+VERSION=$(ssh "$FRONT" 'sudo nginx -v 2>&1' | sed -n 's|.*nginx/\([0-9][0-9.]*\).*|\1|p')
+if [ -n "$VERSION" ] && [ "$(printf '%s\n%s\n' 1.25.1 "$VERSION" | sort -V | head -n 1)" = 1.25.1 ]; then
+  LISTEN="listen $IP:443 ssl;"; HTTP2="http2 on;"
+else
+  LISTEN="listen $IP:443 ssl http2;"; HTTP2=""
+fi
 # A site that fails nginx's check is taken out again, so a later restart or reboot still starts nginx.
 ssh "$FRONT" "sudo tee /etc/nginx/sites-available/front-tls >/dev/null
               sudo ln -sf ../sites-available/front-tls /etc/nginx/sites-enabled/front-tls
@@ -57,7 +66,8 @@ ssh "$FRONT" "sudo tee /etc/nginx/sites-available/front-tls >/dev/null
               sudo systemctl reload-or-restart nginx" <<EOF
 # Written by scripts/front-https.sh on compute. Run that again rather than editing this.
 server {
-    listen $IP:443 ssl;   # the LAN address only: Tailscale Serve holds 443 on its own address
+    $LISTEN   # the LAN address only: Tailscale Serve holds 443 on its own address
+    $HTTP2
     server_name $NAME;
     ssl_certificate     /etc/nginx/tls/$NAME.crt;
     ssl_certificate_key /etc/nginx/tls/$NAME.key;
@@ -76,7 +86,9 @@ server {
 EOF
 
 echo "Checking https://$NAME from here"
-curl -fsS -o /dev/null --cacert home-ca.crt --resolve "$NAME:443:$IP" "https://$NAME/"
+PROTOCOL=$(curl -fsS -o /dev/null -w '%{http_version}' --cacert home-ca.crt --resolve "$NAME:443:$IP" "https://$NAME/")
+case "$PROTOCOL" in 2*) echo "HTTPS answers over HTTP/2";;
+  *) echo "HTTPS answers over HTTP/$PROTOCOL: this curl may lack HTTP/2; check a browser's protocol column";; esac
 
 if [ "${KEEP_HTTP:-0}" != 1 ]; then
   ssh "$FRONT" "python3 - $WHERE/settings/weightroom.toml" <<'EOF'
