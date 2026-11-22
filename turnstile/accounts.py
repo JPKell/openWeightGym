@@ -492,8 +492,8 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         existing = users.groups.get(name)
         if existing and "new" in request.query_params:
             return error(409, f"There is already a group named {name!r}.")
-        if existing is None and request.method == "PATCH":
-            return error(404, f"No group named {name!r}.")
+        if existing is None and (request.method == "PATCH" or "replace" in request.query_params):
+            return error(404, f"No group named {name!r}.")  # ?replace never adds one: a stale page must not bring back a removed group
         if name == user.group_name:
             return error(403, ONES_GROUP)  # rule 2
         kept = {**users.groups.stored(name), **asked} if existing and request.method == "PATCH" else asked

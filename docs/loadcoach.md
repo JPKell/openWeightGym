@@ -4951,7 +4951,7 @@ at each start saying so, and where to look. It changes nothing.
 | Ask | Who | What |
 |---|---|---|
 | `GET /loadcoach/groups` | `manage-groups` or `manage-users` | Every group with all its settings and its members, whether the one asking may change it, and every ability with what it allows |
-| `POST /loadcoach/groups/NAME` | `manage-groups` | Add a group or replace its settings. With `?new`, a name that is taken gets `409` |
+| `POST /loadcoach/groups/NAME` | `manage-groups` | Add a group or replace its settings. With `?new`, a name that is taken gets `409`; with `?replace`, a group that does not exist gets `404` and is not added, so a page left open after the group was removed cannot bring it back |
 | `DELETE /loadcoach/groups/NAME` | `manage-groups` | Remove a group. `409` while anyone is in it |
 | `loadcoach group`, `group show NAME`, `group export` | this machine | See them, as they would be written in a settings file |
 | `loadcoach group add NAME KEY=VALUE...`, `group set`, `group remove` | this machine | Change them |

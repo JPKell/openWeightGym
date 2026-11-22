@@ -5010,7 +5010,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     made["limits"] = {entry.name: int(one("value-" + entry.name)) for entry in content_contracts() if one("value-" + entry.name)}
                 except ValueError:
                     return await group_page(request, person, "Content limits must be whole numbers; leave blank to inherit.", failed=True, typed_in=made)
-            answer = await ask("PATCH" if do in ("abilities", "limits", "tools") else "POST", where, person.key, json=made)
+            answer = await ask("PATCH" if do in ("abilities", "limits", "tools") else "POST", where, person.key, json=made,
+                               params=None if do in ("abilities", "limits", "tools") else {"replace": "1"})  # QA-046
+        if answer.status_code == 404:
+            return page(request, "refused.html", person, status=404, why=f"There is no group named {name}: it was removed, so nothing was saved.")
         if answer.status_code != 200:
             return await group_page(request, person, answer.json()["error"]["message"], failed=True, typed_in=made)
         return go(f"/groups/{quote(name, safe='')}?said=Saved.")
