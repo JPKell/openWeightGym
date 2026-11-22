@@ -25,3 +25,30 @@ def test_the_form_that_was_sent_is_filled_in_again_and_no_other():
     assert '<textarea name="notes">&lt;b&gt;typed&lt;/b&gt;</textarea>' in page  # what was typed is text, never markup
     assert refill(PAGE, "http://site/thing", "/other", "POST", sent) == (PAGE, False)  # no form goes to that address
     assert error_message(PAGE) == "Bad interval."
+
+
+REPEATED = """<form method="post" action="/models/m"><input type="hidden" name="do" value="preset">
+<input type="hidden" name="flag" value="temp"><input name="value" value="0.7">
+<input type="hidden" name="flag" value="reasoning"><select name="value"><option value="">default</option><option value="on">on</option></select>
+<input type="hidden" name="flag" value="effort"><select name="value"><option value="">default</option><option value="high">high</option></select>
+<input type="hidden" name="model" value="m-1"><input name="weight" value="0.25">
+<input type="hidden" name="model" value="m-2"><input name="weight" value="0.5">
+<select name="model"><option value="">Add a candidate</option><option value="m-1">m-1</option></select>
+<textarea name="note">a</textarea><textarea name="note">b</textarea></form>"""
+
+
+def test_fields_that_share_a_name_each_keep_their_own_value():
+    """Each flag keeps its value and each candidate its weight when a form is refused (QA-061)."""
+    sent = {"do": ["preset"], "flag": ["temp", "reasoning", "effort"], "value": ["0.3", "on", ""],
+            "model": ["m-1", "m-2", ""], "weight": ["0.25", "0.5"], "note": ["first", "second"]}
+    page, found = refill(REPEATED, "http://site/models/m", "/models/m", "POST", sent)
+    assert found
+    for flag in ("temp", "reasoning", "effort"):
+        assert f'name="flag" value="{flag}"' in page
+    assert 'name="value" value="0.3"' in page
+    assert '<option value="on" selected>on</option>' in page and '<option value="high">high</option>' in page
+    assert '<option value="" selected>default</option>' in page  # the third flag was left at its default
+    assert 'name="model" value="m-1"' in page and 'name="model" value="m-2"' in page
+    assert 'name="weight" value="0.25"' in page and 'name="weight" value="0.5"' in page
+    assert '<option value="" selected>Add a candidate</option><option value="m-1">m-1</option>' in page
+    assert '<textarea name="note">first</textarea><textarea name="note">second</textarea>' in page

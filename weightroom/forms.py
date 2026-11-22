@@ -82,7 +82,19 @@ class Refill(HTMLParser):
         self.values, self.chosen, self.form_id = values, chosen, form_id
         self.output, self.form_number, self.active = [], -1, False
         self.textarea, self.select, self.option = False, None, None
+        self.used, self.template = {}, 0
         self.feed(html)
+
+    def nth(self, name):
+        """The value submitted for this occurrence of a repeated name, in document order, as a browser sends them (QA-061).
+
+        Fields that share a name, such as each flag of a model or each candidate of a role, keep their own value.
+        None when the form shows more such fields than were sent, so the rendered one stays.
+        """
+        index = self.used.get(name, 0)
+        self.used[name] = index + 1
+        sent = self.values.get(name, [])
+        return sent[index] if index < len(sent) else None
 
     def handle_starttag(self, tag, pairs):
         """Restore permitted submitted input values while preserving markup."""
@@ -91,7 +103,9 @@ class Refill(HTMLParser):
         if tag == "form":
             self.form_number += 1
             self.active = self.form_number == self.chosen
-        belongs = self.active or (self.form_id and attrs.get("form") == self.form_id)
+        if tag == "template":
+            self.template += 1  # a browser never sends a template's fields, so they take no submitted value
+        belongs = not self.template and (self.active or (self.form_id and attrs.get("form") == self.form_id))
         name = attrs.get("name")
         if belongs and name and "disabled" not in attrs:
             if tag == "input":
@@ -102,24 +116,21 @@ class Refill(HTMLParser):
                         attrs["checked"] = None
                     original = start_tag(tag, attrs)
                 # A password is never written back into a page, whoever typed it.
-                elif name in self.values and kind not in (
-                    "password",
-                    "file",
-                    "submit",
-                    "button",
-                    "image",
-                    "reset",
-                ):
-                    attrs["value"] = self.values[name][-1]
-                    original = start_tag(tag, attrs)
+                elif kind == "password":
+                    self.nth(name)  # sent, so it holds a place, but never written back
+                elif name in self.values and kind not in ("file", "submit", "button", "image", "reset"):
+                    if (value := self.nth(name)) is not None:
+                        attrs["value"] = value
+                        original = start_tag(tag, attrs)
             elif tag == "textarea" and name in self.values:
-                self.textarea = True
-                self.output.extend(
-                    [original, escape(self.values[name][-1], quote=False)]
-                )
-                return
-            elif tag == "select" and (name in self.values or "multiple" in attrs):
+                if (value := self.nth(name)) is not None:
+                    self.textarea = True
+                    self.output.extend([original, escape(value, quote=False)])
+                    return
+            elif tag == "select" and "multiple" in attrs:
                 self.select = {"wanted": self.values.get(name, []), "seen": set()}
+            elif tag == "select" and name in self.values and (value := self.nth(name)) is not None:
+                self.select = {"wanted": [value], "seen": set()}
         if tag == "option" and self.select is not None:
             self.option = {"attrs": attrs, "start": len(self.output), "text": []}
         self.output.append(original)
@@ -130,6 +141,8 @@ class Refill(HTMLParser):
 
     def handle_endtag(self, tag):
         """Close the current refill field and preserve the ending tag."""
+        if tag == "template" and self.template:
+            self.template -= 1
         if tag == "textarea" and self.textarea:
             self.textarea = False
         elif tag == "option" and self.option is not None:
