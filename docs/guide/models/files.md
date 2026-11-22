@@ -18,6 +18,12 @@ Use an account with [model management](/docs/system/abilities#ability-manage-mod
 2. Select the source and desired destinations before copying or moving. Review transfer progress and errors. Finished transfers, installs, bulk changes and conversions leave the list a day after they end; **Clear finished** removes them at once and leaves running tasks.
 3. Open the individual file to inspect metadata, node copies and its offered configuration actions. **Search metadata** and **Metadata group** narrow the record.
 
+An adapter or projector file offers **Make a model with this adapter** or **Make a model that sees**.
+Choose a language model from any node; models the file names come first, and others are marked. The new
+model copies the base model's settings on each node that has it, adds the file, and leaves the base as it
+was. Where a node does not hold the file yet, such as a file in control-node storage, an ordinary
+installation copies it there first; follow its progress on Models.
+
 Compatible HunyuanVideo weights and LTX-2.5 text encoders offer **Convert video component**.
 Choose RAM and temporary disk budgets; Files tracks conversion without replacing the source.
 See [Video models](/docs/model-guides/video-models) for component requirements and qualification.

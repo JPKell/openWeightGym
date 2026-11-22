@@ -5230,6 +5230,66 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         said = "Looked through every model folder again." + (" Not answering, so not looked at: " + ", ".join(silent) + "." if silent else "")
         return go(back + "&said=" + quote(said))
 
+    async def base_models(person: Person) -> list[dict]:
+        """The language models an adapter or projector can go onto, on every node, each with its per-node settings.
+
+        Files may be on the control node's storage while models are on compute nodes, so the choices come from
+        the combined catalogue, not from whichever node holds the file (QA-103)."""
+        answer = await ask("GET", "/turnstile/models", person.key)
+        if answer.status_code != 200:
+            return []
+        return [one for one in answer.json().get("models", []) if one.get("engine", "llama_cpp") == "llama_cpp"
+                and not one.get("embedding") and not one.get("reranking") and one.get("locations")]
+
+    async def make_with_part(request: Request, person: Person, path: str, form: dict, adapter: bool) -> Response:
+        """A new model on each node that has the chosen base: its settings plus this adapter or projector.
+
+        The ordinary installation places the file on each node first, from storage if need be."""
+        new, chosen = form.get("name", "").strip(), form.get("model", "")
+        base = next((one for one in await base_models(person) if one["name"] == chosen), None)
+        if base is None:
+            return await file_page(request, person, f"Choose the model this {'adapter' if adapter else 'projector'} is for.", failed=True, path=path)
+        if not new:
+            return await file_page(request, person, "Give the new model a name.", failed=True, path=path)
+        short = form.get("short", "").strip()
+        if adapter and not short:
+            return await file_page(request, person, "Give the adapter a word to be known by.", failed=True, path=path)
+        found = await all_files(request, person)
+        held = {(node["name"], file["path"]) for node in (found.get("nodes", []) if isinstance(found, dict) else [])
+                for file in node.get("files", [])}
+        made_now, installing, problems = [], [], []
+        for place in base["locations"]:
+            machine = place["machine"]
+            made = {key: place[key] for key in ("flags", "gpus", "alone", "allow_split", "adapters", "min_context", "host_ram_mib") if key in place}
+            if adapter:
+                made["adapters"] = {**made.get("adapters", {}), short: {"file": path}}
+            else:
+                made["flags"] = {**made.get("flags", {}), "mmproj": path}
+            if (machine, path) in held:  # the node has the file where it is named: the model is made at once
+                answer = await ask("POST", f"/turnstile/machines/{quote(machine, safe='')}/model-api/models/{quote(new, safe='/:')}",
+                                   person.key, json=made, params={"new": "1"})
+                done, into = answer.status_code == 201, made_now
+            else:  # elsewhere, such as control-node storage: the ordinary installation copies it to the node first
+                answer = await ask("POST", "/turnstile/models/install", person.key, timeout=None,
+                                   json={"name": new, "machine": machine, "settings": made})
+                done, into = answer.status_code == 202, installing
+            if done:
+                into.append(machine)
+            else:
+                problems.append(f"{machine}: {answer.json()['error']['message']}")
+        if not made_now and not installing:
+            return await file_page(request, person, " ".join(problems), failed=True, path=path)
+        part = f"the adapter {short}" if adapter else f"the projector {Path(path).name}, so that it can be sent pictures"
+        kept = "It can be asked for from now on." if adapter else f"{base['name']} stays as it was."
+        if made_now and not installing and not problems:
+            return go(model_address(new) + "?said=" + quote(f"Made {new}: {base['name']} with {part}. {kept}"))
+        said = " ".join(part for part in (
+            f"Made {new} on {', '.join(made_now)}." if made_now else "",
+            f"Making {new} on {', '.join(installing)}: the file is copied there first; progress is shown on Models." if installing else "",
+            f"{base['name']} with {part}. {base['name']} stays as it was.",
+            "Not made on " + "; ".join(problems) if problems else "") if part)
+        return go("/models?kind=llm&said=" + quote(said))
+
     async def file_page(request: Request, person: Person, said: str = "", failed: bool = False, path: str = "") -> Response:
         """The one page for a file: what it is, what it says about itself, and moving or deleting it."""
         found = await all_files(request, person)
@@ -5243,8 +5303,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         told, unread = (read_it.json(), "") if read_it.status_code == 200 else (None, read_it.json()["error"]["message"])
         # An adapter or a projector goes onto a model. The page offers the models there are: first those the file says it was made for, then the rest, marked.
         part = file.get("facts", {}).get("what") in ("adapter", "projector")
-        models = await ask("GET", "/turnstile/artifacts/models", person.key) if part else None
-        names = [one["name"] for one in models.json()["models"]] if models is not None and models.status_code == 200 else []
+        names = [one["name"] for one in await base_models(person)] if part else []
         fits = {name for one in file.get("goes_with", []) for name in one["models"]}
         names = [name for name in names if name in fits] + [name for name in names if name not in fits]
         from weightroom.file_views import destinations
@@ -5291,31 +5350,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if answer.status_code != 202:
                 return await file_page(request, person, answer.json()['error']['message'], failed=True, path=path)
             return go('/files?type=classifier&said=' + quote('Classifier conversion started. Progress and parity appear on Files.'))
-        if form.get("do") == "adapt":
-            # A new model: everything the chosen model has, and this adapter as well.
-            new, short, known = form.get("name", "").strip(), form.get("short", "").strip(), await ask("GET", "/turnstile/artifacts/models", person.key)
-            base = next((one for one in known.json().get("models", []) if one["name"] == form.get("model")), None)
-            if base is None:
-                return await file_page(request, person, "Choose the model this adapter is for.", failed=True, path=path)
-            made = {key: base[key] for key in ("flags", "gpus", "alone", "allow_split", "min_context", "host_ram_mib") if key in base} | {"adapters": {**base.get("adapters", {}), short: {"file": path}}}
-            answer = await ask("POST", f"/turnstile/artifacts/models/{quote(new, safe='/:')}", person.key, json=made, params={"new": "1"}) if new else None
-            if answer is None or answer.status_code != 201:
-                why = answer.json()["error"]["message"] if answer is not None else "Give the new model a name."
-                return await file_page(request, person, why, failed=True, path=path)
-            return go(model_address(new) + "?said=" + quote(f"Made {new}: {base['name']} with the adapter {short}. It can be asked for from now on."))
-        if form.get("do") == "project":
-            # A new model: everything the chosen model has, and this projector, so that it can see. The chosen model stays as it is.
-            new, known = form.get("name", "").strip(), await ask("GET", "/turnstile/artifacts/models", person.key)
-            base = next((one for one in known.json().get("models", []) if one["name"] == form.get("model")), None)
-            if base is None:
-                return await file_page(request, person, "Choose the model this projector is for.", failed=True, path=path)
-            made = {key: base[key] for key in ("flags", "gpus", "alone", "allow_split", "adapters", "min_context", "host_ram_mib") if key in base}
-            seeing = {**made, "flags": {**made["flags"], "mmproj": path}}
-            answer = await ask("POST", f"/turnstile/artifacts/models/{quote(new, safe='/:')}", person.key, json=seeing, params={"new": "1"}) if new else None
-            if answer is None or answer.status_code != 201:
-                why = answer.json()["error"]["message"] if answer is not None else "Give the new model a name."
-                return await file_page(request, person, why, failed=True, path=path)
-            return go(model_address(new) + "?said=" + quote(f"Made {new}: {base['name']} with the projector {name}, so that it can be sent pictures. {base['name']} stays as it was."))
+        if form.get("do") in ("adapt", "project"):
+            return await make_with_part(request, person, path, form, adapter=form.get("do") == "adapt")
         if form.get("do") == "distribute":
             machines = fields.get("machine", [])
             if not machines:
