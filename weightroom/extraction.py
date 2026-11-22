@@ -89,6 +89,12 @@ def schema_checked(schema, *, require_all=True):
         kinds = types if isinstance(types, list) else [types]
         if not kinds or any(kind not in ('object', 'array', 'string', 'number', 'integer', 'boolean', 'null') for kind in kinds):
             raise Problem('Every schema node needs supported type values.')
+        # A schema no value can satisfy would leave the model generating until it gives up (QA-057).
+        for low, high in (('minLength', 'maxLength'), ('minItems', 'maxItems'), ('minimum', 'maximum')):
+            if low in value and high in value and value[low] > value[high]:
+                raise Problem(f'{low} {value[low]} is more than {high} {value[high]}, so no value could match.')
+        if value.get('enum') == []:
+            raise Problem('An empty enum allows no value. List at least one choice.')
         if 'object' in kinds:
             props = value.get('properties', {})
             if not isinstance(props, dict) or len(props) > 50 or any(not isinstance(key, str) or len(key) > 120 for key in props):
@@ -96,6 +102,8 @@ def schema_checked(schema, *, require_all=True):
             required = value.get('required', [])
             if not isinstance(required, list) or any(not isinstance(key, str) for key in required):
                 raise Problem('Schema required fields must be a list of names.')
+            if value.get('additionalProperties') is False and (missing := [key for key in required if key not in props]):
+                raise Problem(f'Required fields {", ".join(missing)} are not among the properties, so no object could match.')
             if require_all and (value.get('additionalProperties') is not False or set(required) != set(props)):
                 raise Problem('Objects must require every field and set additionalProperties to false. Use nullable types for missing values.')
             if isinstance(value.get('additionalProperties'), dict):

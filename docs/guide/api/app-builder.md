@@ -266,7 +266,9 @@ tool names. `require_approval` is `never` (default), `always`, or `{"never": {"t
 **JSON Schema keywords:** `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `description`, `title`, `minimum`, `maximum`, `minLength`, `maxLength`, `minItems`, `maxItems`, `pattern`
 
 These are the keywords allowed in a Responses `json_schema`, a Responses function tool's
-`parameters` and a custom extraction `schema`. Chat completions pass their schema to the engine.
+`parameters` and a custom extraction `schema`. A schema no value could match is refused with 400:
+a minimum above its maximum (`minLength`, `minItems`, `minimum`), an empty `enum`, or a closed
+object requiring a field it does not define. Chat completions pass their schema to the engine.
 
 OpenAI Assistants, Conversations, Realtime and fine-tuning are not implemented.
 

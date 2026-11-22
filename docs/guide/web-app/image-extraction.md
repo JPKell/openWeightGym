@@ -25,7 +25,7 @@ Use a permitted vision model with JSON Schema support. Upload limits are listed 
 | **Task** | **Describe image**, **Extract text**, **Extract receipt**, **Extract table**, or **Custom fields**. |
 | **Description detail** | **Concise** or **Detailed** for a description. |
 | **Instructions** | Add guidance; it does not replace the task's structured contract. |
-| **Field schema · JSON Schema** | For custom fields, use a closed object, require every field and allow null where information may be absent. |
+| **Field schema · JSON Schema** | For custom fields, use a closed object, require every field and allow null where information may be absent. A schema no value could match, such as `minLength` above `maxLength` or an empty `enum`, is refused before the model runs. |
 | **Preview** / **Raw output** | Compare readable output with the returned data. |
 | **Image inbox** | Keep separate settings per image; **Extract selected images** starts independent jobs. |
 

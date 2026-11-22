@@ -209,6 +209,31 @@ def test_custom_schema_rejects_unsafe_or_unsupported_shapes(schema):
         schema_checked(schema)
 
 
+def field(**rule):
+    return {'type': 'object', 'properties': {'a': rule}, 'required': ['a'], 'additionalProperties': False}
+
+
+@pytest.mark.parametrize('schema, words', [
+    (field(type='string', minLength=2, maxLength=1), 'minLength 2 is more than maxLength 1'),  # QA-057's schema
+    (field(type='array', items={'type': 'string'}, minItems=3, maxItems=2), 'minItems 3 is more than maxItems 2'),
+    (field(type='integer', minimum=5, maximum=4), 'minimum 5 is more than maximum 4'),
+    (field(type='string', enum=[]), 'enum'),
+    ({'type': 'object', 'properties': {'a': {'type': 'string'}}, 'required': ['a', 'b'], 'additionalProperties': False}, 'b'),
+])
+def test_a_schema_no_value_could_satisfy_is_refused_before_inference(schema, words):
+    """QA-057: contradictory bounds reached the model, which could never finish a valid answer."""
+    with pytest.raises(Problem) as refused:
+        schema_checked(schema, require_all=False)
+    assert words in str(refused.value)
+    with pytest.raises(Problem):
+        schema_checked(schema)
+
+
+def test_equal_bounds_are_still_allowed():
+    schema_checked(field(type='string', minLength=1, maxLength=1))
+    schema_checked(field(type='number', minimum=0, maximum=0))
+
+
 def test_decimal_reconciliation_refunds_and_formula_safe_csv():
     spec = specification({'asset_id': 'a', 'model': 'vision', 'task': 'receipt'})
     data = receipt()
