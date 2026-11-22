@@ -29,16 +29,22 @@ def fingerprint_context(records: list[dict], params) -> dict:
               any(query in file.get('path', '').casefold() for file in one.get('files', {}).values())) and
              (not model or one.get('model') == model) and
              (not context or str(one.get('settings', {}).get('flags', {}).get('ctx-size', '')) == context)]
-    one = found[0] if len(found) == 1 and start and params.get('view') != 'directory' else None
-    peek = params.get('peek', '')
-    selected = next((record for record in records if record['fingerprint'] == peek), None) if peek else (found[0] if found else None)
+    # Each node keeps a fingerprint once, so a record is a fingerprint on a node; the same snapshot on several nodes is
+    # several records, and a link names the node to open one of them (QA-027).
+    node = params.get('node', '')
+    exact = [record for record in found if not node or record.get('node', '') == node]
+    one = exact[0] if len(exact) == 1 and start and params.get('view') != 'directory' else None
+    peek, peek_node = params.get('peek', ''), params.get('peek_node', '')
+    selected = next((record for record in records if record['fingerprint'] == peek and (not peek_node or record.get('node', '') == peek_node)),
+                    None) if peek else (found[0] if found else None)
     current = '/fingerprints?' + urlencode({key: value for key, value in
         [('start', start), ('model', model), ('context', context), ('view', 'directory')] if value})
     back = directory_url(params.get('return', '/fingerprints'))
 
     def record_url(record):
         """Build a fingerprint selection link retaining its safe return destination."""
-        return '/fingerprints?' + urlencode({'start': record['fingerprint'], 'return': back if peek else current})
+        return '/fingerprints?' + urlencode({'start': record['fingerprint'], **({'node': record['node']} if record.get('node') else {}),
+                                             'return': back if peek else current})
 
     files = {file.get('sha256') or file.get('path') for record in records for file in record.get('files', {}).values()}
     contexts = {str(record.get('settings', {}).get('flags', {}).get('ctx-size', '')) for record in records}

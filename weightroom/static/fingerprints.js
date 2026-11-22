@@ -20,9 +20,9 @@
     if (exporter) exporter.disabled = !rows.length;
   }
   function ready() {
-    const selected = $('#record-peek')?.dataset.selectedFingerprint;
+    const peek = $('#record-peek')?.dataset, selected = peek?.selectedFingerprint, node = peek?.selectedNode || '';
     $$('#fingerprint-rows [data-record]').forEach(row => {
-      const active = row.dataset.fingerprint === selected;
+      const active = row.dataset.fingerprint === selected && (row.dataset.node || '') === node;  // a fingerprint on one node (QA-027)
       row.dataset.selected = String(active);
       if (active) row.querySelector('[data-open]').setAttribute('aria-current', 'true');
       else row.querySelector('[data-open]').removeAttribute('aria-current');

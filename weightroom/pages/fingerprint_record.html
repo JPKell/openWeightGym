@@ -5,12 +5,13 @@
 <button type="button" class="btn btn-outline-secondary" data-fingerprint-export="record-json">Download JSON ↓</button>
 <button type="button" class="btn btn-primary" data-copy-target="record-link">Copy record link</button>
 {% endcall %}
-<span id="record-link" hidden data-record-link="/fingerprints?start={{ one.fingerprint }}">/fingerprints?start={{ one.fingerprint }}</span>
+{% set link = '/fingerprints?start=' ~ one.fingerprint ~ ('&node=' ~ (one.node|urlencode) if one.node else '') %}<span id="record-link" hidden data-record-link="{{ link }}">{{ link }}</span>
 <div class="fp-detail-grid">
   <nav class="fp-outline" aria-label="Record sections"><span class="eyebrow d-block mb-3">On this record</span><a href="#identity">01 <span>Identity</span></a><a href="#record-files">02 <span>File evidence</span></a><a href="#record-settings">03 <span>Settings</span></a><a href="#record-notes">04 <span>Reading this record</span></a></nav>
   {% call card('', id='identity', class_='fp-identity') %}
     <div class="fp-identity-content">{{ mosaic(one.fingerprint) }}<div class="min-w-0 flex-grow-1"><span class="eyebrow">Model, when first recorded</span>{{ section_title(one.model or 'Not named', id='record-model', class_='fp-model-title', wrapper_class='mt-1 mb-2') }}<div class="fp-full-hash"><span id="record-hash"><code>{{ one.fingerprint }}</code></span><button type="button" class="btn btn-outline-secondary btn-sm" data-copy-target="record-hash">Copy<span class="visually-hidden"> fingerprint</span></button></div></div><span class="badge bg-secondary-lt align-self-start">Immutable record</span></div>
     <dl class="fp-identity-facts">
+      {% if one.node %}{{ fact_row('Node', one.node) }}{% endif %}
       {{ fact_row('First seen', one.first|timestamp) }}
       {{ fact_row('Context', one.settings.get('flags', {}).get('ctx-size')|count ~ ' tokens') }}
       {{ fact_row('Recorded files', one.files|length) }}

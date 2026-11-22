@@ -1,6 +1,6 @@
 {% from 'parts.html' import card, section_title %}
 {% from 'fingerprint_parts.html' import fact_row, file_record, mosaic %}
-<aside class="fp-peek" id="record-peek" aria-label="Record preview"{% if selected %} data-selected-fingerprint="{{ selected.fingerprint }}"{% endif %}>
+<aside class="fp-peek" id="record-peek" aria-label="Record preview"{% if selected %} data-selected-fingerprint="{{ selected.fingerprint }}" data-selected-node="{{ selected.node|default('') }}"{% endif %}>
 {% if selected %}
 {% call card('At a glance') %}
   {{ mosaic(selected.fingerprint) }}
@@ -8,6 +8,7 @@
   <code id="peek-hash">{{ selected.fingerprint }}</code>
   {{ section_title(selected.model or 'Not named', id='peek-model', wrapper_class='mt-3') }}
   <dl class="fp-facts">
+    {% if selected.node %}{{ fact_row('Node', selected.node) }}{% endif %}
     {{ fact_row('First seen', selected.first|timestamp) }}
     {{ fact_row('Context', selected.settings.get('flags', {}).get('ctx-size')|count ~ ' tokens') }}
     {{ fact_row('Files', selected.files|length) }}

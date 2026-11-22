@@ -20,7 +20,7 @@ Use an account with [model management](/docs/system/abilities#ability-manage-mod
 
 ## Limits and troubleshooting
 
-A fingerprint is a saved snapshot. A current file or model can differ from its historical record; changing a display name does not rewrite old evidence. On smaller screens, a row opens the full record. Retain the recorded hashes and identities when comparing benchmark results.
+A fingerprint is a saved snapshot. A current file or model can differ from its historical record; changing a display name does not rewrite old evidence. On smaller screens, a row opens the full record. Each node keeps its own record of a fingerprint, so the same snapshot on three nodes is three rows, each marked with its node; a row, its preview and its record link open that node's copy, and a full fingerprint without a node lists every copy. Retain the recorded hashes and identities when comparing benchmark results.
 
 ## Related
 
