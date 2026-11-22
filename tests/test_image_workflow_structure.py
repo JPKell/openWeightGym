@@ -90,6 +90,20 @@ def test_control_requests_are_bounded_and_need_a_model_with_a_controlnet(sdxl):
         checked_request({'model': 'm', 'image': image, 'control': {'image': image}, 'upscale_with': {'upscaler': 'a.pth'}}, sdxl)
 
 
+def test_upscaling_one_image_does_not_need_a_model_that_takes_reference_images(sdxl):
+    """QA-090: a text-only model (no reference images) refused the image it was only asked to upscale."""
+    krea = copy.deepcopy(sdxl)
+    krea['sdcpp']['family'] = 'krea2'
+    assert model.limits(krea)['max_references'] == 0
+    image = encoded(64, 64)
+    resolved = checked_request({'model': 'm', 'image': image, 'upscale_with': {'upscaler': '4x-UltraSharp.pth'}}, krea)
+    assert resolved['references'] == [image] and resolved['upscale_with']['upscaler'] == '4x-UltraSharp.pth'
+    with pytest.raises(ValueError, match='Too many reference images|one image'):  # still exactly one
+        checked_request({'model': 'm', 'image': [image, image], 'upscale_with': {'upscaler': '4x-UltraSharp.pth'}}, krea)
+    with pytest.raises(ValueError, match='Too many reference images'):  # generation keeps the model's limit
+        checked_request({'model': 'm', 'prompt': 'A house', 'image': image}, krea)
+
+
 def test_the_control_image_reaches_the_native_request_and_its_bytes_stay_out_of_the_settings(sdxl):
     native, job = FakeNative(), private_job(sdxl)
     with TestClient(create_app(job, native)) as client:

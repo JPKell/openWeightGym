@@ -293,7 +293,9 @@ def checked_request(asked,settings=None):
         if refs:
             raise ValueError("Use image or references, not both.")
         refs=asked["image"] if isinstance(asked["image"],list) else [asked["image"]]
-    if not isinstance(refs,list) or len(refs)>maximum["max_references"]:
+    # An upscale-only request's one source image is not a generation reference, so the model's reference limit
+    # does not apply; checked_upscale_with holds it to exactly one (QA-090).
+    if not isinstance(refs,list) or len(refs)>(max(1,maximum["max_references"]) if "upscale_with" in asked else maximum["max_references"]):
         raise ValueError("Too many reference images for this workflow.")
     result["references"]=[encoded_image(value) for value in refs]
     result.pop("image",None)
