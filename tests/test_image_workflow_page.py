@@ -225,3 +225,28 @@ def test_test_run_of_unsaved_changes_shows_steps_and_saved_outputs(site):
         assert not errors
     finally:
         browser.close(); engine.stop()
+
+
+def test_renaming_connected_steps_carries_their_links(site):
+    """A new label moves every link into and out of a step along, and the Outline stays whole (QA-099)."""
+    sign_in(site, 'jordan')
+    engine, browser, page, errors = editor(site)
+    try:
+        page.locator('#graph-new').click()
+        page.locator('[data-wf-view="outline"]').click()
+        for old, new in (('prompt1', 'subject'), ('sampler1', 'render')):
+            page.locator(f'.wf-outline [data-node="{old}"]').click()
+            label = page.locator('.wf-inspector [data-node-label]')
+            expect(label).to_have_value(old)
+            label.fill(new)
+            label.press('Tab')
+            expect(page.locator(f'.wf-outline [data-node="{new}"]')).to_have_count(1)
+        steps = page.locator('.wf-outline [data-node]').evaluate_all('all => all.map(one => one.dataset.node)')
+        assert 'prompt1' not in steps and 'sampler1' not in steps and {'subject', 'render'} <= set(steps)
+        page.locator('.wf-outline [data-node="render"]').click()
+        sources = page.locator('.wf-inspector select[id^="wf-from-render-"]').evaluate_all('all => all.map(one => one.value)')
+        assert any(value.startswith('subject.') for value in sources), sources
+        expect(page.locator('[data-wf-problems]')).to_have_attribute('data-state', 'ready')
+        assert not errors
+    finally:
+        browser.close(); engine.stop()

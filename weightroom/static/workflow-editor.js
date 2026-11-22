@@ -189,7 +189,7 @@ window.SuiteWorkflowEditor = (() => {
         item.querySelector('[data-kind]').textContent = G.spec(catalogue, node.type).label;
         item.querySelector('[data-summary]').textContent = summary(node);
         const into = state.links.filter(link => link.to[0] === id).map(link => title(link.from[0]) + ' → ' + portLabel(node, link.to[1], 'in'));
-        const out = state.links.filter(link => link.from[0] === id).map(link => title(link.to[0]) + ' · ' + portLabel(G.find(state, link.to[0]), link.to[1], 'in'));
+        const out = state.links.filter(link => link.from[0] === id && G.find(state, link.to[0])).map(link => title(link.to[0]) + ' · ' + portLabel(G.find(state, link.to[0]), link.to[1], 'in'));
         item.querySelector('[data-from]').textContent = into.length ? 'From: ' + into.join('; ') : '';
         item.querySelector('[data-to]').textContent = out.length ? 'To: ' + out.join('; ') : '';
         const count = issues.filter(issue => issue.node === id).length;
@@ -307,11 +307,8 @@ window.SuiteWorkflowEditor = (() => {
         const next = label.value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').slice(0, 40);
         if (!next || next === node.id) { label.value = node.id; return; }
         if (G.find(state, next)) { announce('Another component already uses the label ' + next + '.', 'danger'); label.value = node.id; return; }
-        commit(() => {
-          const one = G.find(state, node.id); one.id = next;
-          state.links.forEach(link => { if (link.from[0] === node.id) link.from[0] = next; if (link.to[0] === node.id) link.to[0] = next; });
-          selected = next;
-        });
+        const was = node.id;  // commit may hand back this same object, so the old label is kept before it changes
+        commit(() => { G.rename(state, was, next); selected = next; });
       });
       const fields = panel.querySelector('[data-fields]'), advanced = panel.querySelector('[data-advanced-fields]');
       for (const field of definition.fields || []) if (visibleField(node, field)) (field.advanced ? advanced : fields).append(fieldControl(node, field));

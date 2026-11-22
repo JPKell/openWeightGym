@@ -27,6 +27,7 @@ Models are installed separately under **Models → Images** with
    **Send to** ticks every destination of an output. Links that would form a loop are refused.
 4. Mark fields callers may set (**Callers set this**) or override within bounds
    (**Callers may override**). Callers address overrides by step label, such as `refine.steps`.
+   Changing a step's **Step label** keeps its links: every source and destination follows the new label.
 5. Fix everything listed under the lanes, then try it with **Run test** (see below).
 6. **Save version** and **Publish**.
 

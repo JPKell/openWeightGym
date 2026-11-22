@@ -132,6 +132,15 @@ window.SuiteWorkflowGraph = (() => {
     return graph;
   }
 
+  /** Give a step a new label, carrying every link into and out of it along (QA-099). */
+  function rename(graph, id, next) {
+    const node = find(graph, id);
+    if (!node || !next || next === id || find(graph, next)) return graph;
+    node.id = next;
+    graph.links.forEach(link => { if (link.from[0] === id) link.from[0] = next; if (link.to[0] === id) link.to[0] = next; });
+    return graph;
+  }
+
   /** Topological order; nodes in a loop (which links refuse) are appended last. */
   function order(graph) {
     const incoming = new Map(graph.nodes.map(node => [node.id, 0]));
@@ -222,6 +231,7 @@ window.SuiteWorkflowGraph = (() => {
     if (graph.nodes.length > catalogue.limits.nodes) push(null, 'error', `Use at most ${catalogue.limits.nodes} components.`);
     if (graph.links.length > catalogue.limits.links) push(null, 'error', `Use at most ${catalogue.limits.links} links.`);
     if (!graph.nodes.some(node => ['output', 'compare'].includes(node.type))) push(null, 'error', 'Add an Output so the run saves something.');
+    if (graph.links.some(link => !find(graph, link.from[0]) || !find(graph, link.to[0]))) push(null, 'error', 'A link names a component that does not exist. Reconnect it with Use from.');
     const labels = new Set();
     for (const node of graph.nodes) {
       const definition = spec(catalogue, node.type);
@@ -322,5 +332,5 @@ window.SuiteWorkflowGraph = (() => {
   }
 
   return {spec, inputs, outputs, find, linksInto, linksFrom, reaches, destinations, sources, connect, disconnect, add,
-    insertAfter, remove, order, depths, fromPreset, lanes, earliestLane, moveToLane, clearLanes, modelOf, stages, validate, request, examples, slug};
+    insertAfter, remove, rename, order, depths, fromPreset, lanes, earliestLane, moveToLane, clearLanes, modelOf, stages, validate, request, examples, slug};
 })();
