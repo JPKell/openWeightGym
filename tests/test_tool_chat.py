@@ -15,7 +15,7 @@ from weightroom.chat_store import Conversations
 @pytest.fixture
 def tool_chat(tmp_path):
     rig=SimpleNamespace(executions=[],models=[],level='normal',removed=False,unavailable=False,block=False,closed=False,
-        repeat=False,no_tools=False,limit=25,seconds=900,result={'content':[{'type':'text','text':'exact <result>'},{'type':'image','data':'YWJj','mimeType':'image/png'}],'isError':False,'structuredContent':{'zero':0}},
+        repeat=False,no_tools=False,model_block=False,model_closed=False,limit=25,seconds=900,result={'content':[{'type':'text','text':'exact <result>'},{'type':'image','data':'YWJj','mimeType':'image/png'}],'isError':False,'structuredContent':{'zero':0}},
         infos={name:{'name':name,'identity':name+'-id','can':['use-tools'],'max_sensitivity':'restricted','models':['local','cloud'],
                      'chat':{'models':{'local':{'tools':True},'cloud':{'tools':True,'hosted':True}}}} for name in ('alice','bob')})
     schema={'type':'object','properties':{'text':{'type':'string','description':'Text to echo'},'count':{'type':'integer','enum':[0,1]}},'required':['text']}
@@ -45,7 +45,23 @@ def tool_chat(tmp_path):
             message={'role':'assistant','content':None,'tool_calls':[{'id':getattr(rig,'call_id','call-'+str(len(rig.models))),'type':'function','function':{'name':'fake__echo','arguments':'{"text":"proposed"}'}}]}
             finish='tool_calls'
         else:message={'role':'assistant','content':'Finished'};finish='stop'
-        return httpx.Response(200,json={'choices':[{'message':message,'finish_reason':finish}]})
+        if not body.get('stream'):
+            return httpx.Response(200,json={'choices':[{'message':message,'finish_reason':finish}]})
+        async def chunks():
+            # As llama-server streams: the call's id and name first, its arguments split across later chunks.
+            sent=lambda delta,finish=None:('data: '+json.dumps({'choices':[{'index':0,'delta':delta,'finish_reason':finish}]})+'\n\n').encode()
+            try:
+                yield sent({'role':'assistant','content':message['content'] or ''})
+                if rig.model_block:await asyncio.Event().wait()
+                for index,call in enumerate(message.get('tool_calls') or []):
+                    arguments=call['function']['arguments']
+                    yield sent({'tool_calls':[{'index':index,'id':call['id'],'type':'function','function':{'name':call['function']['name'],'arguments':arguments[:5]}}]})
+                    yield sent({'tool_calls':[{'index':index,'function':{'arguments':arguments[5:]}}]})
+                yield sent({},finish)
+                yield b'data: '+json.dumps({'choices':[],'usage':{'prompt_tokens':3,'completion_tokens':2}}).encode()+b'\n\ndata: [DONE]\n\n'
+            finally:
+                rig.model_closed=True
+        return httpx.Response(200,headers={'content-type':'text/event-stream'},content=chunks())
     http=httpx.AsyncClient(transport=httpx.MockTransport(wire),base_url='http://front')
     rig.http=http
     app=build_app(str(tmp_path/'chat.db'),http,tools=http,tool_level=lambda owner,trace:rig.level,
@@ -161,6 +177,37 @@ def test_stopping_uses_existing_cancellable_chat_tasks(tool_chat):
     assert rig.closed and 'Stopped' in talk['messages'][-1]['error'] and not talk['tool_state'].get('pending')
     assert any(message.get('tool_call',{}).get('function',{}).get('arguments') == '{"text": "wait"}' for message in talk['messages'])
     assert any(message.get('exact',{}).get('isError') for message in talk['messages'])
+
+
+def test_stop_ends_a_model_answer_that_is_still_coming(tool_chat):
+    """QA-069: Stop closed only the console's task; the inference request kept running. Streaming makes the close visible."""
+    client,app,rig=tool_chat;number=start(client);rig.model_block=True
+    response=client.post('/loadcoach/tool-conversations/'+number+'/actions',json={'do':'say','model':'local','content':'Use the tool'})
+    assert response.status_code==202
+    deadline=time.monotonic()+2
+    while not rig.models and time.monotonic()<deadline:time.sleep(.01)
+    assert rig.models[-1]['stream'] is True and not rig.model_closed
+    assert client.post('/loadcoach/tool-conversations/'+number+'/actions',json={'do':'stop'}).status_code==200
+    talk=wait(client,number)
+    assert rig.model_closed, 'the model stream must be closed, so the gateway ends the inference'
+    assert 'Stopped' in talk['messages'][-1]['error'] and not rig.executions
+
+
+def test_streamed_tool_calls_are_rebuilt_whole():
+    from weightroom.tool_chat import collected
+    from weightroom.extraction import Problem
+    chunk=lambda delta,finish=None:json.dumps({'model':'m','choices':[{'index':0,'delta':delta,'finish_reason':finish}]})
+    result=collected([chunk({'role':'assistant','content':''}),chunk({'reasoning_content':'think'}),
+                      chunk({'tool_calls':[{'index':0,'id':'a','type':'function','function':{'name':'fa','arguments':'{"x"'}}]}),
+                      chunk({'tool_calls':[{'index':1,'id':'b','type':'function','function':{'name':'fb','arguments':'{}'}}]}),
+                      chunk({'tool_calls':[{'index':0,'function':{'arguments':':1}'}}]}),chunk({},'tool_calls'),
+                      json.dumps({'choices':[],'usage':{'total_tokens':5}}),'[DONE]'])
+    message=result['choices'][0]['message']
+    assert [call['function'] for call in message['tool_calls']]==[{'name':'fa','arguments':'{"x":1}'},{'name':'fb','arguments':'{}'}]
+    assert [call['id'] for call in message['tool_calls']]==['a','b'] and message['reasoning_content']=='think'
+    assert result['choices'][0]['finish_reason']=='tool_calls' and result['usage']=={'total_tokens':5}
+    with pytest.raises(Problem):
+        collected([chunk({'content':'cut off'})])
 
 
 def test_no_visible_tools_and_unavailability_have_explicit_errors(tool_chat):

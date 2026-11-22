@@ -15,6 +15,39 @@ from weightroom.chat_store import trace_of
 from weightroom.extraction import Problem
 
 
+def collected(events):
+    """Rebuild one chat completion from its streamed chunks: text, reasoning and tool calls by index.
+
+    Tool chat streams so that Stop closes a connection the gateway sees, which ends the inference too (QA-069).
+    """
+    message, calls, finish, usage, model = {'role': 'assistant', 'content': ''}, {}, None, None, None
+    for data in events:
+        if data == '[DONE]':
+            break
+        chunk = json.loads(data)
+        model, usage = chunk.get('model') or model, chunk.get('usage') or usage
+        for choice in chunk.get('choices') or []:
+            if choice.get('index', 0) != 0:
+                continue
+            delta = choice.get('delta') or {}
+            for kind in ('content', 'reasoning_content'):
+                if isinstance(delta.get(kind), str):
+                    message[kind] = message.get(kind, '') + delta[kind]
+            for call in delta.get('tool_calls') or []:
+                one = calls.setdefault(call.get('index', len(calls)), {'id': '', 'type': 'function', 'function': {'name': '', 'arguments': ''}})
+                one['id'] = call.get('id') or one['id']
+                function = call.get('function') or {}
+                one['function']['name'] += function.get('name') or ''
+                one['function']['arguments'] += function.get('arguments') or ''
+            finish = choice.get('finish_reason') or finish
+    if finish is None:
+        raise Problem('The model stream ended before its answer did.', 502, 'upstream_disconnected')
+    if calls:
+        message['tool_calls'] = [calls[index] for index in sorted(calls)]
+    result = {'object': 'chat.completion', 'model': model, 'choices': [{'index': 0, 'message': message, 'finish_reason': finish}]}
+    return {**result, 'usage': usage} if usage else result
+
+
 def failure(status, message, code='tool_chat_error'):
     """Use the normal private error envelope for console API operations."""
     return JSONResponse({'error': {'message': message, 'type': 'tool_chat_error', 'code': code}}, status,
@@ -246,13 +279,21 @@ class ToolChat:
                 if not options.get('tools'):raise Problem('This model is no longer available for tool calls.',403)
                 if options.get('hosted') and client.current_level() != 'normal':
                     raise Problem(f"A tool result is marked {client.current_level()} and may not be sent to the hosted model {state['model']}.",403,'tool_result_too_sensitive')
-                response=await self.inference.post('/v1/chat/completions',json={'model':state['model'],'messages':history,'tools':definitions,'stream':False},
-                    headers={'authorization':client.authorization,'x-loadcoach-trace':client.trace,'x-loadcoach-sensitivity':client.current_level()},timeout=None)
-                if not response.is_success:
-                    try:message=response.json()['error']['message']
-                    except (ValueError,KeyError,TypeError):message='The model request failed.'
-                    raise Problem(message,response.status_code)
-                return response.json()
+                # Streamed: cancelling this task on Stop closes the connection, which ends the inference as well (QA-069).
+                async with self.inference.stream('POST','/v1/chat/completions',json={'model':state['model'],'messages':history,'tools':definitions,
+                        'stream':True,'stream_options':{'include_usage':True}},
+                        headers={'authorization':client.authorization,'x-loadcoach-trace':client.trace,'x-loadcoach-sensitivity':client.current_level()},timeout=None) as response:
+                    if not response.is_success:
+                        await response.aread()
+                        try:message=response.json()['error']['message']
+                        except (ValueError,KeyError,TypeError):message='The model request failed.'
+                        raise Problem(message,response.status_code)
+                    if not response.headers.get('content-type','').startswith('text/event-stream'):
+                        return json.loads(await response.aread())  # an engine that answered whole
+                    events=[line[5:].strip() async for line in response.aiter_lines() if line.startswith('data:')]
+                try:return collected(events)
+                except Problem:raise
+                except (ValueError,TypeError,AttributeError):raise Problem('The model returned an unreadable stream.',502,'invalid_upstream_response') from None
             async def approve(call):
                 """Every model-proposed call waits for the person's explicit decision."""
                 return None
