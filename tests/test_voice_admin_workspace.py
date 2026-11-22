@@ -175,3 +175,21 @@ def test_settings_reset_keeps_other_unsent_fields_in_the_same_card(tmp_path):
         playwright.expect(page.locator('[name="value-greetings.ready"]')).to_have_value(voice_settings.TEXTS['ready'])
         playwright.expect(page.locator('[name="value-greetings.waiting"]')).to_have_value('Unsent waiting phrase')
         browser.close()
+
+
+def test_a_prompt_edit_saves_beside_the_flat_profile_entries_a_voice_report_carries(tmp_path):
+    """The catalogue's profiles.default.* entries reach the console as flat file-only rows too; they must not shadow the table's fields (QA-102)."""
+    app, changes, original, *_ = voice_panel(tmp_path)
+    changes.seen('voice', said(original, original, {}, 'voice'))
+    profile = original['profiles']['default']
+    with TestClient(app) as client:
+        sign_in(client, 'jordan')
+        page = client.get('/system/voice').text
+        assert page.count('name="value-profiles.default.model"') == 1
+        form = {'return_to': 'voice', 'value-profiles.default.model': profile['model'],
+                'value-profiles.default.modes': '["direct"]', 'value-profiles.default.system_prompt': profile['system_prompt'] + '\n',
+                'value-profiles.default.max_output_tokens': str(profile['max_output_tokens']),
+                'value-profiles.default.max_context_tokens': str(profile['max_context_tokens'])}
+        saved = client.post('/settings/voice', data=form)
+        assert saved.status_code == 200, saved.text
+        assert changes.of('voice')['profiles']['default'] == {**profile, 'system_prompt': profile['system_prompt'] + '\n'}

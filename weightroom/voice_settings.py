@@ -48,6 +48,10 @@ def fields(settings, models=()):
                     row['changed'] = {**entry['changed'], 'value': value}
                 result.append(row)
             continue
+        if entry["name"].startswith("profiles."):
+            # The catalogue's profiles.default.* entries arrive as flat file-only copies of the table's fields. The
+            # table's own rows below are the editable ones; a copy here would shadow them with a settings-file parse (QA-102).
+            continue
         if entry["name"] != "profiles":
             result.append(entry)
             continue
