@@ -116,3 +116,18 @@ def test_front_s_own_request_and_a_compute_request_with_the_same_number_keep_the
     assert front.about(listed["cloud"], request=True)[1]["of"] == listed["cloud"]
     assert [entry["model"] for entry in front.about(number, request=True)] == ["small", "small"]
     assert front.text_of(listed["cloud"])["asked"] == {"from": "front"} and front.text_of(number)["asked"] == {"from": "compute"}
+
+
+def test_source_and_parent_searches_find_the_public_ids_the_log_shows(tmp_path):
+    """The log shows a moved row's source and parent under its node's public number; a search for that number finds it (QA-048)."""
+    import time
+
+    front = Log(str(tmp_path / "front.db"))
+    front.write((time.time(), "request", "asked", "pat", "", None, None, None, "{}", None), machine="gpu1", source=7)
+    ended = front.write((time.time(), "request", "done", "pat", "", None, None, None, json.dumps({"of": 7}), None), machine="gpu1", source=8)
+    front.write((time.time(), "request", "done", "pat", "", None, None, None, json.dumps({"of": 7}), None), machine="other", source=8)
+    shown = next(entry for entry in front.read(limit=10) if entry["id"] == ended)
+    assert shown["source"] == public_number("gpu1", 8) and shown["of"] == public_number("gpu1", 7)
+    assert [entry["id"] for entry in front.read(q=str(shown["source"]), q_field="source")] == [ended]
+    assert [entry["id"] for entry in front.read(q=str(shown["of"]), q_field="of")] == [ended]
+    assert front.read(q=str(public_number("gpu1", 99)), q_field="source") == []

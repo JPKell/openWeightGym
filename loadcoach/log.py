@@ -271,8 +271,21 @@ class Log:
 
             query = '%' + q.replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
             fields = expressions(q_field, self.json_value, self.db.engine)
-            where.append('(' + ' OR '.join(f"LOWER({field}) LIKE LOWER(?) ESCAPE '!'" for field in fields) + ')')
-            values.extend([query] * len(fields))
+            matches, matched = [f"LOWER({field}) LIKE LOWER(?) ESCAPE '!'" for field in fields], [query] * len(fields)
+            if q_field in ('source', 'of') and q.strip().isdigit() and int(q) >= 1 << MACHINE_SHIFT:
+                # Source and parent IDs are shown under their node's public number; find the row they name (QA-048).
+                slot, local = int(q) >> MACHINE_SHIFT, int(q) & ((1 << MACHINE_SHIFT) - 1)
+                column = 'source' if q_field == 'source' else self.json_value('detail', 'of')
+                if machine_slot(FRONT) == slot:
+                    matches.append(f"(machine IS NULL AND CAST({column} AS TEXT) = ?)")
+                    matched.append(str(local))
+                names = [name for (name,) in self.db.execute("SELECT DISTINCT machine FROM events WHERE machine IS NOT NULL")
+                         if name != LEGACY and machine_slot(name) == slot]
+                if names:
+                    matches.append(f"(machine IN ({','.join('?' for _ in names)}) AND CAST({column} AS TEXT) = ?)")
+                    matched.extend([*names, str(local)])
+            where.append('(' + ' OR '.join(matches) + ')')
+            values.extend(matched)
         ordering = f'at {order}, id {order}' if order_by == 'time' else f'id {order}'
         rows = self.db.execute(
             f"SELECT {COLUMNS}, source, machine FROM events WHERE {' AND '.join(where)} ORDER BY {ordering} LIMIT ?", (*values, limit)
