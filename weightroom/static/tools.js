@@ -24,7 +24,7 @@
   /** Initialize the MCP session and retrieve its permitted tool catalogue. */
   async function connect() {
     session = ''; tools = []; $('call').disabled = true; $('connect').disabled = true;
-    $('state').textContent = 'Connecting…'; $('answer').textContent = ''; $('status').textContent = '';
+    $('state').textContent = 'Connecting…'; OWGTools.clear('tools'); $('status').textContent = '';
     try {
       await ask('initialize', {protocolVersion: '2025-06-18', capabilities: {}, clientInfo: {name: 'WeightRoom', version: '1'}});
       tools = (await ask('tools/list')).tools || [];

@@ -54,5 +54,9 @@ window.OWGTools = (() => {
     field(prefix + '-error-flag').textContent = `isError: ${value.isError === undefined ? 'not supplied' : String(value.isError)}`;
     field(prefix + '-result-json').textContent = JSON.stringify(value,null,2);
   }
-  return {argumentsFor, read, result};
+  /** Empty all three result panels, so no earlier call's result outlives its session (QA-053). */
+  function clear(prefix) {
+    for (const part of ['-answer', '-error-flag', '-result-json']) field(prefix + part).textContent = '';
+  }
+  return {argumentsFor, read, result, clear};
 })();

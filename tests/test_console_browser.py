@@ -427,6 +427,12 @@ def test_system_logs_selection_refresh_and_tools_console(desk_with_machine, tmp_
         page.get_by_role('button', name='Call', exact=True).click()
         playwright.expect(page.locator('#tools-answer')).to_have_text('example contents')
         assert tools[-1]['params'] == {'name': 'files__read', 'arguments': {'path': '/example.txt'}}
+        playwright.expect(page.locator('#tools-result-json')).to_contain_text('example contents')
+        # Reconnecting leaves no earlier result in any of its panels (QA-053).
+        page.get_by_role('button', name='Connect', exact=True).click()
+        playwright.expect(page.locator('#tools-state')).to_have_text('1 tools available to your account.')
+        for part in ('answer', 'error-flag', 'result-json'):
+            playwright.expect(page.locator('#tools-' + part)).to_have_text('')
         images = Path('data/console-previews'); images.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(images / 'tools.png'))
         assert not errors
