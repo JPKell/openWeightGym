@@ -32,6 +32,7 @@ os.chmod(root,0o700)
 shutil.copytree(source/'plugins',root/'plugins',dirs_exist_ok=True)
 shutil.copytree(source/'db',root/'db',dirs_exist_ok=True)
 shutil.copytree(source/'loadcoach',root/'loadcoach',dirs_exist_ok=True)
+for package in ('mirrorwall','soundroom'):shutil.copytree(source/package,root/package,dirs_exist_ok=True)
 shutil.copy2(source/'pyproject.toml',root/'pyproject.toml')
 for directory in ('keys','data'):
     (root/directory).mkdir(exist_ok=True,mode=0o700)
@@ -74,7 +75,7 @@ dependencies = ["starlette", "uvicorn", "httpx", "jsonschema==4.26.0"]
 [project.scripts]
 suite-adapter = "plugins._runtime:main"
 [tool.setuptools]
-packages = ["plugins", "db", "db.drivers", "loadcoach"]
+packages = ["plugins", "db", "db.drivers", "loadcoach", "mirrorwall", "soundroom"]
 [tool.setuptools.package-data]
 plugins = ["**/*"]
 '''
@@ -93,8 +94,13 @@ plugins = ["**/*"]
         files["db/drivers/" + name] = (database / "drivers" / name).read_bytes()
     # Ship only the shared observation/signature/storage dependencies, never openWeightGym settings.
     for name in ('__init__.py', 'observability.py', 'observation_store.py', 'log.py', 'statement.py',
-                 'client_origin.py', 'users.py', 'groups.py', 'machine_identity.py', 'usage.py'):
+                 'client_origin.py', 'users.py', 'groups.py', 'machine_identity.py', 'usage.py',
+                 'preferences.py', 'setting_catalog.py'):
         files['loadcoach/'+name] = (shared.parent/'loadcoach'/name).read_bytes()
+    # The shared schema catalogue also names the media ledgers, so their schema modules travel with it.
+    for package in ('mirrorwall', 'soundroom'):
+        for name in ('__init__.py', 'schema.py'):
+            files[package + '/' + name] = (shared.parent / package / name).read_bytes()
     resources = [manifest.folder / "manifest.json", manifest.driver,
                  manifest.folder / json.loads((manifest.folder / "manifest.json").read_text())["schema"],
                  manifest.folder / "README.md", *manifest.files]
