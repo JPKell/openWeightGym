@@ -325,7 +325,10 @@ class ExtractionService:
             body = await read_json(request, MAX_OUTPUT + 1024)
             if set(body) != {'revision', 'data', 'reviewed'} or type(body['revision']) is not int or type(body['reviewed']) is not bool:
                 raise Problem('Review requires revision, data and a reviewed boolean.')
-            data = validate_output(job['spec'], body['data'])
+            try:
+                data = validate_output(job['spec'], body['data'])
+            except Problem as problem:  # the person's correction, not the model's output, was refused (QA-056)
+                raise Problem(str(problem).replace('Model output', 'The correction'), 400, problem.code) from None
             warnings = warnings_for(job['spec'], data)
             updated = self.store.review(job['owner'], job['id'], body['revision'], data, body['reviewed'], bool(warnings))
             return JSONResponse(self.public(updated), headers=PRIVATE)

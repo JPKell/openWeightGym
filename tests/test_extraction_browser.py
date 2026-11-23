@@ -114,6 +114,7 @@ def test_invalid_json_draft_cannot_be_silently_marked_reviewed(workspace):
     assert api.get('/owg/extractions/' + job['id']).json()['revision'] == job['revision']
     page.locator('#field-tax').fill('2.12'); page.locator('#save-review').click()
     expect(page.locator('#result-state')).to_have_text('needs review')
+    expect(page.locator('#error-notice')).to_be_hidden()  # the saved correction supersedes the refusal (QA-056)
     corrected = api.get('/owg/extractions/' + job['id']).json()
     assert corrected['data']['tax'] == '2.12' and corrected['revision'] == job['revision'] + 1
 

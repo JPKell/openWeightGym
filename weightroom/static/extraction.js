@@ -270,7 +270,7 @@
         }
         const job = await send('jobs/' + item.job.id + '/review', 'PATCH', {revision: item.job.revision,
           data: item.correction || item.job.data, reviewed});
-        item.job = job; item.correction = null; item.rawDraft = null; jobs.set(job.id, job); render(); historyRows(); say('Saved correction revision ' + job.revision + '. Original output is retained.');
+        item.job = job; item.correction = null; item.rawDraft = null; noticeError = ''; jobs.set(job.id, job); render(); historyRows(); say('Saved correction revision ' + job.revision + '. Original output is retained.');
       } catch (error) { failure(error); }
     }
     function historyRows() {

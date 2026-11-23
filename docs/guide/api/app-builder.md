@@ -569,7 +569,8 @@ instead of 30 days; `retry_of` names an earlier extraction of this account to re
 **Extraction review fields:** `revision`, `data`, `reviewed`
 
 `PATCH /owg/extractions/{id}/review` saves corrected `data` against the job's current integer
-`revision` (a stale revision returns 409), with `reviewed` true or false. The
+`revision` (a stale revision returns 409; `data` that does not fit the task's shape returns 400
+`invalid_structured_output`), with `reviewed` true or false. The
 [Image extraction guide](/docs/web-app/image-extraction) covers review and exports.
 
 ## Errors {#app-errors}

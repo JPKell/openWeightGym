@@ -130,6 +130,8 @@ def test_corrections_keep_original_and_reject_stale_revision(extraction):
     assert changed.status_code == 200 and changed.json()['status'] == 'needs_review'
     assert changed.json()['revision'] == 2
     assert client.patch(path + '/review', json={'revision': 1, 'data': data, 'reviewed': True}).status_code == 409
+    wrong = client.patch(path + '/review', json={'revision': 2, 'data': {**data, 'items': 'wrong'}, 'reviewed': False})
+    assert wrong.status_code == 400 and wrong.json()['error']['message'].startswith('The correction failed the extraction schema')  # QA-056
     assert client.get(path + '/export?format=json').json()['tax'] is None
     assert client.get(path + '/export?format=json&revision=original').json()['tax'] == '1.12'
     for format_, mime in [('plain', 'text/plain'), ('layout', 'text/plain'), ('markdown', 'text/markdown'), ('csv', 'text/csv')]:
