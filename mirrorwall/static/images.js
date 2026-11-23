@@ -70,7 +70,11 @@
       const node = $('form').elements.namedItem(name);
       if (node && values[name] !== undefined) node.value = values[name];
     });
-    $('loras').querySelectorAll('[data-lora]').forEach(node => { node.value = values.loras?.[node.dataset.lora] ?? node.dataset.default; });
+    // Values that name no LoRAs, such as the CFG lock's, leave a strength already entered as it is (QA-077).
+    $('loras').querySelectorAll('[data-lora]').forEach(node => {
+      if (values.loras === undefined && node.value !== '') return;
+      node.value = values.loras?.[node.dataset.lora] ?? node.dataset.default;
+    });
   }
   function chooseModel(reset = true) {
     const one = state.models.find(row => row.id === $('model').value);

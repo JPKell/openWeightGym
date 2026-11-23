@@ -102,6 +102,9 @@
     $('upload').disabled = $('saved').disabled = full;
     $('reference-mp-wrap').hidden = !references.length;
     $('strength-wrap').hidden = !(rules.editing && references.length);
+    // A field shown is a field needed: left empty it would be sent as 0, below its minimum (QA-087).
+    $('reference-mp').required = !$('reference-mp-wrap').hidden;
+    $('strength').required = !$('strength-wrap').hidden;
     $('reference-help').textContent = (rules.editing ? 'Optional: one starting image that every combination redraws.'
       : `Optional: up to ${rules.most} image${rules.most === 1 ? '' : 's'}, used by every combination.`) + (rules.upscaler ? ' Small images are enlarged first.' : '');
     $('saved').replaceChildren(new Option('Add a saved reference…', ''), ...saved.filter(one => !references.includes(one.id)).map(one => new Option(one.filename || one.id, one.id)));
@@ -253,7 +256,9 @@
   function wire() {
     $('model').addEventListener('change', () => applyModel());
     $('form').addEventListener('input', event => {
-      if (event.target.name && !['scheduler', 'sampler'].includes(event.target.name)) remember();
+      // Choosing a model already names the new one, so its draft is restored by applyModel, not written over with
+      // the form of the model before it (QA-075). Every other field's change is kept at once.
+      if (event.target.name && event.target !== $('model') && !['scheduler', 'sampler'].includes(event.target.name)) remember();
       if (event.target === $('reference-mp')) renderReferences(); else count();
     });
     $('form').addEventListener('submit', run);

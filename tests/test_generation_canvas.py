@@ -596,3 +596,30 @@ def test_image_details_list_sampler_and_scheduler_in_a_compact_grid_in_every_vie
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         assert not errors
         browser.close()
+
+
+def test_a_shared_cfg_one_model_keeps_its_lora_strength_across_model_switches(studio, monkeypatch):
+    """The CFG lock applies CFG alone; it does not put LoRA strengths back to their defaults (QA-077)."""
+    server, wire, _, _ = studio
+    original = wire.front.state.mirrorwall.catalogue
+
+    async def catalogue(user):
+        rows = await original(user)
+        rows[1]['image_workflow'].update(exclusive=False, loras={'miki': {'scale': 1}})
+        rows[1]['image_workflow']['defaults']['cfg_scale'] = 1
+        return rows
+    monkeypatch.setattr(wire.front.state.mirrorwall, 'catalogue', catalogue)
+    with playwright.sync_playwright() as driver:
+        browser, page = browser_context(driver, server)
+        errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto('http://console.test/chat/images')
+        page.locator('#mw-model').select_option('qwen')
+        page.locator('#mw-advanced > summary').click()
+        playwright.expect(page.locator('[data-lora=miki]')).to_have_value('1')
+        page.locator('[data-lora=miki]').fill('0.5')
+        page.locator('#mw-model').select_option('moss')
+        page.locator('#mw-model').select_option('qwen')
+        playwright.expect(page.locator('[data-lora=miki]')).to_have_value('0.5')
+        playwright.expect(page.locator('#mw-cfg')).to_have_value('1')
+        assert not errors
+        browser.close()
