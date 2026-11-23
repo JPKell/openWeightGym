@@ -76,11 +76,12 @@ window.suiteNodeLabel = name => name === 'front' ? 'Control node' : name;
   function filterOptions(input) {
     const select = document.getElementById(input.dataset.filterOptions);
     if (!select) return;
+    for (const option of select.options) option.hidden = Boolean(option.value) && !option.selected && !optionMatches(input, option);
+  }
+  function optionMatches(input, option) {
     const words = input.value.toLocaleLowerCase().split(/\s+/).filter(Boolean);
-    for (const option of select.options) {
-      const text = (option.textContent + ' ' + option.title).toLocaleLowerCase();
-      option.hidden = Boolean(option.value) && !option.selected && !words.every(word => text.includes(word));
-    }
+    const text = (option.textContent + ' ' + option.title).toLocaleLowerCase();
+    return words.every(word => text.includes(word));
   }
   window.suiteFilterOptions = root => (root || document).querySelectorAll('[data-filter-options]').forEach(filterOptions);
   document.addEventListener('input', event => { if (event.target.matches?.('[data-filter-options]')) filterOptions(event.target); });
@@ -91,7 +92,9 @@ window.suiteNodeLabel = name => name === 'front' ? 'Control node' : name;
     if (!select) return;
     event.preventDefault();
     if (event.key === 'ArrowDown') { select.focus(); return; }
-    const first = [...select.options].find(option => option.value && !option.hidden && !option.disabled);
+    // The kept selection stays visible but is not a match; Enter takes the first option the words fit (QA-098).
+    const usable = [...select.options].filter(option => option.value && !option.hidden && !option.disabled);
+    const first = usable.find(option => optionMatches(input, option)) || usable[0];
     if (first && !first.selected) {
       first.selected = true;
       select.dispatchEvent(new Event('input', {bubbles: true}));

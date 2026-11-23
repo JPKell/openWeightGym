@@ -437,3 +437,21 @@ def test_system_logs_selection_refresh_and_tools_console(desk_with_machine, tmp_
         page.screenshot(path=str(images / 'tools.png'))
         assert not errors
         browser.close()
+
+
+def test_enter_in_an_option_search_picks_a_match_not_the_kept_selection(desk):
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.goto('http://console.test/account')
+        page.evaluate("""() => document.querySelector('main').insertAdjacentHTML('beforeend',
+          '<input id="find" type="search" data-filter-options="weights"><select id="weights">' +
+          '<option value="">Choose</option><option value="early" selected>GTM Krea2</option><option value="late">Jib_Mix_Moss_V2</option></select>')""")
+        page.locator('#find').fill('jib_mix')
+        page.locator('#find').press('Enter')
+        playwright.expect(page.locator('#weights')).to_have_value('late')  # QA-098
+        page.locator('#find').fill('nothing fits')
+        page.locator('#find').press('Enter')
+        playwright.expect(page.locator('#weights')).to_have_value('late')
+        browser.close()
