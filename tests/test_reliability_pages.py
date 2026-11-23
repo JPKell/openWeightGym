@@ -94,7 +94,8 @@ def test_issues_only_filters_the_chart_and_table_together(desk, tmp_path):
     full = browser.get('/reliability').text
     assert '>clean<' in full and '"role": "clean"' in full
     filtered = browser.get('/reliability?issues=1').text
-    assert 'id="reliability-issues" name="issues" value="1" type="checkbox" class="form-check-input" checked' in filtered
+    assert 'id="reliability-issues-only" name="issues" value="1" type="checkbox" class="form-check-input" checked' in filtered
+    assert 'id="reliability-issues"' not in filtered  # that ID is the Issue requests section's, which its links target (QA-021)
     assert '>clean<' not in filtered and '"role": "clean"' not in filtered
     assert '>chat<' in filtered and '"role": "chat"' in filtered
 
@@ -113,7 +114,7 @@ def test_reliability_chart_table_filters_and_mobile_viewport(desk, tmp_path):
         playwright.expect(page).to_have_url('http://console.test/reliability')
         playwright.expect(page.locator('#reliability-chart .rl-outcome-row')).to_have_count(2)
         assert page.locator('#reliability-table tbody tr').count() == 2
-        page.locator('#reliability-issues').check()
+        page.locator('#reliability-issues-only').check()
         page.get_by_role('button', name='Apply report filters').click()
         page.wait_for_url('**/reliability?**')
         assert parse_qs(urlsplit(page.url).query)['issues'] == ['1']
@@ -121,7 +122,7 @@ def test_reliability_chart_table_filters_and_mobile_viewport(desk, tmp_path):
         playwright.expect(page.locator('#reliability-chart .rl-outcome-row')).to_have_count(1)
         chart = page.locator('#reliability-data').evaluate('e => JSON.parse(e.textContent)')
         assert chart[0]['counts'] == dict(success=1, error=1, timeout=1, empty=1)
-        page.locator('#reliability-issues').uncheck()
+        page.locator('#reliability-issues-only').uncheck()
         page.locator('#reliability-role').fill('missing')
         page.get_by_role('button', name='Apply report filters').click()
         page.wait_for_url('**/reliability?**role=missing**')
