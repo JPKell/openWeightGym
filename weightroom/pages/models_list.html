@@ -14,7 +14,7 @@
 {% call alert(('danger' if installation.state == 'failed' else 'success' if installation.state == 'complete' else 'info'), role='status') %}
 <strong>{{ installation.name }}</strong> on {{ installation.destination|default(installation.machine) }}: {{ install_states.get(installation.state, installation.state) }}
 {% if installation.file and installation.state not in ('queued', 'complete') %} · {{ installation.file }}{% endif %}
-{% if installation.working_machine and installation.working_machine != installation.machine %} · on {{ installation.working_machine }}{% endif %}
+{% if installation.working_machine and installation.working_machine != installation.machine %} · on {{ 'the control node' if installation.working_machine == 'front' else installation.working_machine }}{% endif %}
 {% if installation.why %} · {{ installation.why }}{% endif %}
 {% if installation.of and installation.progress_available|default(true) %} · {{ installation.done|size }} / {{ installation.of|size }}{% endif %}
 {% if installation.moved_from %} · moved from {{ installation.moved_from }}{% endif %}

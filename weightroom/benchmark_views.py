@@ -429,6 +429,6 @@ def measurement_matrix(catalogue, inventory, models, benchmarks, selected, runs,
         rows.append(dict(id=model['id'], engine=model.get('engine_id') or model.get('engine') or '',
                          quant=model.get('quant') or '', placements=len(placements), cells=cells))
     total, current = sum(node['total'] for node in nodes), sum(node['current'] for node in nodes)
-    return dict(nodes=nodes, rows=rows, metric=metric, unit=value_unit, higher=measurement != 'load',
+    return dict(nodes=nodes, rows=rows, metric=metric, unit=value_unit, score_unit=selected['score_unit'], higher=measurement != 'load',
                 score_higher=selected.get('green') != 'low', current=current, total=total,
                 coverage=f'{round(100 * current / total)}%' if total else '—')

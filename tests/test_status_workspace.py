@@ -60,6 +60,7 @@ def test_live_dispatch_layout_filter_refresh_and_narrow_screens(desk,monkeypatch
         data = original(runner)
         data.pop('model_cards', None)  # Reproduce workers that have not received the policy update.
         data.update(memory={'CUDA0':{'total':24576,'free':8192,'others':1024}, 'AMD@0000:0e:00.0':None, 'Intel@0000:00:02.0':None},
+                    cards=['CUDA0', 'AMD@0000:0e:00.0', 'Intel@0000:00:02.0'],  # such a worker lists the same cards it measures
                     loaded=[{'model':'Qwen3 14B','state':'ready','gpus':['CUDA0'],'mib':[15360],'rss_mib':2048,'locked':False}],
                     running=[{'id':41,'model':'Qwen3 14B','user':'jordan','caller':'chat','seconds':42,'priority':'normal'}],
                     waiting=[{'id':42,'model':'Qwen3 14B','user':'jordan','caller':'api','seconds':9,'priority':'normal'}])

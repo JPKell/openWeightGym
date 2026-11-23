@@ -68,8 +68,12 @@ class Switch(httpx.AsyncBaseTransport):
 
 
 @pytest.fixture
-def desk(tmp_path, monkeypatch):
-    """weightroom and turnstile in front of a LoadCoach, with a few users. Yields the browser, the switch to compute, and the users."""
+def desk(tmp_path, monkeypatch, request):
+    """weightroom and turnstile in front of a LoadCoach, with a few users. Yields the browser, the switch to compute, and the users.
+
+    `@pytest.mark.loadcoach_config(**settings)` sets more of that LoadCoach's settings.
+    """
+    extra = (marker.kwargs if (marker := request.node.get_closest_marker("loadcoach_config")) else {})
     monkeypatch.setattr("weightroom.app.LOOK_EVERY", 0.05)  # it looks at compute often, so a test need not wait long
     database = str(tmp_path / "loadcoach.db")
     (tmp_path / "data").mkdir()
@@ -81,7 +85,7 @@ def desk(tmp_path, monkeypatch):
     hub = FakeHub({"tiny-q4.gguf": os.urandom(1000), "big-00001-of-00002.gguf": b"one", "big-00002-of-00002.gguf": b"two"})  # what this LoadCoach takes for Hugging Face
     turnstile = Later()  # compute asks turnstile for the accounts, for its reports and for work done later in someone's name
     switch = Switch(build_loadcoach(Config(database=database, gpus=("A", "B"), model_defaults={"flash-attn": "on"}, nvidia_smi="no-such-program",
-                                           machine_key_file=machine_key(tmp_path), front="http://front:8442"), hub.client(), door(turnstile, 8442)))
+                                           machine_key_file=machine_key(tmp_path), front="http://front:8442", **extra), hub.client(), door(turnstile, 8442)))
     switch.hub = hub
     front = switch.front = turnstile.app = turnstile_to(
         tmp_path, users, {8442: switch}, keep_console_settings_on_front=True, toollocker_url="http://front-tools:9443")

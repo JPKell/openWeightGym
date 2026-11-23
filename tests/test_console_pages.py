@@ -58,7 +58,9 @@ def test_navigation_orders_and_detail_parents():
     assert list(docs['children']) == ['/docs/modules'] and ('Voice', '/docs/modules/voice') in docs['children']['/docs/modules']
     front = navigation('/docs', can, True)
     assert front['active'] == '/docs' and front['children'] == {}
-    assert navigation('/docs/api', can, True)['children']['/docs/api'][1] == ('OpenAI compatibility', '/docs/api/openai')
+    assert navigation('/docs/api', can, True)['children']['/docs/api'][:3] == [
+        ('Build an app on the API', '/docs/api/app-builder'), ('Authentication and keys', '/docs/api/authentication'),
+        ('OpenAI compatibility', '/docs/api/openai')]  # in the guides' front-matter order
     assert navigation('/status', can, True)['children'] == {}
     assert all(url != '/deploy' for group in navigation('/status', [*can, 'superuser'], True)['groups']
                for _, url in group['links'])

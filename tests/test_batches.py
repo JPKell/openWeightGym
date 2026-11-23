@@ -1,5 +1,6 @@
 """Checks of batches: requests handed in to be answered later, which outlive LoadCoach stopping."""
 
+import asyncio
 import json
 import time
 
@@ -38,9 +39,10 @@ def answers(caller, who, file):
 
 
 def retry_at_once(monkeypatch):
-    """The control node retries a line compute refused while draining at once, not after the 30 s default."""
+    """The control node retries a line compute refused while draining almost at once, not after the 30 s default."""
     async def at_once(self):
-        """No wait before the retry."""
+        """A moment's wait, so refused lines retry in the order they were refused."""
+        await asyncio.sleep(.05)
     monkeypatch.setattr('turnstile.batches.FrontBatches.retry_delay', at_once)
 
 

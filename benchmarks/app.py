@@ -16,7 +16,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from db import DatabaseSource
-from loadcoach.log import LEGACY
+from benchmarks.store import LEGACY
 from turnstile.reporting import ReportTimeout, run as run_report
 from .store import Benchmarks, TERMINAL
 from .worker import BenchmarkWorker, Retry

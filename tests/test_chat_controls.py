@@ -237,6 +237,7 @@ def test_chat_delete_requires_two_clicks_and_recovers_after_failure(desk, tmp_pa
         browser.close()
 
 
+@pytest.mark.loadcoach_config(unlogged=True)  # Temporary is offered only where policy allows it
 def test_chat_sidebar_options_and_scroll_in_chromium(desk, tmp_path):
     from playwright.sync_api import sync_playwright, expect
     server, _, _ = desk

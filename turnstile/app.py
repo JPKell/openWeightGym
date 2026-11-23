@@ -1616,7 +1616,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             if found.status_code != 200:
                 return found
             return JSONResponse({'generated_at': time.time(), 'keys': [],
-                                 'models': json.loads(found.body).get('data', []), 'unlogged': False})
+                                 'models': json.loads(found.body).get('data', []), 'unlogged': False},
+                                headers={'cache-control': 'no-store'})  # as each node's own mirror is never kept
         if path == '/spotter/alert-evidence' and request.method == 'GET' and not named:
             if user is None or not (user.can('manage-settings') or user.can('mirror-users')):
                 return error(403, 'Operational alert evidence requires manage-settings or mirror-users.')

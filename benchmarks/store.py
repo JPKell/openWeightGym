@@ -7,11 +7,12 @@ import secrets
 import time
 
 from db import DatabaseSource, database, local_path, migrate
-from loadcoach.log import LEGACY
 from db.schemas import BENCHMARKS as BENCHMARK_MIGRATIONS
 from db.text_codec import pack_text, unpack_text
 
 from . import BENCHMARKS, MODULES, TEXT, quality
+
+LEGACY = 'compute'  # the old default node's name (loadcoach.log.LEGACY); the benchmark application imports nothing of LoadCoach's
 from .scoring import MODEL_VALUES, calculate, formula_tree
 
 TERMINAL = {"completed", "failed", "cancelled"}

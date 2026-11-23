@@ -51,9 +51,9 @@ def test_the_sort_order_is_set_on_a_models_page_and_every_list_follows_it(desk, 
 
     listed = browser.get("/models?part=list").text
     assert listed.index('href="/models/zebra"') < listed.index('href="/models/apple"') < listed.index('href="/models/mango"')
-    assert '<td data-value="0">0</td>' in listed and listed.count('<td data-value="10">10</td>') == 2
-    fit = browser.get("/dry-fit").text
-    assert fit.index('href="/models/zebra"') < fit.index('href="/models/apple"')
+    assert listed.count('>Order 0 ') + listed.count('>Order 0<') == 1 and listed.count('>Order 10 ') + listed.count('>Order 10<') == 2  # each row's details
+    fit = browser.get("/dry-fit").text  # Dry fit draws its rows from the workspace data, in its order
+    assert fit.index('"local_name": "zebra"') < fit.index('"local_name": "apple"')
 
     # A prior result must not move a model below models that have not run yet.
     store = browser.app.state.benchmarks.state.store

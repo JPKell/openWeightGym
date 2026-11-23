@@ -2,7 +2,7 @@
 import hashlib
 import json
 
-from loadcoach.log import LEGACY
+from benchmarks.store import LEGACY
 
 
 def evidence_matches(run, definition, fingerprint, environment):

@@ -61,7 +61,7 @@ def test_hermes_levels_share_schema_for_profile_cli_and_voice(tmp_path):
     with TestClient(app) as client:
         request = {"model": "gandalf", "messages": [{"role": "user", "content": "hello"}]}
         accepted = client.post("/v1/chat/completions", headers=headers, json={**request, "reasoning_effort": levels[-1]})
-        assert accepted.status_code == 200
+        assert accepted.status_code == 200, accepted.text
         argv = turns(cli)[0]["argv"]
         assert argv[argv.index("--reasoning") + 1] == levels[-1]
         refused = client.post("/v1/chat/completions", headers=headers, json={**request, "reasoning_effort": "future-v2"})

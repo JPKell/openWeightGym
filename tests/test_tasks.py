@@ -250,6 +250,9 @@ def test_benchmark_application_has_no_loadcoach_imports():
                 assert not (node.module or '').startswith('loadcoach'),path
             elif isinstance(node,ast.Import):
                 assert all(not name.name.startswith('loadcoach') for name in node.names),path
+    from benchmarks.store import LEGACY
+    from loadcoach.log import LEGACY as loadcoach_legacy
+    assert LEGACY == loadcoach_legacy  # its copy of the old default node's name stays the same
 
 
 def test_task_tracks_renames_without_following_a_reused_name(fake_llama_server,fake_cards,tmp_path):

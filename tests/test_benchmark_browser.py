@@ -243,7 +243,7 @@ def test_embedder_cards_picker_and_mobile_results_are_separate(desk,tmp_path):
         page.set_viewport_size({'width':1440,'height':1000})
         page.goto('http://embedding.test/benchmarks/node-measurements?benchmark=speed')
         types = page.locator('nav[aria-label="Model type"]')
-        playwright.expect(types.get_by_role('link')).to_have_text(['LLM', 'Embedders', 'Image', 'Audio'])
+        playwright.expect(types.get_by_role('link')).to_have_text(['LLM', 'Reranker', 'Embedders', 'Image', 'Audio', 'Classifier'])
         types.get_by_role('link', name='Embedders', exact=True).click()
         page.wait_for_url('http://embedding.test/benchmarks/node-measurements?kind=embedding&benchmark=embedding_speed')
         playwright.expect(page.locator('#benchmark-resource-table tbody')).to_contain_text('vector-model')

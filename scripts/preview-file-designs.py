@@ -12,6 +12,8 @@ def render() -> str:
     """Render portable file proposals from shared templates and prepared sample data."""
     pages = Environment(loader=FileSystemLoader(ROOT / 'weightroom/pages'), autoescape=select_autoescape())
     pages.filters['shown'] = lambda value: str(value)
+    from weightroom.display import node_label
+    pages.filters['node_label'] = node_label
     facts = dict(name='Qwen3 32B', size_label='32B', architecture='qwen3', layers=64,
                  trained_context=40960, license='apache-2.0', chat_template=True,
                  takes_tools=True, thinking_switch=True)

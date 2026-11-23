@@ -177,14 +177,19 @@ def test_old_keys_in_a_settings_file_are_renamed_once_with_a_backup(tmp_path):
     assert rename_in_file(both, 'turnstile') == [] and not both.with_name('both.toml' + BACKUP_SUFFIX).exists()
 
 
-def test_an_installation_is_renamed_in_both_settings_files(tmp_path):
+def test_an_installation_is_renamed_in_both_settings_files(tmp_path, monkeypatch):
+    monkeypatch.setattr('socket.gethostname', lambda: 'gpu-one')
     (tmp_path / 'weightroom.toml').write_text('[turnstile]\nfront_settings = true\n')
     (tmp_path / 'loadcoach.toml').write_text('front_toollocker = true\ndata = "."\n[machines.rig]\nfront_toollocker = 1\n')
     said = []
     rename_installation(tmp_path, said.append)
     assert (tmp_path / 'weightroom.toml').read_text() == '[turnstile]\nkeep_console_settings_on_front = true\n'
-    assert (tmp_path / 'loadcoach.toml').read_text() == 'toollocker_runs_on_front = true\ndata = "."\n[machines.rig]\nfront_toollocker = 1\n'
-    assert len(said) == 2 and all(BACKUP_SUFFIX in line for line in said)
+    # The keys are renamed, and the node, a peer now, takes its host's name in place of the old default.
+    assert (tmp_path / 'loadcoach.toml').read_text() == (
+        'former_machine_name = "compute"\ntoollocker_runs_on_front = true\ndata = "."\n'
+        'machine_name = "gpu-one"  # formerly compute; matches [machines.gpu-one] on the control node\n'
+        '[machines.rig]\nfront_toollocker = 1\n')
+    assert len(said) == 3 and all(BACKUP_SUFFIX in line for line in said)
 
 
 def test_owg_update_renames_keys_with_only_the_checkout_files(tmp_path, capsys):

@@ -157,6 +157,8 @@ class Manifest:
         package = "suite_adapter_" + self.id
         namespace = types.ModuleType(package)
         namespace.__path__ = [str(self.driver.parent)]
+        for name in [name for name in sys.modules if name.startswith(package + ".")]:
+            del sys.modules[name]  # a reinstalled plugin's modules come from its own folder, not one loaded before
         sys.modules[package] = namespace
         spec = importlib.util.spec_from_file_location(package + ".driver", self.driver)
         module = importlib.util.module_from_spec(spec)

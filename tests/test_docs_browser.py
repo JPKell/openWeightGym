@@ -32,7 +32,7 @@ def test_docs_search_navigation_history_contents_and_source_browser(desk, tmp_pa
         expect(page.locator('.result-excerpt mark').first).to_have_text('recipients.txt')
         expect(page).to_have_url(re.compile(r'/docs\?q=recipients.txt'))
         page.locator('#docs-scope').select_option('web-app')
-        expect(page.locator('#docs-search-empty')).to_be_visible()
+        expect(page.locator('#docs-search-empty')).to_be_visible(timeout=15000)  # a search under full-suite load, as above
         page.locator('#docs-search-empty [data-docs-clear]').click()
         expect(page.locator('.docs-hero')).to_be_visible()
         page.locator('#docs-query').fill('shift+enter')
@@ -90,7 +90,7 @@ def test_docs_library_reading_and_mobile_navigation(desk, tmp_path, width, theme
         page.goto('http://console.test/docs')
         page.screenshot(path=str(tmp_path / f'docs-library-{width}-{theme}.png'), full_page=True)
         page.locator('#docs-query').fill('not-a-real-document-needle')
-        expect(page.locator('#docs-search-empty')).to_be_visible()
+        expect(page.locator('#docs-search-empty')).to_be_visible(timeout=15000)  # a search under full-suite load, as above
         page.keyboard.press('Escape')
         expect(page.locator('#docs-query')).to_have_value('')
         expect(page.locator('.docs-hero')).to_be_visible()
