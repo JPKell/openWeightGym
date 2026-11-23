@@ -314,7 +314,9 @@ window.suiteNodeLabel = name => name === 'front' ? 'Control node' : name;
   if (!bar) return;
   const failures = new Map();
   const requests = new WeakMap();
+  let over = false;  // the session ended: that message stays until the page is left
   function status(source, okay, retrying = true) {
+    if (over) return;
     if (okay) failures.delete(source);
     else failures.set(source, retrying);
     bar.hidden = failures.size === 0;
@@ -337,7 +339,22 @@ window.suiteNodeLabel = name => name === 'front' ? 'Control node' : name;
     if (code >= 200 && code < 400) status(request.source, true);
     else if (request.polling && (code === 0 || code >= 500)) status(request.source, false);
   });
-  document.addEventListener('suite:connection', event => status(event.detail.source, event.detail.okay, event.detail.retrying));
+  // A closed stream may mean the session ended (signed out, or the account removed): say so and offer sign-in.
+  async function ended() {
+    try {
+      // The page names who is signed in; a sign-in page names nobody.
+      const answer = await fetch('/', {cache: 'no-store', credentials: 'same-origin'});
+      const who = (await answer.text()).match(/data-theme-user="([^"]*)"/)?.[1];
+      return who !== undefined && who !== document.documentElement.dataset.themeUser;
+    } catch { return false; }
+  }
+  document.addEventListener('suite:connection', async event => {
+    const {source: from, okay, retrying, closed} = event.detail;
+    status(from, okay, retrying);
+    if (!closed || !(await ended())) return;
+    const link = document.createElement('a'); link.href = '/sign-in'; link.textContent = 'Sign in again';
+    over = true; bar.replaceChildren('Your session has ended. ', link); bar.hidden = false;
+  });
 })();
 
 // Copy buttons: data-copy-target names the element whose text is copied. A page served over plain

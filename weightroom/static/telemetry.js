@@ -17,7 +17,9 @@
     pending = null;
   };
   const stream = new EventSource(strip.dataset.telemetryStream);
-  stream.onerror = () => document.dispatchEvent(new CustomEvent('suite:connection', {detail:{source:'telemetry',okay:false,retrying:true}}));
+  // A stream the browser closed is not retried; the console then checks whether the session ended (QA-062).
+  stream.onerror = () => { const closed = stream.readyState === 2;  // EventSource.CLOSED
+    document.dispatchEvent(new CustomEvent('suite:connection', {detail:{source:'telemetry',okay:false,retrying:!closed,closed}})); };
   stream.onmessage = event => {
     document.dispatchEvent(new CustomEvent('suite:connection', {detail:{source:'telemetry',okay:true}}));
     try { apply(JSON.parse(event.data)); } catch { /* Ignore a malformed frame. */ }

@@ -1184,6 +1184,23 @@ def test_failed_polls_show_connection_loss_until_each_region_recovers(desk):
         browser.close()
 
 
+def test_a_closed_stream_after_the_session_ended_offers_sign_in(desk):
+    """A stream the browser closed is not "retrying"; when the session has ended, the bar says so (QA-062)."""
+    from test_console_browser import browser_context, playwright
+    server, _, _ = desk; sign_in(server, 'pat')
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.add_init_script("""const NativeEventSource = window.EventSource;
+          window.EventSource = class { constructor(url) { if (!String(url).includes('/strip/stream')) return new NativeEventSource(url); window.strip = this; this.readyState = 0; } close() {} };""")
+        page.goto('http://console.test/')
+        server.post('/sign-out')  # the session ends elsewhere, as when the account is removed
+        page.evaluate("window.strip.readyState = 2; window.strip.onerror()")
+        bar = page.locator('#connection-status')
+        playwright.expect(bar).to_have_text('Your session has ended. Sign in again')
+        playwright.expect(bar.get_by_role('link', name='Sign in again')).to_have_attribute('href', '/sign-in')
+        browser.close()
+
+
 def test_chat_refresh_recovers_without_losing_the_finished_reply():
     from test_console_browser import playwright
     attempts = []

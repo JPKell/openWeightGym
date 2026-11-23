@@ -181,7 +181,8 @@ function follow() {
   const live = document.querySelector("[data-stream]");
   if (!live) return;
   const coming = new EventSource(live.dataset.stream);
-  coming.onerror = () => document.dispatchEvent(new CustomEvent('suite:connection', {detail:{source:'chat-stream',okay:false,retrying:true}}));
+  coming.onerror = () => { const closed = coming.readyState === 2;  // EventSource.CLOSED
+    document.dispatchEvent(new CustomEvent('suite:connection', {detail:{source:'chat-stream',okay:false,retrying:!closed,closed}})); };
   coming.onmessage = step => {
     document.dispatchEvent(new CustomEvent('suite:connection', {detail:{source:'chat-stream',okay:true}}));
     const stay = atEnd();  // someone who has scrolled up to read is left where they are
