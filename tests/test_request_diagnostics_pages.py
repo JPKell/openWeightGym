@@ -8,7 +8,7 @@ from test_weightroom import desk, desk_with_machine, sign_in  # noqa: F401
 
 def recorded(tmp_path, owner='pat'):
     log = Log(str(tmp_path / 'data/accounts.db'), keep_text=5)
-    entry = log.add('request', 'asked', owner, model='vision', trace='image-check', path='chat/completions',
+    entry = log.add('request', 'asked', owner, model='vision', trace='image-check', path='chat/completions', machine='compute',
                     role='chat:fast', picked='vision', because='Loaded model preference')
     tool = log.add('tool', 'called', owner, trace='image-check', tool='files_read', text={'arguments': 'PRIVATE_TOOL_ARGUMENT'})
     log.add('tool', 'returned', owner, trace='image-check', tool='files_read', of=tool, took=.2)
@@ -41,7 +41,8 @@ def test_request_page_explains_image_failure_and_preserves_metadata_offline(desk
     assert 'Prompt processing' in html and 'Unavailable' in html
     assert 'PRIVATE_TOOL_ARGUMENT' not in html
     assert '<script>throw Error' not in html and '&lt;script&gt;throw Error' in html
-    assert '/output?source=loadcoach&amp;at=' in html and '/log?trace=image-check' in html
+    assert '/output?node=compute&amp;source=loadcoach&amp;at=' in html and '/output?node=compute&amp;source=kernel&amp;at=' in html  # the request's own node (QA-058)
+    assert '/log?trace=image-check' in html
     assert 'Recent latency and errors' in html and 'All authorized users' in html
     compute.off = True
     offline = server.get(f'/requests/{entry}')
