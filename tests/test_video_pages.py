@@ -137,3 +137,19 @@ def test_video_model_editor_uses_shared_setup_and_workflow_controls(desk):
         playwright.expect(page.locator('#mw-alone')).to_be_disabled()
         assert not errors,errors
         browser.close()
+
+
+def test_an_empty_video_catalogue_says_to_add_a_video_model(desk):
+    """The empty catalogue names the page's own media (QA-026)."""
+    server,_,_=desk;sign_in(server,'jordan')
+    def capture(route,path):
+        base=path.partition('?')[0]
+        if base=='/video-models':
+            route.fulfill(content_type='application/json',body=json.dumps({'models':[],'cards':[],'nodes':[{'name':'compute','state':'ready'}],'engines':{'engines':[]}}));return True
+        if base=='/mirrorwall-api/workflows':
+            route.fulfill(content_type='application/json',body=json.dumps({'models':[],'presets':[],'can_manage':True}));return True
+    with playwright.sync_playwright() as driver:
+        browser,page=browser_context(driver,server,capture=capture)
+        page.goto('http://console.test/models/video')
+        playwright.expect(page.locator('#studio-models-empty, [id$=models-empty]').first).to_have_text('No video models in this selection. Add a video model to begin.')
+        browser.close()

@@ -81,7 +81,7 @@
       $('model-list').append(button);
     });
     $('models-empty').hidden=Boolean($('model-list').children.length);
-    $('models-empty').textContent=models.length?'No models match your search.':'No image models in this selection. Add an image model to begin.';
+    $('models-empty').textContent=models.length?'No models match your search.':`No ${video?'video':'image'} models in this selection. Add a${video?' video':'n image'} model to begin.`;
   }
   function showWorkflows() {
     const all=rows(), search=$('workflow-search').value.toLowerCase(), visibility=$('visibility').value;

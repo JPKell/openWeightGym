@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/mirrorwall-static/images.css?v=4"><link rel="stylesheet" href="/static/image-studio.css?v=1">
 <script src="/mirrorwall-static/image-profiles.js?v=2" defer></script>{% if video %}<script src="/mirrorwall-static/video-profiles.js?v=1" defer></script>{% endif %}
 {% if studio_manage %}<script src="/static/model-settings.js?v=6" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/mirrorwall-static/models.js?v=20" defer></script>{% endif %}
-<script src="/mirrorwall-static/workflows.js?v=7" defer></script>
+<script src="/mirrorwall-static/workflows.js?v=8" defer></script>
 {% endblock %}
 {% block main %}
 <div id="image-studio" data-media-kind="{{ media_kind|default('image') }}" data-video-profiles='{{ video_profiles|default({})|tojson }}' data-manage="{{ 'true' if studio_manage else 'false' }}">
