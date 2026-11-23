@@ -56,8 +56,10 @@ def test_classifier_builder_comparison_drafts_exports_and_errors(desk, width):
         page.locator('[data-load-starter]').click()
         playwright.expect(page.locator('[data-criterion]')).to_have_count(5)
         page.locator('#classifier-compare').select_option([])
+        page.locator('[data-question-id]').first.fill('q' * 128)  # the longest accepted ID wraps in its card (QA-100)
         page.locator('[data-run]').click()
         playwright.expect(page.locator('[data-results]')).to_contain_text('Expected level')
+        assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
         page.get_by_text('Developer drawer', exact=True).click()
         for kind in ('python', 'openai'):
             page.locator('#classifier-code').select_option(kind)
