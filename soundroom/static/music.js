@@ -21,7 +21,9 @@
       body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store'
     });
     if (response.redirected) { location.href = '/sign-in'; throw new Error('Please sign in again.'); }
-    const value = await response.json();
+    // A console page instead of JSON means the service in between gave up waiting (QA-020).
+    const value = (response.headers.get('content-type') || '').includes('json') ? await response.json() : null;
+    if (!value) throw new Error(`The audio service did not answer in time (HTTP ${response.status}). A model request may still be waiting in line; check Requests before trying again.`);
     if (!response.ok) throw new Error(value.error?.message || 'The audio operation failed.');
     return value;
   }

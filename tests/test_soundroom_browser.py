@@ -568,3 +568,29 @@ def test_script_room_heading_layout_and_empty_states(desk, tmp_path, width, appe
         playwright.expect(page.locator('#sr-availability')).to_contain_text('No speech model')
         assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
         browser.close()
+
+
+def test_writing_helper_explains_a_console_page_instead_of_a_parser_error(desk):
+    """A gateway timeout answers with a console page, not JSON; the helper says what happened (QA-020)."""
+    server, _, _ = desk
+    sign_in(server, "jordan")
+    audio = capture_audio(state(), [])
+
+    def capture(route, path):
+        if path == "/soundroom-api/lyrics":
+            route.fulfill(status=503, content_type="text/html", body="<!doctype html><title>Service unavailable</title>")
+            return True
+        return audio(route, path)
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture)
+        errors = []; page.on("pageerror", lambda error: errors.append(str(error)))
+        page.goto("http://console.test/chat/music")
+        page.locator("#sr-helper > summary").click()
+        page.locator("#sr-idea").fill("A six-second greeting song.")
+        page.locator("#sr-write").click()
+        playwright.expect(page.locator("#sr-message")).to_contain_text("did not answer in time (HTTP 503)")
+        playwright.expect(page.locator("#sr-message")).to_contain_text("check Requests")
+        assert "Unexpected token" not in page.locator("#sr-message").inner_text()
+        playwright.expect(page.locator("#sr-write")).to_be_enabled()
+        assert not errors
+        browser.close()
