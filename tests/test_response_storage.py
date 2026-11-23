@@ -255,6 +255,9 @@ def test_console_pagination_and_clearance_after_session_changes(desk):
     page = browser.get('/responses?limit=10').text
     assert 'Page 1 of 2' in page
     assert 'Page 2 of 2' in browser.get('/responses?limit=10&page=2').text
+    # A bookmark past the end opens the last page there is, with its rows (QA-070).
+    beyond = browser.get('/responses?limit=10&page=999999').text
+    assert 'Page 2 of 2' in beyond and 'Page 999999' not in beyond and 'input 0' in beyond
     response = seed_response(browser, users, 'jordan', text='sensitive')
     with browser.app.state.responses.db:
         browser.app.state.responses.db.execute('UPDATE responses SET level=? WHERE id=?', ('restricted', response['id']))

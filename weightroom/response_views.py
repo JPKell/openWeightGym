@@ -42,6 +42,10 @@ def routes(for_people, page, store):
                         raise Problem('Choose a valid UTC date and time.') from None
             limit, current = controls(request.query_params)
             records, total = store.listing(user, filters, limit=limit, offset=(current-1)*limit)
+            last = max(1, (total + limit - 1) // limit)
+            if current > last:  # a bookmark past the end opens the last page there is (QA-070)
+                current = last
+                records, total = store.listing(user, filters, limit=limit, offset=(current-1)*limit)
             return page(request, 'responses.html', person, records=records, filters=displayed,
                         groups=groups, user_groups=user_groups,
                         paging=pagination('/responses', request.query_params, total, limit, current),

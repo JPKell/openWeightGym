@@ -26,5 +26,6 @@ def pagination(path, params, total, limit, current):
         return path + '?' + urlencode({**query, 'page': number})
     return {'limit': limit, 'page': current, 'pages': pages, 'total': total,
             'sizes': sorted(set((*SIZES, limit))),
-            'previous': link(current - 1) if current > 1 else '',
+            # Past the last page, Previous goes to the last page there is rather than one before an impossible one.
+            'previous': link(min(current - 1, pages)) if current > 1 else '',
             'next': link(current + 1) if current < pages else ''}
