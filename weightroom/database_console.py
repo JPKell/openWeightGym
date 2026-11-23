@@ -135,10 +135,15 @@ class DatabaseConsole:
             raise OperationRefused('Choose all databases or an explicit selection.')
         if not selected:
             raise OperationRefused('No reachable database stores are selected.')
-        omissions = [dict(machine=node['name'], reason=node['error']) for node in snapshot['nodes'] if not node['answering'] and node.get('lifecycle') != 'retired']
-        omissions += [dict(machine=row['machine'], database=row['id'], reason=row['error']) for row in snapshot['databases'] if row['error']]
-        if snapshot['inventory_error']:
-            omissions.append({'reason': snapshot['inventory_error']})
+        # Only an export of everything can leave something out. An explicit selection either exports every
+        # chosen store or fails; unrelated or unconfigured nodes are not omissions (QA-049).
+        omissions = []
+        if scope == 'all':
+            omissions = [dict(machine=node['name'], reason=node['error']) for node in snapshot['nodes']
+                         if not node['answering'] and node.get('lifecycle') != 'retired' and node.get('configured', True)]
+            omissions += [dict(machine=row['machine'], database=row['id'], reason=row['error']) for row in snapshot['databases'] if row['error']]
+            if snapshot['inventory_error']:
+                omissions.append({'reason': snapshot['inventory_error']})
         row = self.jobs.create(owner_of(person), 'export', selected)
         self.local.audit('export-started', owner_of(person), job=row['id'], databases=len(selected), partial=partial)
         folder = self.jobs.folder(row['id'])

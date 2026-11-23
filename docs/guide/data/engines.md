@@ -21,7 +21,8 @@ A migration copies one named store while its services are stopped, checks the co
 ## Export and maintenance
 
 **Dump all** reviews every active database, regardless of filters. If a node is unavailable,
-**Start partial export** requires two clicks and records omissions in the manifest. Exports
+**Start partial export** requires two clicks and records omissions in the manifest. **Dump
+selected** is complete once every chosen database is exported, whatever other nodes are doing. Exports
 contain separate per-database snapshots, not a simultaneous cluster recovery set.
 
 For purge or disk reclaim, choose stores and preview the operation first. Review the counts,

@@ -120,7 +120,10 @@ def test_fleet_inventory_and_archive_restore_all_stores_then_report_missing_node
         assert json.loads(bundle.read('manifest.json'))['omissions'][0]['machine'] == 'gpu3'
     # Explicit selection is independent of the incomplete global scope.
     front = next(row for row in snapshot['databases'] if row['machine'] == 'front')
-    assert browser.post('/databases/api/export', json={'scope': [front['key']]}).status_code == 202
+    chosen = browser.post('/databases/api/export', json={'scope': [front['key']]})
+    assert chosen.status_code == 202
+    # Every chosen store was exported, so the job is complete although another node is down (QA-049).
+    assert wait_job(browser, chosen.json()['id'])['state'] == 'complete'
 
 
 def test_node_scoped_dump_lazy_details_and_reviewed_purge(fleet):
