@@ -16,6 +16,7 @@ out, and deciding whether it may leave, is in app.py.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import tempfile
@@ -39,9 +40,9 @@ def check_service(name: str, settings: dict, taken: set[str]) -> None:
     url, ceiling, models = settings.get("url"), settings.get("ceiling"), settings.get("models", {})
     if not isinstance(url, str) or not url.startswith(("http://", "https://")):
         raise ValueError(f"service {name!r} needs url: its address, as far as and including /v1.")
-    if ceiling is not None and (type(ceiling) not in (int, float) or ceiling < 0):
+    if ceiling is not None and (type(ceiling) not in (int, float) or not 0 <= ceiling < math.inf):
         raise ValueError(f"service {name!r}: ceiling is the most it may cost in 24 hours, in dollars. Leave it out for none.")
-    price = lambda one: all(type(one.get(way, 0)) in (int, float) and one.get(way, 0) >= 0 for way in ("in", "out"))  # noqa: E731
+    price = lambda one: all(type(one.get(way, 0)) in (int, float) and 0 <= one.get(way, 0) < math.inf for way in ("in", "out"))  # noqa: E731
     good = lambda ours, one: isinstance(ours, str) and MODEL_NAME.fullmatch(ours) and isinstance(one, dict) and one.keys() <= {"theirs", "in", "out", "vision", "json_schema", "systemone"} and isinstance(one.get("theirs"), str) and one["theirs"] and price(one) and all(type(one.get(key, False)) is bool for key in ('vision', 'json_schema', 'systemone'))  # noqa: E731
     if not isinstance(models, dict) or not all(good(ours, one) for ours, one in models.items()):
         raise ValueError(f"service {name!r}: models is a list of OUR NAME = {{theirs, in, out}}. theirs is the service's own name for the model. in and out are prices in dollars for a million tokens, and may be left out.")

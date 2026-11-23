@@ -2845,6 +2845,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 have = [model["theirs"] for model in models.values()]
                 models |= {theirs: {"theirs": theirs} for theirs in form.get("offer", []) if theirs not in have}
             body = {"url": url, "models": models} | ({"ceiling": ceiling} if ceiling is not None else {})
+            numbers = [ceiling, *(one.get(way) for one in models.values() for way in ("in", "out"))]
+            if any(isinstance(number, float) and not math.isfinite(number) for number in numbers):  # 1e309 reads as infinity
+                return await cloud_apis_page(request, person, "Prices and the daily spending limit must be ordinary numbers of dollars.",
+                    failed=True, selected_name=name, add_values={field: one(field) for field in ('name', 'url', 'ceiling')} if do == 'add' else None)
             answer = await ask("POST", where, person.key, json=body, params={"new": "1"} if do == "add" else None)
             done = f"Added {name}. Install its API key below, then ask it what it has." if do == "add" else "Saved."
         if not answer.is_success:

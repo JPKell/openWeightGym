@@ -62,3 +62,28 @@ def test_account_desk_section_saves_preserve_other_settings_and_same_endpoint_ac
     assert 'data-cloud-account="personal"' in page and 'data-cloud-section="limits"' in page
     removal = page.split('id="remove-form"')[1].split('</form>')[0]
     assert 'data-confirm-two' in removal and 'data-loss-confirm' not in removal
+
+
+def test_an_overflowing_price_is_refused_beside_the_draft_not_a_server_error(desk, service, tmp_path):
+    """QA-038: 1e309 reads as infinity, which no request can carry; it is refused like any other bad price."""
+    browser, switch, _ = desk
+    kept = Services(str(tmp_path / "data" / "accounts.db"), str(tmp_path))
+    sign_in(browser, "sam")
+    browser.post("/cloud-apis", data={"do": "add", "name": "rented", "url": service})
+    for way in ("in", "out"):
+        prices = {"in": ["2"], "out": ["6.5"]} | {way: ["1e309"]}
+        refused = browser.post("/cloud-apis", data={"do": "models", "name": "rented", "ours": ["big-out"], "theirs": ["vendor/big"], **prices})
+        assert refused.status_code == 400 and "ordinary numbers of dollars" in refused.text
+        assert 'value="1e309"' in refused.text and 'value="big-out"' in refused.text  # the draft is kept
+        assert kept.get("rented")["models"] == {}
+    ceiling = browser.post("/cloud-apis", data={"do": "save", "name": "rented", "url": service, "ceiling": "1e309"})
+    assert ceiling.status_code == 400 and "ceiling" not in kept.get("rented")
+
+
+def test_loadcoach_refuses_an_infinite_price_sent_to_it_directly():
+    import math
+    import pytest
+    from loadcoach.outside import check_service
+    for models, ceiling in (({"m": {"theirs": "t", "in": math.inf}}, None), ({"m": {"theirs": "t", "out": math.nan}}, None), ({}, math.inf)):
+        with pytest.raises(ValueError):
+            check_service("rented", {"url": "http://x/v1", "models": models} | ({"ceiling": ceiling} if ceiling is not None else {}), set())
