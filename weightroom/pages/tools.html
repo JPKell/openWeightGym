@@ -50,7 +50,7 @@
 <div class="form-check mt-1"><input id="drop-{{ loop.index }}" name="drop:{{ name }}" type="checkbox" class="form-check-input"><label for="drop-{{ loop.index }}" class="form-check-label">Remove {{ name }}</label></div></div>
 {% endfor %}
 <div class="col-md-6"><label for="new_set" class="form-label">New tool set</label>
-<input id="new_set" name="new_set" class="form-control mb-2" placeholder="code" pattern="[a-z0-9][a-z0-9-]*">
+<input id="new_set" name="new_set" class="form-control mb-2" placeholder="code" pattern="[a-z0-9][a-z0-9\-]*">
 <label for="new_tools" class="form-label visually-hidden">Its tools</label>
 <textarea id="new_tools" name="new_tools" rows="3" class="form-control font-monospace" placeholder="code__*&#10;files__read_file"></textarea></div>
 </div>

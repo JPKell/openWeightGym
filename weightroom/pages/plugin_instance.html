@@ -10,7 +10,7 @@
 {% call card("", tag="form", attrs={"method": "post"}) %}
 <input type="hidden" name="do" value="save">
 {{ section_title("Connection and settings") }}
-{% if not instance %}<label class="form-label d-block">Instance name<input class="form-control" name="instance" required pattern="[a-z][a-z0-9_-]{0,47}" placeholder="local"></label>{% endif %}
+{% if not instance %}<label class="form-label d-block">Instance name<input class="form-control" name="instance" required pattern="[a-z][a-z0-9_\-]{0,47}" placeholder="local"></label>{% endif %}
 <label class="form-label d-block">Adapter HTTP URL<input class="form-control" type="url" name="url" required value="{{ config.url }}"><small class="text-secondary">The address turnstile reaches, locally or remotely. Use the listening port configured below.</small></label>
 <label class="form-check mb-3"><input class="form-check-input" type="checkbox" name="enabled"{% if config.enabled %} checked{% endif %}> Enable this instance</label>
 <label class="form-label d-block">Maximum request sensitivity<select class="form-select" name="sensitivity">{% for level in levels %}<option{% if config.max_sensitivity == level %} selected{% endif %}>{{ level }}</option>{% endfor %}</select></label>

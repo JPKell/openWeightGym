@@ -71,7 +71,7 @@
 <p>Each telephone number runs calls as a normal app account. Configure models, tools and limits on its Users page.</p>
 <form method="post" action="/system/voice/telephone/create_account" data-hold-refresh>
 <label class="form-label" for="phone-account-label">Account label</label>
-<input class="form-control" id="phone-account-label" name="label" pattern="[a-z0-9_-]{0,50}" maxlength="50" aria-describedby="phone-account-help">
+<input class="form-control" id="phone-account-label" name="label" pattern="[a-z0-9_\-]{0,50}" maxlength="50" aria-describedby="phone-account-help">
 <p id="phone-account-help" class="small text-secondary">Leave empty for voice-phone, or enter a label for voice-phone-&lt;label&gt;.</p>
 <div class="d-flex flex-wrap gap-2"><button class="btn btn-primary">Create phone account</button>
 <button class="btn btn-outline-secondary" formaction="/system/voice/telephone/rotate_account" {{ confirm_two('Rotate this phone account’s API key? The old key will stop working.') }}>Rotate key</button></div>

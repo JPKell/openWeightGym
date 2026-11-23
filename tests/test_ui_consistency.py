@@ -1,5 +1,6 @@
 """Console component contracts over isolated apps, without inference or GPU access."""
 
+import html
 import json
 import os
 import re
@@ -1228,3 +1229,21 @@ def test_system_logs_refusal_is_permanent_and_unavailable_link_is_hidden(desk_wi
     response = server.get('/output')
     assert response.status_code == 403 and 'restart-services ability' in response.text
     assert 'said-box' not in response.text and 'href="/output"' not in server.get('/usage?complete=1').text
+
+
+def test_every_template_pattern_compiles_as_the_browser_reads_it():
+    """Browsers compile `pattern` with the `v` flag, where an unescaped `-` in a class is an error that
+    silently switches validation off (QA-054). Each pattern written in a template must compile."""
+    from test_console_browser import playwright
+    found = set()
+    for folder in ('weightroom/pages', 'mirrorwall/pages', 'soundroom/pages'):
+        for path in Path(folder).rglob('*.html'):
+            found.update(html.unescape(one) for one in re.findall(r'pattern="([^"]+)"', path.read_text()) if '{{' not in one)
+            found.update(one.replace('\\\\', '\\') for one in re.findall(r"'pattern': ?'([^']+)'", path.read_text()))
+    assert len(found) >= 8
+    with playwright.sync_playwright() as engine:
+        browser = engine.chromium.launch()
+        page = browser.new_page()
+        invalid = page.evaluate("""patterns => patterns.filter(pattern => { try { new RegExp('^(?:' + pattern + ')$', 'v'); return false; } catch { return true; } })""", sorted(found))
+        browser.close()
+    assert invalid == []
