@@ -13,13 +13,13 @@ def main():
     """Join the delegated memory cgroup before executing the owned engine command."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cgroup", required=True)
-    parser.add_argument("--memory-mib", required=True, type=int)
+    parser.add_argument("--memory-mib", required=True, type=int, help="the engine's host RAM cap; 0 for an isolating group with none")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command or not Path(command[0]).is_absolute():
         parser.error("Engine command must name an absolute executable.")
-    enter(args.cgroup, args.memory_mib)
+    enter(args.cgroup, args.memory_mib or None)
     os.execve(command[0], command, dict(os.environ))
 
 

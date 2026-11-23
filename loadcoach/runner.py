@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import math
 import os
+import shutil
 import re
 import socket
 import sys
@@ -29,7 +30,7 @@ from loadcoach.models import LAUNCH_FAILURE_PREFIX, Models, at_context, base, co
 from loadcoach.waiting import estimate
 from loadcoach.host_memory import memory_snapshot, resident_mib
 from loadcoach.processes import ProcessGroup, adopt_orphans
-from loadcoach.engine_memory import MemoryGroup
+from loadcoach.engine_memory import MemoryGroup, isolating_group
 from loadcoach.devices import allowed, disabled, inventory, telemetry_index
 
 # A place in line is decided by rank first, then by arrival. A request to take the lock
@@ -1376,6 +1377,11 @@ class Runner:
                 server.memory_group = MemoryGroup.create(launch.memory_mib)
                 command = [sys.executable, "-I", "-B", str(Path(__file__).with_name("engine_child.py")),
                            "--cgroup", str(server.memory_group.path), "--memory-mib", str(launch.memory_mib), "--", *command]
+            elif (program := shutil.which(command[0], path=launch.environment.get("PATH"))) and (isolating := isolating_group()):
+                # Its own cgroup, without a cap: when memory runs short, the engine is what is ended, not LoadCoach with it.
+                server.memory_group = isolating
+                command = [sys.executable, "-I", "-B", str(Path(__file__).with_name("engine_child.py")),
+                           "--cgroup", str(isolating.path), "--memory-mib", "0", "--", os.path.abspath(program), *command[1:]]
             # Everything it prints comes to LoadCoach, which passes it on and remembers the end of it.
             # CUDA numbers the cards fastest first unless told otherwise, and nvidia-smi by where they sit.
             # With this, llama-server's CUDA0 is nvidia-smi's card 0, which is how a measure is matched to a card.
@@ -1495,7 +1501,12 @@ class Runner:
         finally:
             if released:
                 if server.memory_group:
-                    server.memory_group.close()
+                    try:
+                        server.memory_group.close()
+                    except (OSError, RuntimeError):
+                        if server.memory_group.budget_mib is not None:
+                            raise  # a bounded engine's reservation stays held until its cgroup is empty
+                        # An isolating group reserves nothing; the service's own cleanup removes a straggler.
                 if server.launch_cleanup:
                     server.launch_cleanup()
                     server.launch_cleanup = None

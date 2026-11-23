@@ -478,6 +478,10 @@ service memory budget. Native systemd installations need systemd 254+ and
 On existing installations, `owg update` followed by `owg restart loadcoach` applies the
 delegation settings while retaining memory ceilings, custom controllers and other service
 policies. The worker must have a finite `MemoryMax` and `MemorySwapMax=0`.
+Where that delegation is present, every other engine process also runs in its own cgroup under
+LoadCoach's service, without a cap of its own. When the service's memory runs short, the kernel's
+OOM killer or systemd-oomd then ends that engine, whole, instead of LoadCoach with it. Without the
+delegation (a manual unit or a container), engines share LoadCoach's cgroup as before.
 
 Strata builds the [reviewed source revision](https://github.com/Niko1221/Strata/tree/477ac13cbe8e582c20484871ce459d20d82df09d)
 in `runtimes/strata`, with a private Python environment. It queries GPU compute capabilities through

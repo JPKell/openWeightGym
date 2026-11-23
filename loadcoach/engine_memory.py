@@ -7,8 +7,11 @@ import re
 MIB = 2**20
 
 
-def delegated_parent(proc: Path = Path("/proc"), mount: Path = Path("/sys/fs/cgroup")) -> Path:
-    """Resolve and validate the service's delegated cgroup-v2 memory parent."""
+def delegated_parent(proc: Path = Path("/proc"), mount: Path = Path("/sys/fs/cgroup"), *, bounded: bool = True) -> Path:
+    """Resolve and validate the service's delegated cgroup-v2 memory parent.
+
+    A bounded engine also needs the service's own finite MemoryMax and MemorySwapMax=0 above it.
+    """
     membership = next((line[3:] for line in (proc/"self/cgroup").read_text().splitlines() if line.startswith("0::")), "")
     root = mount.resolve()
     current = (root/membership.lstrip("/")).resolve()
@@ -18,6 +21,8 @@ def delegated_parent(proc: Path = Path("/proc"), mount: Path = Path("/sys/fs/cgr
     parent = current.parent
     if (parent/"cgroup.procs").read_text().strip() or "memory" not in (parent/"cgroup.controllers").read_text().split():
         raise ValueError("Worker memory delegation is unavailable or its root still contains processes.")
+    if not bounded:
+        return parent
     limit = (parent/"memory.max").read_text().strip()
     if limit == "max" or int(limit) <= 0 or (parent/"memory.swap.max").read_text().strip() != "0":
         raise ValueError("Bounded engines require an existing finite worker MemoryMax and MemorySwapMax=0.")
@@ -25,10 +30,33 @@ def delegated_parent(proc: Path = Path("/proc"), mount: Path = Path("/sys/fs/cgr
 
 
 class MemoryGroup:
-    """A generated child only. Never create a sibling service or enlarge an ancestor cap."""
-    def __init__(self, path: Path, budget_mib: int):
-        """Retain the owned cgroup path, configured memory cap and cleanup state."""
+    """A generated child only. Never create a sibling service or enlarge an ancestor cap.
+
+    A bounded group (`budget_mib`) caps the engine's host RAM. An isolating group (`budget_mib` None)
+    sets no cap of its own: it keeps the engine out of LoadCoach's supervisor cgroup, so that the
+    kernel's OOM killer or systemd-oomd, when the service's memory runs short, ends the engine
+    (memory.oom.group kills it whole) rather than LoadCoach with it.
+    """
+    def __init__(self, path: Path, budget_mib: int | None):
+        """Retain the owned cgroup path, configured memory cap (None for none) and cleanup state."""
         self.path, self.budget_mib, self.closed = path, budget_mib, False
+
+    @classmethod
+    def isolate(cls, *, proc: Path = Path("/proc"), mount: Path = Path("/sys/fs/cgroup")):
+        """Create an owned child cgroup that only separates an engine from LoadCoach, with no cap of its own."""
+        parent = delegated_parent(proc, mount, bounded=False)
+        if "memory" not in (parent/"cgroup.subtree_control").read_text().split():
+            (parent/"cgroup.subtree_control").write_text("+memory")
+        path = parent/("engine-"+secrets.token_hex(12))
+        path.mkdir(mode=0o700)
+        try:
+            (path/"memory.oom.group").write_text("1")
+            group = cls(path, None)
+            group.verify()
+            return group
+        except BaseException:
+            path.rmdir()
+            raise
 
     @classmethod
     def create(cls, budget_mib: int, *, proc: Path = Path("/proc"), mount: Path = Path("/sys/fs/cgroup")):
@@ -56,6 +84,10 @@ class MemoryGroup:
 
     def verify(self) -> None:
         """Check that the owned cgroup still enforces its expected memory contract."""
+        if self.budget_mib is None:
+            if self.closed or (self.path/"memory.oom.group").read_text().strip() != "1":
+                raise ValueError("Engine cgroup isolation changed or is unavailable.")
+            return
         if self.closed or (self.path/"memory.max").read_text().strip() != str(self.budget_mib*MIB) \
                 or (self.path/"memory.swap.max").read_text().strip() != "0" \
                 or (self.path/"memory.oom.group").read_text().strip() != "1":
@@ -79,10 +111,19 @@ class MemoryGroup:
         self.closed = True
 
 
-def enter(path: str, budget_mib: int, *, proc: Path = Path("/proc"), mount: Path = Path("/sys/fs/cgroup")) -> None:
-    """Called by the child before exec: no native runtime or model has started yet."""
+def isolating_group(*, proc: Path = Path("/proc"), mount: Path = Path("/sys/fs/cgroup")) -> "MemoryGroup | None":
+    """An isolating group for an engine launch, or None where the service has no delegated cgroup
+    (a manual unit, a container, a test): the engine then shares LoadCoach's cgroup, as before."""
+    try:
+        return MemoryGroup.isolate(proc=proc, mount=mount)
+    except (OSError, ValueError):
+        return None
+
+
+def enter(path: str, budget_mib: int | None, *, proc: Path = Path("/proc"), mount: Path = Path("/sys/fs/cgroup")) -> None:
+    """Called by the child before exec: no native runtime or model has started yet. `budget_mib` None joins an isolating group."""
     folder = Path(path).resolve()
-    parent = delegated_parent(proc, mount)
+    parent = delegated_parent(proc, mount, bounded=budget_mib is not None)
     if folder.parent != parent or not re.fullmatch(r"engine-[a-f0-9]{24}", folder.name):
         raise ValueError("Engine cgroup must be a generated child of this worker's delegated service.")
     MemoryGroup(folder, budget_mib).verify()

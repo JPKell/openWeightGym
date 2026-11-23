@@ -8,6 +8,7 @@ import uuid
 import pytest
 
 from loadcoach.engine_memory import MemoryGroup, delegated_parent, enter, MIB
+from test_app import fake_llama_server, in_an_empty_folder  # noqa: F401  (the first needs the second)
 
 
 @pytest.fixture
@@ -171,3 +172,57 @@ print('native bounded engine launch and cleanup passed')
         text=True, capture_output=True, timeout=30)
     assert answer.returncode == 0, answer.stdout + answer.stderr
     assert 'native bounded engine launch and cleanup passed' in answer.stdout
+
+
+def test_an_unbudgeted_engine_gets_its_own_uncapped_group_so_an_oom_kill_spares_loadcoach(controls, monkeypatch):
+    """systemd-oomd and the kernel end a whole cgroup; an engine in LoadCoach's supervisor group took LoadCoach with it."""
+    from loadcoach.engine_memory import isolating_group
+    proc, mount, parent = controls
+    (parent/"memory.max").write_text("max")  # isolation needs no finite cap of its own
+    group = isolating_group(proc=proc, mount=mount)
+    assert group.budget_mib is None and group.path.parent == parent and group.path.name.startswith("engine-")
+    assert (group.path/"memory.oom.group").read_text() == "1" and not (group.path/"memory.max").exists()
+    assert "memory" in (parent/"cgroup.subtree_control").read_text()
+    real_write = Path.write_text
+    def write(path, value, *args, **kwargs):
+        result = real_write(path, value, *args, **kwargs)
+        if path == group.path/"cgroup.procs":
+            real_write(proc/"self/cgroup", "0::/fixture.service/"+group.path.name+"\n")
+        return result
+    monkeypatch.setattr(Path, "write_text", write)
+    enter(str(group.path), None, proc=proc, mount=mount)
+    monkeypatch.undo()
+    (group.path/"memory.oom.group").write_text("0")
+    with pytest.raises(ValueError):
+        group.verify()
+    # Without a delegated service (a manual unit, a container, a test run) the engine runs as before.
+    (proc/"self/cgroup").write_text("0::/user.slice/session.scope\n")
+    assert isolating_group(proc=proc, mount=mount) is None
+
+
+def test_loadcoach_launches_an_unbudgeted_engine_into_its_isolating_group(fake_llama_server, tmp_path, monkeypatch):
+    import asyncio
+    from test_app import gateway
+    groups, launched = [], []
+    class Isolating:
+        def __init__(self):
+            self.path, self.budget_mib, self.closed = tmp_path / f'engine-{len(groups)}', None, False
+        def close(self):
+            self.closed = True
+    def isolating():
+        groups.append(Isolating())
+        return groups[-1]
+    monkeypatch.setattr('loadcoach.runner.isolating_group', isolating)
+    spawn = asyncio.create_subprocess_exec
+    async def recorded(*command, **kwargs):
+        launched.append(command)
+        if any(str(arg).endswith('/engine_child.py') for arg in command):
+            command = command[command.index('--') + 1:]  # these fixtures have no real cgroup to enter
+        return await spawn(*command, **kwargs)
+    monkeypatch.setattr(asyncio, 'create_subprocess_exec', recorded)
+    with gateway(fake_llama_server) as caller:
+        assert caller.post("/v1/chat/completions", json={"model": "small", "messages": []}).status_code == 200
+    engine = next(command for command in launched if any(str(arg).endswith('/engine_child.py') for arg in command))
+    assert engine[engine.index('--cgroup') + 1] == str(groups[0].path) and engine[engine.index('--memory-mib') + 1] == '0'
+    assert Path(engine[engine.index('--') + 1]).is_absolute()
+    assert groups[0].closed  # removed when the model stopped
