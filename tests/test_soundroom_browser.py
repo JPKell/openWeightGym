@@ -594,3 +594,25 @@ def test_writing_helper_explains_a_console_page_instead_of_a_parser_error(desk):
         playwright.expect(page.locator("#sr-write")).to_be_enabled()
         assert not errors
         browser.close()
+
+
+def test_a_text_list_option_takes_one_item_per_line(desk):
+    """A runtime option of type string_list is text, one item per line, sent as a list (QA-019)."""
+    server, _, _ = desk
+    sign_in(server, "jordan")
+    voices = [{"id": "voice_one", "name": "One", "mine": True}]
+    phonemes = {"name": "phonemes", "type": "string_list", "description": "Phoneme chunks that bypass eSpeak-ng."}
+    payload = state(models=[audio_model("kokoro", "clone", options=[phonemes])], voices=voices, preferences={"voice": "voice_one"})
+    sent = []
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture_audio(payload, sent))
+        page.goto("http://console.test/chat/speech")
+        field = page.locator("#sr-option-phonemes")
+        assert field.evaluate("node => node.tagName") == "TEXTAREA"
+        page.locator("#sr-prompt").fill("Hello world")
+        page.locator("details:has(#sr-option-phonemes) > summary").first.click()
+        field.fill("həloʊ\n\n wɜːld ")
+        page.get_by_role("button", name="Generate speech", exact=False).click()
+        page.wait_for_function("document.querySelector('#sr-generate').disabled === false")
+        assert sent[0]["request"]["options"]["phonemes"] == ["həloʊ", "wɜːld"]
+        browser.close()

@@ -124,6 +124,10 @@
       } else if (option.type === 'bool') {
         input = element('select', undefined, 'form-select form-select-sm mb-2');
         [['', 'Default' + (configured !== undefined ? ' (' + configured + ')' : '')], ['true', 'On'], ['false', 'Off']].forEach(([value, text]) => input.add(new Option(text, value)));
+      } else if (option.type === 'string_list') {  // a list of text, one item per line (QA-019)
+        input = element('textarea', undefined, 'form-control form-control-sm mb-2');
+        input.rows = 3;
+        input.placeholder = Array.isArray(configured) && configured.length ? configured.join('\n') : 'Default · one item per line';
       } else {
         input = element('input', undefined, 'form-control form-control-sm mb-2');
         input.type = option.type === 'string' ? 'text' : 'number';
@@ -163,7 +167,7 @@
         $('source-name').textContent = source?.filename || '';
         $('source').value = '';
       }
-      root.querySelectorAll('[data-option]').forEach(node => { node.value = String(draft.options[node.dataset.option] ?? ''); });
+      root.querySelectorAll('[data-option]').forEach(node => { node.value = optionText(draft.options[node.dataset.option]); });
     }
     chooseMode();
     updateAvailability();
@@ -316,10 +320,17 @@
     if (values.mode === 'song') delete values.mode;
     return values;
   }
+  // An option as its field shows it: a list one item per line.
+  function optionText(value) { return Array.isArray(value) ? value.join('\n') : String(value ?? ''); }
   function advanced() {
     const options = {};
     root.querySelectorAll('[data-option]').forEach(node => {
       if (node.disabled || node.value === '') return;
+      if (node.dataset.type === 'string_list') {
+        const items = node.value.split('\n').map(item => item.trim()).filter(Boolean);
+        if (items.length) options[node.dataset.option] = items;
+        return;
+      }
       options[node.dataset.option] = node.dataset.type === 'bool' ? node.value === 'true' : ['int', 'float'].includes(node.dataset.type) ? Number(node.value) : node.value;
     });
     return options;
@@ -348,7 +359,7 @@
       if ($('loop')) $('loop').checked = !!values.loop;
       chooseMode();
     }
-    root.querySelectorAll('[data-option]').forEach(node => { node.value = String(values.options?.[node.dataset.option] ?? values.options?.[profile().family + '.' + node.dataset.option] ?? ''); });
+    root.querySelectorAll('[data-option]').forEach(node => { node.value = optionText(values.options?.[node.dataset.option] ?? values.options?.[profile().family + '.' + node.dataset.option]); });
     if (page === 'speech' && lines?.length) {
       if (lines[0].voice_id) $('voice').value = lines[0].voice_id;
       $('preset').value = lines[0].voice || '';
