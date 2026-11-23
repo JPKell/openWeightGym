@@ -96,14 +96,16 @@ def test_video_model_editor_uses_shared_setup_and_workflow_controls(desk):
     settings=profile()
     public={'id':'wan','model_id':'video-id','video_workflow':{**settings['sdcpp'],'defaults':{
         'width':832,'height':480,'seconds':5,'fps':16,'steps':20,'seed':-1,'guidance':6,'sampler':'euler','scheduler':'discrete'}}}
-    saved=[]
+    saved=[];image_weights=False
     def capture(route,path):
         base=path.partition('?')[0]
         if base=='/video-models' and route.request.method=='GET':
             route.fulfill(content_type='application/json',body=json.dumps({'models':[{'name':'wan','model_id':'video-id','node':'compute',**settings}],
                 'cards':['C0'],'nodes':[{'name':'compute','state':'ready'}],'engines':{'engines':[{'id':'sdcpp','available':True}]}}));return True
         if base=='/video-models/check':
-            route.fulfill(content_type='application/json',body=json.dumps({'ready':True,'slots':[{'slot':'diffusion','need':'required','status':'ok','message':'Fixture'}],'loras':[],'get_diffusion':[]}));return True
+            found={'ready':True,'slots':[{'slot':'diffusion','need':'required','status':'ok','message':'Fixture'}],'loras':[],'get_diffusion':[]}
+            if image_weights: found.update(ready=False,detected_family='sdxl',family_matches=False,variant_label='SDXL')
+            route.fulfill(content_type='application/json',body=json.dumps(found));return True
         if base=='/mirrorwall-api/workflows':
             route.fulfill(content_type='application/json',body=json.dumps({'models':[public],'presets':[],'can_manage':True}));return True
         if base=='/video-models' and route.request.method=='POST':
@@ -117,10 +119,21 @@ def test_video_model_editor_uses_shared_setup_and_workflow_controls(desk):
         playwright.expect(page.locator('#workflow-n')).to_have_count(0)
         page.locator('#studio-edit-model').click()
         playwright.expect(page.locator('#mw-family')).to_have_value('wan2.1')
+        # Video is always admitted alone: the switch is on, locked and says why (QA-025).
+        playwright.expect(page.locator('#mw-alone')).to_be_checked();playwright.expect(page.locator('#mw-alone')).to_be_disabled()
+        playwright.expect(page.locator('#mw-alone-why')).to_have_text('Video models always keep their GPUs to themselves.')
         page.locator('#mw-ram').fill('18000');page.get_by_role('button',name='Save model',exact=True).click()
         playwright.expect(page.locator('#model-dialog')).not_to_be_visible()
         assert saved[-1]['settings']['sdcpp']['mode']=='vid_gen'
         assert saved[-1]['settings']['alone'] is True
         assert saved[-1]['settings']['sdcpp']['host_ram_mib']==18000
+        # Image weights in video setup keep a video family and say what they are (QA-024).
+        image_weights=True
+        page.locator('#mw-new').click()
+        playwright.expect(page.locator('#mw-family')).to_have_value('wan2.1')
+        page.locator('#mw-diffusion').evaluate("(input) => { input.value = '/compute/sd_xl_base_1.0.safetensors'; input.dispatchEvent(new Event('change', {bubbles: true})); }")
+        playwright.expect(page.locator('#mw-check')).to_contain_text('These weights are SDXL, which is not a video model')
+        playwright.expect(page.locator('#mw-family')).to_have_value('wan2.1')
+        playwright.expect(page.locator('#mw-alone')).to_be_disabled()
         assert not errors,errors
         browser.close()

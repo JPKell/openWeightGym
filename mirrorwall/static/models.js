@@ -94,8 +94,14 @@
     head.append(element('strong', ready ? '✓ Everything this model needs is here' : !$('diffusion').value.trim() ? 'Choose the diffusion weights to see what this model needs' : '✗ ' + missing + ' part' + (missing === 1 ? '' : 's') + ' to fix before it can run'));
     if (found.variant_label) head.append(element('span', 'Detected: ' + found.variant_label, 'badge text-bg-secondary ms-2'));
     box.append(head);
-    if (found.detected_family && !found.family_matches && !selected) { setFamily(found.detected_family); return; }  // a new model takes the family its weights say
-    if (found.detected_family && !found.family_matches) {
+    // Weights of a family this page does not offer (an image checkpoint in video setup) keep the chosen family (QA-024).
+    if (found.detected_family && !found.family_matches && !(found.detected_family in FAMILIES)) {
+      const wrong = $('family-warning').content.firstElementChild.cloneNode(true);
+      wrong.querySelector('[data-message]').textContent = 'These weights are ' + (found.variant_label || found.detected_family) + ', which is not '
+        + (video ? 'a video' : 'an image') + ' model. Choose ' + (video ? 'video' : 'image') + ' diffusion weights' + (video ? ', or add these under Models → Images.' : '.');
+      wrong.querySelector('button').remove(); box.append(wrong);
+    } else if (found.detected_family && !found.family_matches && !selected) { setFamily(found.detected_family); return; }  // a new model takes the family its weights say
+    else if (found.detected_family && !found.family_matches) {
       const wrong = $('family-warning').content.firstElementChild.cloneNode(true);
       wrong.querySelector('[data-message]').textContent = 'These weights are ' + FAMILIES[found.detected_family] + ', but the family above says ' + FAMILIES[$('family').value] + '.';
       const fix = wrong.querySelector('button'); fix.textContent = 'Use ' + FAMILIES[found.detected_family];
