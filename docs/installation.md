@@ -294,12 +294,13 @@ the `pg_hba.conf` lines to add.
 
 | Command | Does |
 |---|---|
-| `owg` | shows what is running, then a menu: restart services (choosing which), restart another machine's services over SSH, update, repair, install components, doctor, logs, add a compute node, uninstall |
+| `owg` | shows what is running, then a menu: restart services (choosing which), restart another machine's services over SSH, update, upgrade engines, repair, install components, doctor, logs, add a compute node, uninstall |
 | `owg status` | programs, addresses, the llama.cpp build and the models' size |
 | `owg start`, `stop`, `restart [PROGRAM…]` | controls the services, all of them by default |
 | `owg restart --host USER@HOST [PROGRAM…]` | restarts services over SSH using that host's OWG installation; all installed services by default |
 | `owg logs [PROGRAM] [-f] [-n LINES]` | the latest from the programs' journals (80 lines unless `-n` says otherwise); `-f` follows them |
 | `owg update [--yes] [--plain]` | fetches the latest code, rebuilds the console's Voice desktop ZIP and selects this checkout ahead of older runtime source overrides, including when an installation is unfinished |
+| `owg upgrade [--check] [--reinstall] [--llama-build TAG] [ENGINE…]` | upgrades the installed model engines, or reinstalls those with no newer release; see [Upgrading the engines](#upgrading-the-engines-owg-upgrade) |
 | `owg repair [--yes] [--plain]` | reinstalls packages and services as they are |
 | `owg install [OPTIONS]` | adds omitted services and model engines; equivalent to `install.sh --components` |
 | `owg doctor` | checks the environment, services, settings, llama.cpp, key permissions, linger, the console and disk space, and says what to fix |
@@ -336,6 +337,34 @@ model workers. Engine version probes use bounded `--version` calls; Strata uses 
 Remote restarts need working SSH key authentication and `owg` installed on the destination.
 For example, `owg restart --host owgadmin@compute loadcoach spotter` restarts those two services.
 The remote installation handles its service account and any sudo prompt in an interactive terminal.
+
+### Upgrading the engines: `owg upgrade`
+
+`owg upgrade` looks after the native engines installed on a GPU node: llama.cpp,
+stable-diffusion.cpp (sdcpp), audio.cpp, whisper.cpp and Strata. It lists each one with what it
+will do, asks which to go ahead with (all are ticked), then runs each engine's own installer.
+
+| Engine | What `owg upgrade` does |
+|---|---|
+| llama.cpp | installs the newest [ggml-org release](https://github.com/ggml-org/llama.cpp/releases/latest) (or `--llama-build TAG`) beside the current one, keeping its backend and its prebuilt or source method. When a release has no prebuilt download for that CUDA version, the nearest older CUDA build is used, which runs on the same driver. If it is already the newest, it is left alone unless `--reinstall` is given. A `llama_server` that openWeightGym did not install is left alone. |
+| sdcpp | builds the newest commit on [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp)'s default branch, unpatched, beside the current release, which is kept for going back. If it is already the newest, it is left alone unless `--reinstall` is given, which rebuilds it from a fresh clone as below. |
+| audio.cpp, whisper.cpp, Strata | these build only the revision this checkout has qualified. After `owg update` brings a newer revision, it is built beside the current release. Otherwise there is no upgrade to take, so the engine is reinstalled: the release in use, with its build and source folders, is set aside in `runtimes/ENGINE/.reinstall-STAMP`, rebuilt from a fresh clone, and the old copy is deleted once the new build is verified. If the rebuild fails, the old release is put back. |
+
+```bash
+owg upgrade                      # every installed engine, asking which
+owg upgrade --check              # show the plan and change nothing
+owg upgrade llama.cpp sdcpp      # only these
+owg upgrade --yes                # everything listed, without asking
+owg upgrade --llama-build b12400 # a particular llama.cpp release
+owg upgrade --reinstall llama.cpp
+```
+
+Backends, Strata's host RAM budget
+and settings are kept. Missing build tools are installed first, where sudo can ask; a system
+installation asks for sudo once and builds as its service account. Nothing is restarted: new model
+launches use the new builds, and `owg restart loadcoach` applies them to models already loaded.
+While an engine is being reinstalled, it cannot start new models. Source builds take a while; the
+log is under `~/.local/state/openweightgym/upgrade-*.log`.
 
 ## The engine: llama.cpp
 

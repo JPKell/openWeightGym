@@ -9,6 +9,9 @@
 #   owg restart --host USER@HOST [PROGRAM...]    restart services on another machine over SSH
 #   owg logs [PROGRAM] [-f|--follow] [-n LINES]  the latest 80 lines unless -n says otherwise
 #   owg update [--yes] [--plain]                 fetch code and select it for the next restart
+#   owg upgrade [--check] [--reinstall] [--llama-build TAG] [ENGINE...]
+#                          upgrade llama.cpp, sdcpp, audio.cpp, whisper.cpp and Strata, or
+#                          reinstall those with no newer release; options: owg upgrade --help
 #   owg repair [--yes] [--plain]                 reinstall packages and services as they are
 #   owg install [--yes] [OPTIONS]                add omitted services and model engines
 #                                                options: install.sh --help
@@ -87,6 +90,7 @@ main() {
     start|stop|restart) control "$command" "$@" ;;
     logs|log) logs "$@" ;;
     update) exec "$ROOT/install.sh" --update --dir "$ROOT" "$@" ;;
+    upgrade) exec "$ROOT/scripts/upgrade-engines.sh" --dir "$ROOT" "$@" ;;
     repair) exec "$ROOT/install.sh" --repair --dir "$ROOT" "$@" ;;
     install) exec "$ROOT/install.sh" --components --dir "$ROOT" "$@" ;;
     discard-install) exec "$ROOT/install.sh" --discard-install --dir "$ROOT" "$@" ;;
@@ -365,10 +369,11 @@ menu() {
   ((UI_ASK)) || { usage; return 0; }
   local choice=0 console=0
   programs | grep -qx weightroom && console=1
-  local -a actions=(restart remote update repair doctor logs install) labels=(
+  local -a actions=(restart remote update upgrade repair doctor logs install) labels=(
     "Restart services|choose which programs to restart"
     "Restart another machine|restart a GPU node's services over SSH"
     "Update|fetch the latest openWeightGym code only"
+    "Upgrade engines|newer llama.cpp, sdcpp and other engine builds, or clean reinstalls"
     "Repair|reinstall packages and services as they are"
     "Doctor|check everything and say what to fix"
     "Logs|the latest from every program"

@@ -172,6 +172,7 @@ Installation/deployment interfaces must change with their contracts:
 - [openWeightGym installer](../scripts/install-suite.sh), [support](../scripts/install-suite-support.py), [source-build toolchain helper](../scripts/install-build-tools.sh), [settings editing](../weightroom/settings_file.py), [installer tests](../tests/test_installer.py), [distribution tests](../tests/test_installer_distros.py), [component tests](../tests/test_install_components.py) and [update tests](../tests/test_installer_update.py).
 - [Installer plan cleanup](../scripts/discard-install.py) and its [tests](../tests/test_discard_install.py).
 - [llama.cpp installer](../scripts/install-llamacpp.sh): pinned ggml-org builds by graphics card.
+- [Engine upgrades](../scripts/upgrade-engines.sh) (`owg upgrade`), its [planner](../scripts/engine-upgrades.py) and [tests](../tests/test_engine_upgrades.py).
 - [Strata installer](../scripts/install-strata.sh) and its [native implementation](../engines/strata/install.py).
 - [Pairing](../weightroom/pairing.py) of GPU nodes with one-time codes, [tests](../tests/test_pairing.py).
 - Optional image runtime: [installer](../scripts/install-sdcpp.sh), [implementation](../scripts/install-sdcpp.py); operating instructions in the [operations log](operations.md#optional-image-generation-runtime).
