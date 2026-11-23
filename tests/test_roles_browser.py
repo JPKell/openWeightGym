@@ -262,3 +262,21 @@ def test_studio_create_role_and_keyboard_copy(studio):
     page.get_by_role('button', name='Are you sure? Remove the role', exact=True).click()
     playwright.expect(page.locator('.said-box')).to_have_text('Removed the role research.')
     assert roles.get('research') is None and roles.get('code') is not None
+
+
+def test_a_saved_decimal_weight_is_not_an_unsaved_change(desk, tmp_path):
+    """A weight saved as 1.0 shows as 1.0 and is kept as 1: the editor is clean (QA-064)."""
+    server, _, _ = desk
+    models = Models(str(tmp_path/'loadcoach.db'))
+    models.put('small', {'gpus':1,'flags':{'model':gguf(tmp_path/'small.gguf'),'ctx-size':2048}})
+    Roles(str(tmp_path/'data'/'roles.db')).put('code', {'models':{'small':1.0}, 'benchmarks':{'code_retrieval':1.0}})
+    sign_in(server, 'jordan')
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.context.add_init_script('window.EventSource = class { close() {} };')
+        page.goto('http://console.test/roles?role=code')
+        playwright.expect(page.locator('#role-name')).to_have_value('code')
+        form = page.locator('[data-role-editor]')
+        playwright.expect(form.locator('[data-role-save-state]')).to_have_text('No unsaved changes')
+        playwright.expect(form.locator('[data-role-discard]')).to_be_disabled()
+        browser.close()

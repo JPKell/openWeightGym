@@ -15,7 +15,11 @@
     fields: fields(form).map(field => ({name: field.name, value: field.value, checked: field.checked})),
     extra: {model: form.querySelector('#add-role-model').value, weight: form.querySelector('#add-role-weight').value},
   });
-  const digest = state => JSON.stringify({...state, models: [...state.models].sort((a, b) => a.name.localeCompare(b.name))});
+  // Numbers compare by value, so a saved 1.0 is the same as the 1 the server keeps (QA-064).
+  const number = value => /^\s*-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?\s*$/i.test(value) ? String(Number(value)) : value;
+  const digest = state => JSON.stringify({...state, extra: {...state.extra, weight: number(state.extra.weight)},
+    fields: state.fields.map(field => ({...field, value: number(field.value)})),
+    models: [...state.models].map(model => ({...model, weight: number(model.weight)})).sort((a, b) => a.name.localeCompare(b.name))});
   function savedState(page, form) {
     // Failed-form middleware echoes submitted inputs. The server's saved settings are
     // separate, so Discard and dirty indicators still compare against accepted values.
