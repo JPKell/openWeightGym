@@ -4,8 +4,8 @@
 {% if loadouts.why %}<p class="text-warning">{{ loadouts.why }}</p>{% else %}
 <form method="post" action="/dry-fit?machine={{ machine|urlencode }}" id="fit-save" class="row g-2 align-items-end mb-3" data-hold-refresh><input type="hidden" name="machine" value="{{ machine }}">{% call form_section('Save selection', machine) %}
   <input type="hidden" name="selection" id="fit-selection" value="[]"><input type="hidden" name="version" id="fit-version" value="">
-  <div class="col-sm-6"><label class="form-label" for="fit-name">Selection name</label><input id="fit-name" name="name" class="form-control" maxlength="80" required></div>
-  <div class="col-sm-6"><div class="form-check mb-2"><input id="fit-replace" class="form-check-input" type="checkbox"><label for="fit-replace" class="form-check-label">Replace this saved name</label></div><button class="btn btn-outline-primary" name="do" value="save">Save current selection</button></div>
+  <div class="col-sm-6"><label class="form-label" for="fit-name">Selection name</label><input id="fit-name" name="name" class="form-control" maxlength="80" required value="{{ (save_draft|default({})).name|default('') }}"></div>
+  <div class="col-sm-6"><div class="form-check mb-2"><input id="fit-replace" class="form-check-input" type="checkbox"{{ ' checked' if (save_draft|default({})).replace|default(false) }}><label for="fit-replace" class="form-check-label">Replace this saved name</label></div><button class="btn btn-outline-primary" name="do" value="save">Save current selection</button></div>
   <p id="fit-selection-message" class="small text-secondary mb-0" role="status">Choose models and context using the controls above.</p>
 {% endcall %}</form>
 <div class="table-responsive"><table class="table table-sm align-middle" id="fit-saved" aria-label="Saved load-outs">

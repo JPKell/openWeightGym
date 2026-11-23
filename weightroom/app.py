@@ -2222,7 +2222,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         answer = await ask("GET", "/turnstile/models/files", person.key)
         return Response(answer.content, answer.status_code, media_type="application/json", headers={"cache-control":"no-store"})
 
-    async def fit_page(request: Request, person: Person, said: str = '', failed: bool = False, review: dict | None = None, machine_override: str = '') -> Response:
+    async def fit_page(request: Request, person: Person, said: str = '', failed: bool = False, review: dict | None = None, machine_override: str = '',
+                       save_draft: dict | None = None) -> Response:
         """Render the node-local split browser and combined memory estimate without loading models.
 
         The bars, the sliders and the automatic fit are static/fit.js, which works from what
@@ -2275,7 +2276,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         workspace.update(machine=machine, api_path=loadout_path, available=available)
         return page(request, "fit.html", person, status=400 if failed else 200, known=known, roles=found["roles"], on=on,
                     machine=machine, nodes=nodes,
-                    loadouts=loadouts, review=review, said=said or asked.get('said', ''), failed=failed, workspace=workspace,
+                    loadouts=loadouts, review=review, said=said or asked.get('said', ''), failed=failed, workspace=workspace, save_draft=save_draft or {},
                     address=lambda name: model_address(name) + '?node=' + quote(machine, safe=''))
 
     async def fit_do(request: Request, person: Person) -> Response:
@@ -2301,7 +2302,9 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         # Always target the named node, including primary compute. No fallback can apply another node's set.
         answer = await ask('POST', f'/turnstile/machines/{quote(machine, safe="")}/control/loadouts', person.key, json=body, timeout=None)
         if not answer.is_success:
-            return await fit_page(request, person, answer.json().get('error', {}).get('message', 'The operation failed.'), True, machine_override=machine)
+            # A refused save keeps the typed name and the Replace choice (a version is sent only when replacing) (QA-063).
+            kept = {'name': form.get('name', ''), 'replace': bool(form.get('version'))} if action == 'save' else None
+            return await fit_page(request, person, answer.json().get('error', {}).get('message', 'The operation failed.'), True, machine_override=machine, save_draft=kept)
         if action == 'preview':
             return await fit_page(request, person, review=answer.json(), machine_override=machine)
         message = {'save': 'Saved selection. Preview it before applying or loading.', 'apply': 'Restored the reviewed configuration.' if body.get('undo') else 'Applied the complete reviewed configuration.',
