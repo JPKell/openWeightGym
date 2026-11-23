@@ -42,6 +42,8 @@ def test_status_feature_states_render_without_false_ready_or_private_text(tmp_pa
         assert response.status_code == 200 and 'hx-trigger="every 5s"' in response.text
         assert '<script>private()</script>' not in response.text
         assert 'Voice entry readiness' in response.text and 'Calls can start' in response.text
+        # No link to a journal System logs cannot read; the gateway's journal is named instead (QA-023).
+        assert 'source=voice' not in response.text and 'journalctl --user -u voice-gateway' in response.text
         if state == 'gateway_down':
             assert 'Gateway is not answering.' in response.text
         elif state == 'compute_asleep':
