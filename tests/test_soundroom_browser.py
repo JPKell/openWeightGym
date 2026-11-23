@@ -616,3 +616,19 @@ def test_a_text_list_option_takes_one_item_per_line(desk):
         page.wait_for_function("document.querySelector('#sr-generate').disabled === false")
         assert sent[0]["request"]["options"]["phonemes"] == ["həloʊ", "wɜːld"]
         browser.close()
+
+
+def test_a_take_says_when_its_length_differs_from_the_one_asked_for(desk):
+    """A model may return a longer or shorter take than asked; the take says so (QA-018)."""
+    server, _, _ = desk
+    sign_in(server, "jordan")
+    short, exact = asset(1, settings={"prompt": "piano", "duration": 1}), asset(2, settings={"prompt": "piano", "duration": 30})
+    short["seconds"] = 5.12
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture_audio(state(assets=[short, exact]), []))
+        page.goto("http://console.test/chat/music")
+        page.locator("#sr-list button").first.click()
+        playwright.expect(page.locator("#sr-info")).to_contain_text("asked for 1 s; the model returned 5.1 s")
+        page.locator("#sr-list button").nth(1).click()
+        playwright.expect(page.locator("#sr-info")).not_to_contain_text("asked for")
+        browser.close()

@@ -526,9 +526,11 @@
     renderList();
     if (!row) { $('audio').removeAttribute('src'); if ($('use-selected')) $('use-selected').disabled = true; return; }
     $('title').textContent = row.metadata?.settings?.prompt || row.metadata?.settings?.lines?.map(line => line.text).join(' ').slice(0, 120) || row.filename;
-    const measured = row.metadata?.metrics || {};
+    const measured = row.metadata?.metrics || {}, asked = Number(row.metadata?.settings?.duration);
     $('info').textContent = [seconds(row.seconds), (row.rate / 1000) + ' kHz', row.channels === 2 ? 'stereo' : row.channels + ' ch',
-      measured.loudness_lufs != null ? measured.loudness_lufs + ' LUFS' : '', row.metadata?.seed !== undefined ? 'seed ' + row.metadata.seed : '', row.metadata?.model].filter(Boolean).join(' · ');
+      measured.loudness_lufs != null ? measured.loudness_lufs + ' LUFS' : '', row.metadata?.seed !== undefined ? 'seed ' + row.metadata.seed : '', row.metadata?.model,
+      // A model may return another length than asked; say so beside the length (QA-018).
+      asked > 0 && row.seconds > 0 && Math.abs(asked - row.seconds) >= .5 ? `asked for ${asked} s; the model returned ${row.seconds.toFixed(1)} s` : ''].filter(Boolean).join(' · ');
     $('nc').hidden = row.metadata?.commercial !== 'no';
     $('favourite').textContent = row.favourite ? '★ Favourite' : '☆ Favourite';
     $('favourite').setAttribute('aria-pressed', String(!!row.favourite));

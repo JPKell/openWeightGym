@@ -11,7 +11,7 @@ Create music or sound effects with a permitted audio model, then compare the res
 ## Do it
 
 1. Open **Music** or **Sounds** and choose the offered **Music model** or **Sound model**.
-2. Describe **Style** for music or **Sound** for an effect. Choose **Seconds**, **Takes** or **Variations**, and the supported **Mode**.
+2. Describe **Style** for music or **Sound** for an effect. Choose **Seconds**, **Takes** or **Variations**, and the supported **Mode**. Some models return a fixed minimum length; a take whose length differs from **Seconds** by half a second or more says so beside its details.
 3. Select **Generate**, listen to a take, and use the library's ordering and filters to find it again.
 
 ## Options
