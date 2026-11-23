@@ -377,6 +377,7 @@ class Store:
 
     @staticmethod
     def _graph(row):
+        """A saved workflow version row as a dictionary with its parsed document."""
         return {'id':row[0],'api_name':row[1],'name':row[2],'version':row[3],'published':row[4],'author':row[5],
                 'document':json.loads(row[6]),'updated':row[7]}
 

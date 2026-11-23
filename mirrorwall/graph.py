@@ -58,6 +58,7 @@ def _field(name, label, kind, default=None, **extra):
 
 
 def _port(name, label, kind, required=False, multiple=False):
+    """One input or output port of a component."""
     return {'name': name, 'label': label, 'type': kind, 'required': required, 'multiple': multiple}
 
 
@@ -179,16 +180,19 @@ LIMITS = {'nodes': 64, 'links': 128, 'stages': 32, 'images': 128}
 
 
 def _node(identifier, component, at, title=None, **values):
+    """A sample graph node of `component` at canvas position `at`, with the component's defaults under `values`."""
     defaults = {field['name']: field['default'] for field in COMPONENTS[component].get('fields', [])}
     return {'id': identifier, 'type': component, 'title': title or COMPONENTS[component]['label'],
             'values': {**defaults, **values}, 'at': at}
 
 
 def _link(source, target):
+    """A link between two `node.port` names."""
     return {'from': source.split('.'), 'to': target.split('.')}
 
 
 def _graph(name, summary, family, nodes, links, exposed=None, overridable=None):
+    """A complete sample image workflow document, with each node's exposed and overridable fields."""
     for node in nodes:
         node['exposed'] = (exposed or {}).get(node['id'], COMPONENTS[node['type']].get('exposed', []))
         node['overridable'] = (overridable or {}).get(node['id'], {})
@@ -198,6 +202,7 @@ def _graph(name, summary, family, nodes, links, exposed=None, overridable=None):
 
 def _inputs(prompt='A lighthouse on a basalt cliff at dusk, long exposure sea, warm windows, cinematic',
             model='', at_y=40, negative=False):
+    """The prompt, model, seed and size nodes (and optionally a negative prompt) that start a sample graph."""
     nodes = [_node('prompt', 'prompt', [40, at_y], text=prompt),
              _node('model', 'model', [40, at_y + 230], model=model),
              _node('seed', 'seed', [40, at_y + 360], mode='fixed', value=1234),
@@ -208,6 +213,7 @@ def _inputs(prompt='A lighthouse on a basalt cliff at dusk, long exposure sea, w
 
 
 def _sampler(identifier, family, at, title=None, **values):
+    """A sampler node with the model family's default settings."""
     defaults = {k: v for k, v in DEFAULTS[family].items() if k != 'basis'}
     return _node(identifier, 'sampler', at, title, **{**defaults, **values})
 
@@ -365,6 +371,7 @@ def _value(field, value):
 
 
 def _ports(node, side):
+    """A node's input or output ports (`side`), by name."""
     return {port['name']: port for port in COMPONENTS[node['type']].get(side, [])}
 
 
@@ -484,8 +491,10 @@ def problems(document, models=None, upscalers=None):
     """Run problems of a structurally valid document: missing sources, family rules, planned components, upscalers."""
     found, listed = {node['id']: node for node in document['nodes']}, []
     def push(node, level, text):
+        """Record one validation problem, optionally about a node."""
         listed.append({'node': node and node['id'], 'level': level, 'text': text})
     def into(node, port):
+        """The IDs of the nodes linked into a node's port."""
         return [link['from'][0] for link in document['links'] if link['to'] == [node['id'], port]]
     if not any(node['type'] in ('output', 'compare') for node in document['nodes']):
         push(None, 'error', 'Add an Output so the run saves something.')

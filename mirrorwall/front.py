@@ -658,6 +658,7 @@ class Front:
 
     @staticmethod
     def upscaler_names(upscalers):
+        """The installed upscalers' file IDs, or None when the inventory could not be read."""
         return None if upscalers is None else [one['id'] for one in upscalers]
 
     def runnable(self,row,models):
@@ -753,6 +754,7 @@ class Front:
         """Send one workflow step through the caller's own image API access; its image is not saved."""
         passed={key:value for key,value in request_headers.items() if key in ('x-loadcoach-log','x-loadcoach-trace','x-loadcoach-sensitivity','x-loadcoach-priority')}
         async def send(path,body):
+            """Stream one intermediate image request back through turnstile as the run's owner, tagging finished images with their node."""
             headers={**passed,'authorization':'Bearer '+self.batches.internal_key(user.name),'x-mirrorwall-intermediate':'1'}
             async with self.batches.door.stream('POST',path,json=body,headers=headers,timeout=None) as response:
                 if response.status_code>=400:
@@ -818,6 +820,7 @@ class Front:
         kind='image_edit' if request.url.path.endswith('/edits') else 'image_generation'
         if asked.get('stream'):
             async def events():
+                """Encode the workflow's events for the API stream, naming outputs by the request kind and ending with completion or an error."""
                 try:
                     async for event in sequence:
                         if event['type']=='workflow.output':
@@ -868,6 +871,7 @@ class Front:
         except (ValueError,TypeError) as problem:
             return error(400,str(problem))
         def image_of(identifier):
+            """A saved image of this owner's library as base64, or None if it is not theirs or gone."""
             content=self.store.content(user.identity,identifier)
             return base64.b64encode(content).decode() if content else None
         for identifier,row in list(self.graph_runs.items()):
@@ -880,6 +884,7 @@ class Front:
                                            'outputs':[],'steps':{},'error':None,'created':time.time(),'updated':time.time()}
         headers={'x-loadcoach-log':'off'} if temporary else {}
         async def execute():
+            """Run the workflow in the background, recording each step, output and the final state for polling."""
             try:
                 async for event in self.execute_workflow(user,document,run,headers=headers,quiet=temporary,identity=identity,image_of=image_of):
                     event={key:value for key,value in event.items() if key!='b64_json'}  # the page loads saved images by URL
@@ -909,6 +914,7 @@ class Front:
 
     @staticmethod
     def graph_run_view(state):
+        """A test run's state for its owner's page, without the background task or owner identity."""
         return {key:value for key,value in state.items() if key not in ('task','owner')}
 
     async def graph_run_state(self,request,user):

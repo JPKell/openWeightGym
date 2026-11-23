@@ -70,6 +70,7 @@ def encoded_image(value):
 
 
 def _number(value,label,lo,hi,integer=False):
+    """Validate a finite number (or integer) within `lo`..`hi`, naming `label` in the error."""
     if (type(value) is not int if integer else type(value) not in (int,float)) or not math.isfinite(value) or not lo<=value<=hi:
         raise ValueError(f"{label} must be {'an integer' if integer else 'a number'} from {lo} to {hi}.")
     return value

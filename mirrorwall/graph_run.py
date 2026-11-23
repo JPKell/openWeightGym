@@ -41,6 +41,7 @@ def parse_model(value):
 
 
 def _first(document, kind, field):
+    """The first node of `kind` that exposes `field` to callers, or None."""
     return next((node for node in document['nodes'] if node['type'] == kind and field in node['exposed']), None)
 
 
@@ -69,6 +70,7 @@ def prepare(document, asked):
     images = {}
 
     def put(node, name, value):
+        """Set a caller-supplied field on a node, validated as the field's own editor would."""
         field = fields[node['id']][name]
         try:
             node['values'][name] = graph._value(field, value)
@@ -146,6 +148,7 @@ def order(document):
         into.setdefault(link['to'][0], set()).add(link['from'][0])
     document_nodes = {node['id']: node for node in document['nodes']}
     def model_of(node):
+        """The model a sampler or tiled-detail node is linked to, or None for other nodes."""
         if node['type'] not in ('sampler', 'tiled_detail'):
             return None
         source = next((link['from'][0] for link in document['links'] if link['to'] == [node['id'], 'model']), None)
@@ -206,6 +209,7 @@ def decode(value):
 
 
 def encode(image):
+    """A PIL image as base64 PNG."""
     buffer = io.BytesIO()
     image.save(buffer, 'PNG')
     return base64.b64encode(buffer.getvalue()).decode()
@@ -230,6 +234,7 @@ def tiles(width, height, tile, overlap, alignment=16):
     """Tile boxes (left, top, right, bottom) covering an image: aligned tiles of at most `tile` pixels a side, neighbours
     sharing at least `overlap` pixels, the last row and column flush with the far edges."""
     def spans(length):
+        """Aligned, overlapping tile start/size pairs that cover `length` pixels."""
         size = min(int(tile), length // alignment * alignment)
         if size < 256:
             raise RunError('Tiled detail needs an image at least 256 pixels on each side.')
@@ -250,6 +255,7 @@ def blend(base, pieces, overlap):
         if piece.size != size:
             piece = piece.resize(size, Image.Resampling.LANCZOS)
         def ramp(length, fade):
+            """Mask values that fade in across the first `fade` pixels of an overlap, then stay opaque."""
             return [min(255, round(255 * (index + 1) / (fade + 1))) if index < fade else 255 for index in range(length)]
         across = Image.new('L', (size[0], 1)); across.putdata(ramp(size[0], int(overlap) if left else 0))
         down = Image.new('L', (1, size[1])); down.putdata(ramp(size[1], int(overlap) if top else 0))
@@ -259,6 +265,7 @@ def blend(base, pieces, overlap):
 
 
 def _advanced(values):
+    """The `advanced` request object for a sampler's optional engine settings; hires passes need a latent upscaler."""
     advanced = {}
     for key in ('eta', 'flow_shift', 'img_cfg', 'shifted_timestep', 'clip_skip'):
         if values.get(key) is not None:
@@ -287,6 +294,7 @@ async def run(document, count, images, *, models, upscalers, send, image_of=None
     nodes = {node['id']: node for node in document['nodes']}
     links = document['links']
     def sources(node, port):
+        """The `[node, port]` sources linked into a node's port."""
         return [link['from'] for link in links if link['to'] == [node['id'], port]]
     steps = order(document)
     loaded = {}
@@ -305,6 +313,7 @@ async def run(document, count, images, *, models, upscalers, send, image_of=None
     for item in range(count):
         made, origin, seeds, settings = {}, {}, {}, {}  # (step, port) -> value; image step -> (model, node) and the seed that made it
         def value(node, port):
+            """What the first source linked into a node's port has made so far, or None."""
             found = sources(node, port)
             return made.get(tuple(found[0])) if found else None
         for node in steps:
