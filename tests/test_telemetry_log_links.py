@@ -41,6 +41,12 @@ def test_log_link_opens_its_exact_recorded_host_with_no_invented_samples(telemet
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto('http://console.test/log/' + str(number))
+        for width in (768, 375):  # a long detail name stays clear of its value (QA-047)
+            page.set_viewport_size({'width': width, 'height': 1000})
+            label = page.locator('dl.facts dt', has_text='machine_fingerprint')
+            gap = label.evaluate('(dt) => dt.nextElementSibling.getBoundingClientRect().left - dt.getBoundingClientRect().right + parseFloat(getComputedStyle(dt).paddingRight)')
+            assert label.evaluate('(dt) => dt.scrollWidth <= dt.clientWidth') and gap >= 0, (width, gap)
+        page.set_viewport_size({'width': 1440, 'height': 1000})
         link = page.get_by_role('link', name='The machine in the half hour before', exact=True)
         address = urlsplit(link.get_attribute('href'))
         query = parse_qs(address.query)

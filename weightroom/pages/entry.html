@@ -14,7 +14,7 @@
 </dl>
 {# Whatever else this kind of entry holds, as it is kept. Each on a line of its own, since some are long. #}
 <dl class="row facts mb-4">
-  {% for name, value in (entry|rest).items() %}<dt class="col-4 col-md-2">{{ name }}</dt><dd class="col-8 col-md-10 wrap">{{ value|shown }}</dd>{% endfor %}
+  {% for name, value in (entry|rest).items() %}<dt class="col-4 col-md-2 wrap">{{ name }}</dt><dd class="col-8 col-md-10 wrap">{{ value|shown }}</dd>{% endfor %}
 </dl>
 
 {# Where to look next: what was printed around that moment, and how the machine was doing. #}
