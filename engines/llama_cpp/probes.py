@@ -165,8 +165,8 @@ class Probes:
             self.working[task['id']] = work
             self.working_since[task['id']] = time.monotonic()
             while not work.done():
-                await asyncio.sleep(.1)
-                if (self.draining() or self.runner.admitting or self.runner.waiting or self.runner.holder() is not lock
+                await asyncio.wait({work}, timeout=.1)  # returns as soon as the sample ends; otherwise checks every 0.1 s
+                if not work.done() and (self.draining() or self.runner.admitting or self.runner.waiting or self.runner.holder() is not lock
                     or not self.allowed(task['id']) or await request.is_disconnected()):
                     if not work.cancelling():
                         work.cancel()

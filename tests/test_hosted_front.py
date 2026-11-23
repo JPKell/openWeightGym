@@ -11,6 +11,7 @@ from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from front_helpers import machine_key
+from loadcoach.setting_catalog import default_for
 from loadcoach import statement
 from loadcoach.groups import Group
 from loadcoach.users import Users
@@ -278,6 +279,7 @@ def test_third_audio_batch_waits_for_partial_inventory_but_detects_real_removal(
     async def exercise():
         async with httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url='http://front') as door:
             work = FrontBatches(store, log, None, door, lambda name: 'internal-test-key')
+            work.setting = lambda name: 0 if name == 'batch_retry_seconds' else default_for('turnstile', name)  # retry at once, not after 30 s
             for index in range(3):
                 file = store.put_file('pat', 'audio.jsonl', 'batch', b'')
                 made = store.start('pat', '/v1/audio/generations', file['id'],

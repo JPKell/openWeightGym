@@ -61,3 +61,7 @@ pythonpath = ["."]
 # Tests run across every core: most of their time is spent waiting on child processes and
 # servers, not computing. Add -n 0 to run in one process, for a debugger or print output.
 addopts = "-n auto --dist worksteal"
+# Temporary folders live in /tmp (tmpfs), where SQLite setup is several times faster than on
+# disk. A passing test's folder is removed at once, so a full run does not fill /tmp's quota.
+tmp_path_retention_policy = "failed"
+markers = ["browser: drives Chromium; left out of a plain run, included by --browser or by naming the test"]

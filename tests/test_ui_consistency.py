@@ -226,12 +226,26 @@ def ui_console(ui_host, desk_with_machine, tmp_path, backup_keys):
     assert not store.db.execute("SELECT id FROM benchmark_runs WHERE state IN ('queued','running')").fetchall()
 
 
+# Each all-page sweep is split into this many tests, so parallel workers share its pages
+# instead of one worker spending minutes on every route.
+SHARDS = 8
+
+
+def shard_of(paths, shard):
+    return paths[shard::SHARDS]
+
+
+@pytest.mark.parametrize('shard', range(SHARDS))
 @pytest.mark.parametrize('width', [1440, 390])
 @pytest.mark.parametrize('theme,palette', [('light', 'slate'), ('dark', 'slate'), ('light', 'forest')])
-def test_all_console_pages_share_sizes_and_fit(ui_console, tmp_path, width, theme, palette):
+def test_all_console_pages_share_sizes_and_fit(ui_console, tmp_path, width, theme, palette, shard):
     """Every audited route renders in two widths, both appearances and a second palette."""
-    from test_console_browser import browser_context, playwright
     server, paths = ui_console
+    audit_sizes(server, shard_of(paths, shard), tmp_path, width, theme, palette, f'-{shard}')
+
+
+def audit_sizes(server, paths, tmp_path, width, theme, palette, part=''):
+    from test_console_browser import browser_context, playwright
     failures = []
     measurements = []
     errors = []
@@ -294,7 +308,7 @@ def test_all_console_pages_share_sizes_and_fit(ui_console, tmp_path, width, them
         browser.close()
     output = Path(os.environ.get('UI_REPORT_DIR', tmp_path))
     output.mkdir(parents=True, exist_ok=True)
-    (output / f'{width}-{theme}-{palette}.json').write_text(json.dumps(measurements, indent=2))
+    (output / f'{width}-{theme}-{palette}{part}.json').write_text(json.dumps(measurements, indent=2))
     assert not errors, errors
     assert not failures, '\n'.join(failures)
 
@@ -304,15 +318,17 @@ def test_all_console_pages_share_sizes_and_fit(ui_console, tmp_path, width, them
 def test_video_surfaces_share_console_controls_and_fit(ui_console,tmp_path,width,theme):
     """Run the canonical layout audit on the new video surfaces in both sizes and themes."""
     server,_=ui_console
-    test_all_console_pages_share_sizes_and_fit((server,('/chat/video','/models/video','/settings/video')),tmp_path,width,theme,'slate')
+    audit_sizes(server,('/chat/video','/models/video','/settings/video'),tmp_path,width,theme,'slate','-video')
 
 
+@pytest.mark.parametrize('shard', range(SHARDS))
 @pytest.mark.parametrize('width', [1440, 390])
-def test_all_console_neutral_surfaces_retheme_without_reloading(ui_console, width):
+def test_all_console_neutral_surfaces_retheme_without_reloading(ui_console, width, shard):
     from test_console_browser import browser_context, playwright
     from test_themes import change_theme
 
     server, paths = ui_console
+    paths = shard_of(paths, shard)
     failures = []
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
@@ -343,8 +359,9 @@ def test_all_console_neutral_surfaces_retheme_without_reloading(ui_console, widt
     assert not failures, json.dumps(failures, indent=2)
 
 
+@pytest.mark.parametrize('shard', range(SHARDS))
 @pytest.mark.parametrize('sidebar', ['closed', 'open'])
-def test_all_console_pages_share_outer_layout_when_resized(ui_console, tmp_path, sidebar):
+def test_all_console_pages_share_outer_layout_when_resized(ui_console, tmp_path, sidebar, shard):
     """Page gutters stay equal through navigation, rail toggles and breakpoint crossings."""
     from test_console_browser import browser_context, playwright
     server, paths = ui_console
@@ -353,6 +370,7 @@ def test_all_console_pages_share_outer_layout_when_resized(ui_console, tmp_path,
     cases = [(path, 'jordan', 200) for path in paths]
     cases.extend([('/no-such-page', 'jordan', 404), ('/settings', 'pat', 403),
                   ('/models/no-such-model', 'jordan', 404)])
+    cases = shard_of(cases, shard)
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         page.add_init_script(f"localStorage.setItem('weightroom-sidebar', '{sidebar}')")

@@ -8,9 +8,13 @@ program, such as a missing one, still goes through the real subprocess call.
 test_fake_cards_in_process.py checks that both ways give the same rows.
 """
 
+import ast
+import inspect
 from pathlib import Path
+import re
 import shutil
 import subprocess
+import textwrap
 from types import SimpleNamespace
 
 import pytest
@@ -70,3 +74,59 @@ def stand_in_cards_answer_in_process(monkeypatch):
             return rows(fake_nvidia_smi.answer([query, "--format=csv,noheader,nounits"]))
         return await REAL_SMI(self, query)
     monkeypatch.setattr(Runner, "smi", smi)
+
+
+# ---- the quick default run -------------------------------------------------------------------
+# A plain `pytest` leaves out the tests that drive Chromium: they are most of the suite's CPU
+# time. `pytest --browser` runs everything, and naming files or tests runs all of those,
+# browser tests included. A test counts as a browser test when its body, a helper it calls or
+# one of its fixtures uses Playwright, so plain tests in the same file still run by default.
+
+BROWSER_WORDS = re.compile(r'\b(playwright|chromium|browser_context)\b')
+TESTS = Path(__file__).resolve().parent
+
+
+def pytest_addoption(parser):
+    parser.addoption('--browser', action='store_true',
+                     help='also run the Chromium tests a plain run leaves out')
+
+
+def drives_browser(function, seen) -> bool:
+    """Whether this test-suite function, or one it names, uses Playwright."""
+    function = inspect.unwrap(function)
+    code = getattr(function, '__code__', None)
+    if code is None or code in seen or not code.co_filename.startswith(str(TESTS)):
+        return False
+    seen.add(code)
+    try:
+        source = inspect.getsource(function)
+    except (OSError, TypeError):
+        return False
+    if BROWSER_WORDS.search(source):
+        return True
+    names = {node.id for node in ast.walk(ast.parse(textwrap.dedent(source))) if isinstance(node, ast.Name)}
+    return any(callable(found := function.__globals__.get(name)) and inspect.isfunction(found)
+               and drives_browser(found, seen) for name in names)
+
+
+def is_browser_test(item) -> bool:
+    seen = set()
+    if drives_browser(item.function, seen):
+        return True
+    for name in item.fixturenames:
+        for definition in item._fixtureinfo.name2fixturedefs.get(name, ()):
+            if drives_browser(definition.func, seen):
+                return True
+    return False
+
+
+def pytest_collection_modifyitems(config, items):
+    for item in items:
+        if hasattr(item, 'function') and is_browser_test(item):
+            item.add_marker(pytest.mark.browser)
+    if config.getoption('--browser') or config.args_source != pytest.Config.ArgsSource.TESTPATHS:
+        return
+    left_out = [item for item in items if item.get_closest_marker('browser')]
+    if left_out:
+        config.hook.pytest_deselected(items=left_out)
+        items[:] = [item for item in items if not item.get_closest_marker('browser')]

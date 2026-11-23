@@ -16,6 +16,10 @@ root agent instructions, documentation contract and durable design decisions.
   Date deployment/acceptance records; a passing fixture does not establish live behavior.
 - Use the existing routes, schedulers, stores and service lifecycle. Do not add a second model
   scheduler, inference path, identity authority, private-prompt store or credentials without scope.
+- A plain `.venv/bin/pytest` is the quick run: it leaves out the tests that drive Chromium.
+  `.venv/bin/pytest --browser` runs everything; naming files or tests runs all of them, browser
+  tests included. Keep tests quick: shorten a shipped delay through a module constant or setting
+  rather than waiting it out, and split a long browser sweep into parametrized shards.
 
 ## Standing permissions and execution constraints
 

@@ -165,7 +165,7 @@ the brief's "must not send" list, and a browser-only request header in `NOT_APP_
 | Shared appearance and browser behavior | [style.css](weightroom/static/style.css), [console.js](weightroom/static/console.js), [model-settings.js](weightroom/static/model-settings.js) |
 
 For UI changes, run the component audit in [test_ui_consistency.py](tests/test_ui_consistency.py)
-and the affected feature tests. Shared component changes also require the all-page browser
+and the affected feature tests by name (a plain `pytest` leaves out browser tests; `--browser` runs all). Shared component changes also require the all-page browser
 checks there, including narrow layouts, empty/error states and dynamic replacements.
 
 A form whose unsent changes must survive a polling refresh of its fragment carries
