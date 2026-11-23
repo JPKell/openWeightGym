@@ -217,3 +217,40 @@ def test_unresolved_count_uses_the_parent_index(tmp_path):
     plan=' '.join(str(row) for row in log.db.raw.execute('EXPLAIN QUERY PLAN '+asked[0]))
     assert 'SEARCH e USING INDEX events_request_parent' in plan
     log.db.close();users.db.close()
+
+
+def test_the_allowance_report_runs_off_the_event_loop_and_bounds_its_log_flush(tmp_path, monkeypatch):
+    """Run on the loop, a slow tally held a concurrent Usage report past its deadline: activity answered 503 (QA-073)."""
+    import time
+    import httpx
+    from starlette.applications import Starlette
+    from turnstile import allowances as module
+    users, log, key = store(str(tmp_path / 'front.db'))
+    pat = users.by_key(key)
+    ending(log, pat, 1)
+    real = Allowances.tally
+    monkeypatch.setattr(Allowances, 'tally', lambda self, *args: (time.sleep(0.6), real(self, *args))[1])
+    async def silent(user, method, where, *args, **kwargs):
+        await asyncio.sleep(30)  # a node that never answers its log flush
+    monkeypatch.setattr(module, 'FLUSH_SECONDS', 0.3)
+    app = Starlette(routes=module.routes(users, log, users.by_key, silent))
+
+    async def run():
+        gaps, last = [], time.monotonic()
+        async def ticker():
+            nonlocal last
+            while True:
+                await asyncio.sleep(0.02)
+                gaps.append(time.monotonic() - last); last = time.monotonic()
+        ticking = asyncio.create_task(ticker())
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://front') as client:
+            started = time.monotonic()
+            answer = await client.get('/loadcoach/allowances', headers={'authorization': 'Bearer ' + key})
+            took = time.monotonic() - started
+        ticking.cancel()
+        return answer, took, max(gaps)
+    answer, took, longest = asyncio.run(run())
+    assert answer.status_code == 200 and answer.json()['compute_synchronized'] is False
+    assert took < 5  # the flush gave up instead of waiting on the silent node
+    assert longest < 0.3, longest  # the loop kept serving while the tally ran
+    log.db.close(); users.db.close()

@@ -18,6 +18,8 @@ Inspect recorded spending and configure the scopes you may manage.
 
 Read [Spending policy](/docs/operations/settings-policy#spending-policy) for advisory, warning and hosted-blocking behavior. Recorded spending excludes unknown and in-flight costs; it does not reserve money or impose a provider-side billing cap. Ordinary members see their authorized scopes; management controls require current authority.
 
+The page waits at most five seconds for nodes to send their latest records; a node that does not answer in time is left out until the next load. A recorded-spending report that takes too long answers **The allowance report took too long. Retry shortly.** instead of slowing other reports.
+
 ## Related
 
 [Usage and costs](/docs/monitoring/usage) · [Cloud APIs](/docs/model-guides/cloud-apis)

@@ -1,4 +1,5 @@
 """Recorded USD allowances with live advisory, warning and hosted-only admission policy."""
+import asyncio
 import json
 import math
 import time
@@ -15,6 +16,9 @@ from starlette.routing import Route
 from loadcoach.usage import ENDINGS, amount
 from loadcoach.users import key_identity
 from .accounts import address, error, read_json, signed_in
+from .reporting import ReportTimeout, run as run_report
+
+FLUSH_SECONDS = 5  # as long as the Usage report waits for a node's log
 
 
 class Allowances:
@@ -109,16 +113,25 @@ class Allowances:
 
     def report(self, user, now=None):
         """Latest ending per request is charged once; missing costs are never mock-priced."""
+        return self.tally(user, self.prepare(user, now), self.log)
+
+    def prepare(self, user, now=None):
+        """What the report needs from the account store: its window, visible targets and policies."""
         now = time.time() if now is None else now
-        since, period_end, window_label = self.window(now)
         targets = [t for t in self.choices() if self.visible(user, t)]
         policies = {(scope, subject): limit for scope, subject, limit in self.users.db.execute(
             'SELECT scope,subject,amount FROM spending_allowances')}
+        return now, targets, policies
+
+    def tally(self, user, prepared, log):
+        """Charge the prepared targets from `log` alone, so a bounded read-only reader can run it off the event loop."""
+        now, targets, policies = prepared
+        since, period_end, window_label = self.window(now)
         totals = {(t['scope'], t['subject']): dict(recorded=Decimal(0), requests=0, unknown_costs=0, unresolved=0, next_charge=None) for t in targets}
         marks = ','.join('?' for _ in ENDINGS)
         # Every ending includes snapshots on matching compute. Keep only the newest retained
         # ending for each parent in this window, so multiple endings are not charged twice.
-        records = self.log.db.execute(f"SELECT id,at,what,\"user\",detail,machine FROM events "
+        records = log.db.execute(f"SELECT id,at,what,\"user\",detail,machine FROM events "
             f"WHERE kind='request' AND what IN ({marks}) AND at>=? AND at<=? ORDER BY id DESC", (*ENDINGS,since,now))
         seen = set()
         legacy = 0
@@ -149,8 +162,8 @@ class Allowances:
         # Unresolved means no retained ending, not proof that the request is still executing.
         # The unary plus on e.at keeps the planner on the parent index; scanning every earlier
         # request by time took 41 s on 48k events and stalled turnstile's event loop.
-        ending_parent = self.log.json_value('e.detail', 'of', 'integer')
-        records = self.log.db.execute(f"SELECT a.detail FROM events a WHERE a.kind='request' AND a.what='asked' "
+        ending_parent = log.json_value('e.detail', 'of', 'integer')
+        records = log.db.execute(f"SELECT a.detail FROM events a WHERE a.kind='request' AND a.what='asked' "
             f"AND a.at>=? AND a.at<=? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.kind='request' "
             f"AND e.what IN ({marks}) AND +e.at<=? AND {ending_parent}=+COALESCE(a.source,a.id) "
             "AND COALESCE(e.machine,'')=COALESCE(a.machine,''))", (since,now,*ENDINGS,now))
@@ -173,7 +186,7 @@ class Allowances:
                 'manage':self.manageable(user,target)})
         return dict(mode=self.setting('allowance_mode'), period=self.setting('allowance_period'), window_label=window_label,
             reset_at=period_end, currency='USD', window_seconds=(period_end - since) if period_end else 86400, as_of=now, since=since,
-            rows=rows, legacy_records=legacy, unattributed_keys=unattributed_keys, keep_days=self.log.keep_days)
+            rows=rows, legacy_records=legacy, unattributed_keys=unattributed_keys, keep_days=log.keep_days)
 
 
 def routes(users, log, caller, ask_compute, *, service=None):
@@ -194,8 +207,18 @@ def routes(users, log, caller, ask_compute, *, service=None):
                 return error(400,str(why))
             log.add('allowance','changed',user.name,address(request),scope=target['scope'],subject=target['subject'],amount=body['amount'])
             return JSONResponse({'saved':True,'mode':allowances.setting('allowance_mode')},headers={'cache-control':'no-store'})
-        synchronized = await ask_compute(user,'POST','/loadcoach/send-log')
-        return JSONResponse({**allowances.report(user),'compute_synchronized':synchronized is not None and synchronized.status_code==200},
+        # A flush is bounded as the Usage report's is, and the tally reads its own connection in a
+        # worker thread: run on the event loop it held up every concurrent report past its deadline (QA-073).
+        try:
+            synchronized = await asyncio.wait_for(ask_compute(user,'POST','/loadcoach/send-log'), timeout=FLUSH_SECONDS)
+        except TimeoutError:
+            synchronized = None
+        prepared = allowances.prepare(user)
+        try:
+            result = await run_report(log, lambda view: allowances.tally(user, prepared, view))
+        except ReportTimeout:
+            return error(503, 'The allowance report took too long. Retry shortly.')
+        return JSONResponse({**result,'compute_synchronized':synchronized is not None and synchronized.status_code==200},
             headers={'cache-control':'no-store'})
 
     checked = signed_in(caller,log,handle)
