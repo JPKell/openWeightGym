@@ -81,6 +81,10 @@ def test_benchmark_shares_presets_and_saves_are_scoped_to_one_role(desk, tmp_pat
         page.locator('#role-tuning > summary').click()
         code = page.locator('form').filter(has=page.locator('#bench-code-code_retrieval'))
         code.get_by_role('button', name='Use coding weights', exact=True).click()
+        # A preset is a change like any other: the draft, Discard and stale-preview notice follow it (QA-051).
+        playwright.expect(code.locator('[data-role-save-state]')).to_have_text('Unsaved changes')
+        playwright.expect(code.locator('[data-role-discard]')).to_be_enabled()
+        playwright.expect(page.locator('[data-role-preview-stale]')).to_be_visible()
         page.locator('#loaded-code').fill('40')
         page.locator('#fast-loaded-code').fill('200')
         playwright.expect(page.locator('#bench-code-code_retrieval')).to_have_value('4')

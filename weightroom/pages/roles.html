@@ -3,7 +3,7 @@
 {% from 'navigation_parts.html' import pills %}
 {% from 'role_parts.html' import request_path, role_link, candidate %}
 {% block title %}Roles · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/roles.css?v=3"><script src="/static/role-preferences.js?v=2" defer></script><script src="/static/role-studio.js?v=2" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/roles.css?v=3"><script src="/static/role-preferences.js?v=3" defer></script><script src="/static/role-studio.js?v=2" defer></script>{% endblock %}
 {% block main %}
 <div class="role-studio" data-role-studio data-role="{{ role.name if role else '' }}" data-role-settings="{{ (role or {})|tojson|forceescape }}">
 {% call page_header('Roles') %}<a href="#create-role" class="btn btn-primary" data-create-role>+ Create role</a>{% endcall %}

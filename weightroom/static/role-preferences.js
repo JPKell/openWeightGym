@@ -25,8 +25,10 @@
     const button = event.target.closest('[data-benchmark-preset]');
     if (!button) return;
     const weights = JSON.parse(button.dataset.benchmarkPreset);
-    button.form.querySelectorAll('[data-benchmark-id]').forEach(field => { field.value = weights[field.dataset.benchmarkId] || 0; });
-    update(button.form, true);
+    const fields = [...button.form.querySelectorAll('[data-benchmark-id]')];
+    fields.forEach(field => { field.value = weights[field.dataset.benchmarkId] || 0; });
+    // Announce the change as typing would, so the role's draft, Discard and preview notice follow it (QA-051).
+    if (fields.length) fields[0].dispatchEvent(new Event('input', {bubbles: true})); else update(button.form, true);
   });
   /** Attach role preference controls to newly rendered forms. */
   const initialize = () => document.querySelectorAll('[data-benchmark-weights]').forEach(section => update(section.closest('form')));
