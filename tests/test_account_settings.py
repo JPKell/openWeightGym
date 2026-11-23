@@ -173,6 +173,13 @@ def test_browser_layout_controls_time_and_saved_accessibility(desk, tmp_path):
         assert 'Asia/Tokyo' == page.evaluate('SuiteTime.zone')
         result = page.evaluate('SuiteTime.format("2026-11-14T00:00:00Z")')
         assert '2026-11-14' in result and '9:00' in result
+        # A filtered refresh keeps the account's zone on the new rows (QA-055).
+        page.goto('http://console.test/account/logs')
+        playwright.expect(page.locator('#latest caption')).to_contain_text('Times: Asia/Tokyo')
+        page.locator('#account-log-limit').select_option(index=1)
+        page.wait_for_function("document.querySelector('#account-log-limit').selectedIndex === 1 && !document.querySelector('.htmx-request')")
+        playwright.expect(page.locator('#latest caption')).to_contain_text('Times: Asia/Tokyo')
+        assert all('UTC' not in text for text in page.locator('#latest time[data-local-time]').all_text_contents())
         page.goto('http://console.test/account/appearance')
         page.locator('#text_size').select_option('large')
         page.locator('#motion').select_option('reduce')

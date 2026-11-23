@@ -272,8 +272,10 @@ window.suiteNodeLabel = name => name === 'front' ? 'Control node' : name;
   }, true);
   window.SuiteTime = {format, localize, zone};
   localize();
-  document.addEventListener('htmx:afterSwap', event => localize(event.detail?.target || document));
-  document.addEventListener('htmx:oobAfterSwap', event => localize(event.detail?.target || document));
+  // An outerHTML swap reports the element it replaced, which has left the page; then format the whole page (QA-055).
+  const swapped = event => { const target = event.detail?.target; localize(target?.isConnected ? target : document); };
+  document.addEventListener('htmx:afterSwap', swapped);
+  document.addEventListener('htmx:oobAfterSwap', swapped);
 })();
 
 
