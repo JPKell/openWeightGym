@@ -34,6 +34,9 @@ def test_journal_presentation_preserves_unknown_text_tracebacks_and_stable_ident
     again = workspace(['earlier output', *lines], 'configured-node', 'loadcoach', 'America/Vancouver')
     assert view['entries'][1]['id'] == again['entries'][2]['id']
     assert workspace(['1970-01-01T00:00:00Z kernel: INFO zero'], 'front', 'kernel', 'UTC')['entries'][0]['epoch'] == 0
+    # journalctl's empty-window marker is not an entry; other unrecognised output still is (QA-036).
+    assert workspace(['-- No entries --'], 'node', 'loadcoach', 'UTC')['count'] == 0
+    assert workspace(['unrecognised output'], 'node', 'loadcoach', 'UTC')['count'] == 1
     assert workspace([], 'front', 'kernel', 'UTC')['duration'] == '—'
     naive = workspace(['2026-01-01T00:00:00 INFO Ready'], 'front', 'kernel', 'Asia/Tokyo')
     assert naive['entries'][0]['at'].endswith('+09:00')

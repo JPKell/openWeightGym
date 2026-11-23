@@ -28,6 +28,8 @@ def workspace(lines, node, source, timezone):
     """Parse retained journal lines while preserving continuation text and original records."""
     entries = []
     for line in lines:
+        if line.strip() == '-- No entries --':  # journalctl's own word that nothing matched, not a record (QA-036)
+            continue
         stamp = STAMP.match(line)
         if not stamp and entries and CONTINUATION.match(line):
             entries[-1]['raw'] += '\n' + line
