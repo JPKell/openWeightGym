@@ -168,3 +168,20 @@ def test_named_set_member_limit_does_not_limit_the_catalogue(cpu_fit_desk):
         playwright.expect(page.locator('#fit-save button[value="save"]')).to_be_disabled()
         playwright.expect(page.locator('[data-catalogue-select]')).to_have_count(30)
         browser.close()
+
+
+def test_rerankers_and_classifiers_have_labels_and_counts(cpu_fit_desk):
+    """Every type the planner knows is labelled and counted (QA-052)."""
+    server, _, library = cpu_fit_desk
+    library.put('qa-ranker', {**library.get('model-00'), 'flags': {**library.get('model-00')['flags'], 'reranking': True}})
+    with playwright.sync_playwright() as driver:
+        browser, page = browser_context(driver, server)
+        page.goto('http://console.test/dry-fit')
+        playwright.expect(page.locator('#catalogue-list .fit-catalogue-item', has_text='qa-ranker').locator('[data-catalogue-kind]')).to_have_text('Reranker')
+        page.get_by_label('Select qa-ranker', exact=True).check()
+        page.get_by_label('Select model-01', exact=True).check()
+        playwright.expect(page.locator('#selection-count')).to_have_text('2 selected · 1 LLM · 1 reranker · 0 audio · 0 image · 0 video')
+        badge = page.locator('#fit-picks tr', has_text='qa-ranker').locator('[data-kind]')
+        playwright.expect(badge).to_have_text('Reranker')
+        assert 'bg-undefined-lt' not in badge.get_attribute('class')
+        browser.close()
