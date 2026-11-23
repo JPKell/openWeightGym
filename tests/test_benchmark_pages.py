@@ -512,3 +512,23 @@ def test_results_show_one_quality_result_per_model_across_nodes(fleet):
     legacy = browser.get('/benchmarks/results?kind=image&family=embedding&benchmark=embedding_load').text
     assert 'id="benchmark-results"' in legacy and 'local-model' in legacy
     assert 'name="kind"' not in legacy and 'name="family"' not in legacy
+
+
+def test_a_classifier_sample_shows_its_graded_labels_instead_of_a_blank_answer(desk, tmp_path):
+    """A classifier answers with labels, not text; the answer tab shows them (QA-072)."""
+    browser, _, _ = desk
+    Models(str(tmp_path/'loadcoach.db')).put('qa-classifier', {'flags': {'model': str(tmp_path/'classifier.gguf')}})
+    store = browser.app.state.benchmarks.state.store
+    n = store.create('jordan', 'qa-classifier', 'extraction')
+    store.activate(n, {'fingerprint': 'fp', 'subject': {'values': {}}, 'environment': {}})
+    store.keep(n, 'kev-test-0000', {'success': True, 'passed': True}, '{"labels":{"intent":"lost_or_stolen_phone"}}', 'log',
+               {'case': {'expected': {}}, 'answer': '', 'prompt': 'input',
+                'checks': [{'name': 'intent', 'passed': True, 'expected': 'lost_or_stolen_phone', 'actual': 'lost_or_stolen_phone'}]})
+    store.keep(n, 'kev-test-0001', {'success': False}, '', 'log', {'case': {'expected': {}}, 'answer': '', 'prompt': 'input', 'checks': []})
+    store.finish(n, 'completed'); store.synced(n)
+    sign_in(browser, 'jordan')
+    html = browser.get('/benchmarks/run/' + n).text
+    first, second = html.split('id="sample-1"', 1)[1], html.split('id="sample-2"', 1)[1]
+    answer = lambda part: part.split('<summary>Graded final answer</summary>', 1)[1].split('</details>', 1)[0]
+    assert 'returns labels rather than text' in answer(first) and 'intent: lost_or_stolen_phone' in answer(first)
+    assert 'No answer text was recorded' in answer(second)

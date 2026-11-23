@@ -36,6 +36,7 @@
       timer = setTimeout(() => { if (root.isConnected) $('#run-feedback').hidden = true; }, 5000);
     }
     async function copy(value) {
+      if (!value.trim()) { notify('This section has nothing to copy.'); return; }
       try { await navigator.clipboard.writeText(value); notify('Copied.'); }
       catch { notify('Clipboard unavailable. Select the evidence to copy it.'); }
     }
