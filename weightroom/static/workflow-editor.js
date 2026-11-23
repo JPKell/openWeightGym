@@ -301,8 +301,11 @@ window.SuiteWorkflowEditor = (() => {
       return true;
     }
 
+    let advancedOpen = {node: null, open: false};  // a rebuilt inspector keeps the same step's Advanced settings open (QA-094)
     function renderInspector() {
       if (!inspector) return;
+      const shown = inspector.querySelector('[data-advanced]');
+      if (shown) advancedOpen = {node: inspector.dataset.node, open: shown.open};
       inspector.replaceChildren();
       const node = selected && G.find(state, selected);
       if (!node) { inspector.append(fromTemplate('wf-inspector-empty-template')); return; }
@@ -322,6 +325,8 @@ window.SuiteWorkflowEditor = (() => {
       const fields = panel.querySelector('[data-fields]'), advanced = panel.querySelector('[data-advanced-fields]');
       for (const field of definition.fields || []) if (visibleField(node, field)) (field.advanced ? advanced : fields).append(fieldControl(node, field));
       panel.querySelector('[data-advanced]').hidden = !advanced.children.length;
+      panel.querySelector('[data-advanced]').open = advancedOpen.node === node.id && advancedOpen.open;
+      inspector.dataset.node = node.id;
       const ins = panel.querySelector('[data-inputs]');
       for (const input of G.inputs(catalogue, node)) {
         const row = fromTemplate('wf-use-from-template'), id = 'wf-from-' + node.id + '-' + input.name;

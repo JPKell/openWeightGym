@@ -312,3 +312,26 @@ def test_workflow_deletion_requires_two_clicks_and_cleans_versions(studio,width)
         assert server.get('/mirrorwall-api/presets/'+row['id']).status_code==404
         playwright.expect(button).to_be_hidden()
         browser.close()
+
+
+def test_setup_json_names_the_labelled_field_and_a_refused_deletion_stays_said(studio):
+    """Valid JSON that repeats a labelled field says so (QA-065); a deletion refused by the server keeps its reason (QA-068)."""
+    server,_,_,_=studio
+    row=server.post('/mirrorwall-api/presets',json={'name':'Stale','model':'sketch','settings':{'steps':10}}).json()
+    with playwright.sync_playwright() as driver:
+        browser,page=browser_context(driver,server)
+        errors=[]; page.on('pageerror',lambda error: errors.append(str(error)))
+        page.goto('http://console.test/models/images/workflows?model=sketch')
+        playwright.expect(page.locator('#studio-delete')).to_be_visible()
+        assert server.delete('/mirrorwall-api/presets/'+row['id']+'?version='+str(row['version'])).status_code==200  # elsewhere
+        page.locator('#studio-delete').click(); page.locator('#studio-delete').click()
+        playwright.expect(page.locator('#studio-save-error')).to_be_visible()
+        assert page.locator('#studio-save-error').inner_text().strip()
+        page.locator('#studio-edit-model').click()
+        playwright.expect(page.locator('#model-dialog')).to_be_visible()
+        page.locator('#model-dialog summary', has_text='Advanced (JSON)').click()
+        page.locator('#mw-defaults').fill('{"width": 512}')
+        page.locator('#model-dialog button[type=submit]').click()
+        playwright.expect(page.locator('#mw-message')).to_have_text('Use the labelled field for width.')
+        assert not errors
+        browser.close()

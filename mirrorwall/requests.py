@@ -348,6 +348,10 @@ def checked_request(asked,settings=None):
         result["upscale_with"]=checked_upscale_with(asked,result)
     if "control" in asked:
         result["control"]=checked_control(asked,result,settings)
+    if (settings or {}).get('sdcpp',{}).get('family')=='sdxl' and result.get('advanced',{}).get('img_cfg',1)!=1 and not result.get('references'):
+        # The image guidance scale weighs a start image; on a text-only SDXL pass any value other than 1 makes
+        # stable-diffusion.cpp return no image at all (QA-095).
+        raise ValueError('On SDXL, Image CFG scale applies to a pass with a start image; leave it empty or 1 for text-to-image.')
     if result.get('advanced',{}).get('hires') and (result.get('detail_resize') or result.get('upscale',1)>1):
         raise ValueError('Use the hires pass or Upscale / Resize & add detail, not both.')
     loras=result.get("loras",{})

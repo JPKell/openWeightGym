@@ -217,12 +217,14 @@
   $('delete').onclick=async () => {
     const row=current(), originalKey=key(); if(!row || saving) return;
     saving=true; $('delete').disabled=true;
+    let refused='';
     try {
       await api('presets/'+encodeURIComponent(row.id)+'?version='+row.version,null,'DELETE');
       library.presets=library.presets.filter(item=>item.id!==row.id); histories.delete(row.id); drafts.delete(originalKey);
       workflowID=null; announce('Workflow and version history deleted. Saved jobs and outputs are unchanged.');
-    } catch(problem) { error(problem.message,true); }
-    finally { saving=false; showWorkflows(); showEditor(); }
+    } catch(problem) { refused=problem.message; }
+    // The editor redrawn clears its messages, so a refusal (changed elsewhere, already deleted) is shown after it (QA-068).
+    finally { saving=false; showWorkflows(); showEditor(); if(refused) error(refused,true); }
   };
   $('workflow-form').addEventListener('input',mark); $('workflow-form').addEventListener('change',mark);
   $('history').onchange=updateHistory;

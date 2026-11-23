@@ -272,7 +272,7 @@ def test_the_editor_refuses_to_run_what_the_server_would_refuse(site):
                                  'values': {field['name']: field['default'] for field in mask.get('fields', [])}})
         cases = [changed('size', width=0), changed('size', width=8193), changed('base', cache_mode='easycache'),
                  changed('base', cache_mode='ucache'), changed('refine', cache_mode='ucache'), changed('refine', vae_tiling=True),
-                 planned]
+                 planned, changed('base', img_cfg=2), changed('refine', img_cfg=2)]
         mine = page.evaluate('''([cases, catalogue, models]) => cases.map(graph =>
             SuiteWorkflowGraph.validate(graph, catalogue, models).filter(one => one.level === 'error').map(one => one.text))''',
             [cases, library['catalogue'], models])
@@ -282,7 +282,7 @@ def test_the_editor_refuses_to_run_what_the_server_would_refuse(site):
             except ValueError as error:  # the server refuses a value out of range outright, on save as on a run
                 return [str(error)]
         theirs = [refused(case) for case in cases]
-        assert [bool(one) for one in mine] == [bool(one) for one in theirs] == [True, True, True, False, True, True, True]
+        assert [bool(one) for one in mine] == [bool(one) for one in theirs] == [True, True, True, False, True, True, True, True, True]  # refine runs on the shared model
         assert mine[0] == theirs[0] == ['Width must be a number from 256 to 4096.'] and mine[2] == theirs[2]
         assert mine[4] == theirs[4] and 'exclusive model entry' in mine[4][0]
         assert not errors
@@ -338,6 +338,27 @@ def test_undo_returns_typed_values_and_run_waits_for_a_save(site):
         expect(page.locator('[data-wf-run-button]')).to_be_disabled()
         expect(page.locator('#graph-version')).to_have_text('Version 1')
         expect(page.locator('[data-wf-run-button]')).to_be_enabled()
+        assert not errors
+    finally:
+        browser.close(); engine.stop()
+
+
+def test_a_renamed_workflow_keeps_advertising_its_saved_api_name(site):
+    """The header and examples show the API name callers use, which a rename keeps (QA-079)."""
+    sign_in(site, 'jordan')
+    engine, browser, page, errors = editor(site)
+    try:
+        page.locator('#graph-new').click()
+        page.locator('#graph-name').fill('qa graph name')
+        page.locator('#graph-save').click()
+        expect(page.locator('#graph-version')).to_have_text('Version 1')
+        page.locator('#graph-name').fill('qa graph name renamed')
+        page.locator('#graph-save').click()
+        expect(page.locator('#graph-version')).to_have_text('Version 2')
+        expect(page.locator('#graph-api-name')).to_have_text('workflow:qa-graph-name')
+        expect(page.locator('[data-wf-api-code]')).to_contain_text('workflow:qa-graph-name"')
+        page.locator('#graph-duplicate').click()
+        expect(page.locator('#graph-api-name')).to_have_text('workflow:qa-graph-name-renamed-copy')
         assert not errors
     finally:
         browser.close(); engine.stop()

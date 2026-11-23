@@ -694,3 +694,25 @@ def test_upscale_only_runs_the_resolved_file_and_never_generates_or_qualifies(im
         assert answer.status_code==200,answer.text
         assert answer.json()['data'][0]['size']=='100x60'
         assert calls==[((100,60),str(upscaler),256)] and native.payloads==[]
+
+
+def test_sdxl_image_cfg_needs_a_start_image(image_settings):
+    """A text-only SDXL pass with Image CFG other than 1 returns no image natively, so it is refused first (QA-095)."""
+    sdxl={**image_settings,'sdcpp':{**image_settings['sdcpp'],'family':'sdxl'}}
+    with pytest.raises(ValueError,match='start image'):
+        checked_request({'model':'m','prompt':'A boat','size':'256x256','advanced':{'img_cfg':2}},sdxl)
+    checked_request({'model':'m','prompt':'A boat','size':'256x256','advanced':{'img_cfg':1}},sdxl)
+    checked_request({'model':'m','prompt':'A boat','size':'256x256','advanced':{'img_cfg':2}},image_settings)  # Flux 2 Dev is not refused
+
+
+def test_an_engine_that_drops_the_connection_is_reported_with_what_to_try():
+    """A transport error with no text is not shown as a bare class name (QA-086)."""
+    from types import SimpleNamespace
+    import httpx
+    from mirrorwall.runtime import failure_detail
+    quiet = SimpleNamespace(failure_detail=lambda: '')
+    said = failure_detail(httpx.ReadError(''), quiet)
+    assert said.startswith('The image engine stopped without an answer (ReadError).') and 'another combination' in said
+    assert failure_detail(httpx.ReadError(''), SimpleNamespace(failure_detail=lambda: 'CUDA out of memory')) == 'CUDA out of memory'
+    assert failure_detail(RuntimeError('sdcpp failed'), quiet) == 'sdcpp failed'
+    assert failure_detail(TimeoutError(), quiet, video=True).startswith('Video generation exceeded')

@@ -43,7 +43,11 @@
   }
   /** The profile the form describes; `strict` refuses unreadable JSON, otherwise it is left out so the files can still be checked. */
   function draft(strict = true) {
-    const parsed = (name, fallback) => { try { return ['defaults','limits'].includes(name) ? SuiteModelFields.read('mw-' + name) : JSON.parse($(name).value); } catch (error) { if (strict) throw new Error('The ' + name + ' field is not valid JSON.'); return fallback; } };
+    const parsed = (name, fallback) => { try { return ['defaults','limits'].includes(name) ? SuiteModelFields.read('mw-' + name) : JSON.parse($(name).value); } catch (error) {
+      // Only unreadable JSON is a syntax error; a key that belongs in a labelled field says which one (QA-065).
+      if (strict) throw error instanceof SyntaxError ? new Error('The ' + name + ' field is not valid JSON.') : error;
+      return fallback;
+    } };
     const profile = {...selected?.sdcpp, family:$('family').value, split_mode:$('split').value, components:{},
       host_ram_mib:Number($('ram').value), ...(!video?{reference_megapixels:Number($('ref-mp').value)}:{mode:'vid_gen'}), threads:Number($('threads').value), staged:$('staged').checked,
       defaults:parsed('defaults', {}), limits:parsed('limits', {}), loras:parsed('loras', {})};

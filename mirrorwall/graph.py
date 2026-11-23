@@ -562,6 +562,8 @@ def problems(document, models=None, upscalers=None):
             sized = next(iter(into(node, 'size')), None)
             if sized and (found[sized]['values']['width'] % family['alignment'] or found[sized]['values']['height'] % family['alignment']):
                 push(node, 'error', f"{family['label']} needs width and height in multiples of {family['alignment']}.")
+            if model.get('family') == 'sdxl' and node['values'].get('img_cfg') not in (None, 1) and not into(node, 'init'):
+                push(node, 'error', 'On SDXL, Image CFG scale applies to a pass with a start image; leave it empty or 1 here.')
             cache = node['values'].get('cache_mode', 'off')
             if cache != 'off' and cache not in family['caches']:
                 push(node, 'error', f"The {cache} cache does not apply to {family['label']}; choose "

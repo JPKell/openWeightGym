@@ -35,7 +35,9 @@ Models are installed separately under **Models → Images** with
    names anything a run would refuse: a value outside its field's range, a step planned for a
    later phase, a step cache the model's family does not take, and advanced settings on a
    shared-residency model. **Run test** stays off until they are fixed.
-6. **Save version** and **Publish**.
+6. **Save version** and **Publish**. Callers use the API name in the header, `workflow:` and the
+   name it was first saved under; renaming it later keeps that API name. A duplicate takes a new
+   one from its own name.
 
 ## Test runs
 

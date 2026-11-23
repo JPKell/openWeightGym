@@ -9,6 +9,9 @@
   let library = null, models = [], editor = null, entries = [], current = -1, language = 'curl', busy = false, opening = false, drafts = 0;
   let running = null;  // the test run being watched: {id, rows, timer}
 
+  // Callers keep the API name a workflow was first saved under; renaming it changes only its title (QA-079).
+  const apiName = one => one.graph.api_name || G.slug(one.graph.name);
+
   function say(text, problem = false) {
     $('error').hidden = !problem; if (problem) $('error').textContent = text;
     $('status').textContent = problem ? '' : text;
@@ -57,7 +60,7 @@
   function header() {
     const one = entry(); if (!one) return;
     $('name').value = one.graph.name; $('summary').value = one.graph.summary || '';
-    $('api-name').textContent = 'workflow:' + G.slug(one.graph.name);
+    $('api-name').textContent = 'workflow:' + apiName(one);
     $('version').textContent = one.kind === 'template' ? 'Sample · read-only' : one.kind === 'draft' ? 'New · not saved' : 'Version ' + one.version + (one.dirty ? ' · unsaved changes' : '');
     $('published').hidden = !(one.kind === 'saved' && one.published);
     $('published').textContent = 'Published · v' + one.published;
@@ -80,7 +83,7 @@
   }
   function refresh() {
     header(); choices(); editor.runInputs(); plan();
-    editor.apiExample(language, {name: entry().graph.name, base: location.origin, version: null});
+    editor.apiExample(language, {name: apiName(entry()), base: location.origin, version: null});
   }
 
   async function versions(one) {
@@ -107,6 +110,7 @@
   }
 
   function addDraft(graph, text) {
+    delete graph.api_name;  // a new workflow is named for callers by its own name, as the server names it on its first save
     drafts += 1;
     entries.push({key: 'draft:' + drafts, kind: 'draft', graph, dirty: true});
     open(entries.length - 1, {quiet: true}); say(text);
@@ -151,7 +155,7 @@
     const row = await api('graphs/' + encodeURIComponent(one.id) + '/publish', {method: 'POST', body: {version, expected_version: one.version}});
     one.published = row.published; one.versions = null;
     current = await load(one.key); open(current, {quiet: true});
-    say(version ? `Published version ${version}. Callers who may use every model it uses can run workflow:${G.slug(one.graph.name)}.` : 'Unpublished. Only workflow managers can see it.');
+    say(version ? `Published version ${version}. Callers who may use every model it uses can run workflow:${apiName(one)}.` : 'Unpublished. Only workflow managers can see it.');
   }
 
   async function remove() {
@@ -238,7 +242,7 @@
     $('choice').addEventListener('change', () => open(Number($('choice').value)));
     $('name').addEventListener('input', () => {
       const one = entry(); one.graph.name = $('name').value.trim() || 'Untitled workflow'; one.dirty = true;
-      header(); choices(); editor.apiExample(language, {name: one.graph.name, base: location.origin});
+      header(); choices(); editor.apiExample(language, {name: apiName(one), base: location.origin});
     });
     $('summary').addEventListener('input', () => { const one = entry(); one.graph.summary = $('summary').value; one.dirty = true; header(); choices(); });
     $('new').addEventListener('click', () => addDraft(blank(), 'A new workflow starts with the usual steps, already connected.'));
@@ -263,7 +267,7 @@
     editorRoot.querySelectorAll('[data-wf-api-language]').forEach(button => button.addEventListener('click', () => {
       language = button.dataset.wfApiLanguage;
       editorRoot.querySelectorAll('[data-wf-api-language]').forEach(one => { one.classList.toggle('active', one === button); one.setAttribute('aria-pressed', String(one === button)); });
-      editor.apiExample(language, {name: entry().graph.name, base: location.origin});
+      editor.apiExample(language, {name: apiName(entry()), base: location.origin});
     }));
     editorRoot.querySelector('[data-wf-api-copy]').addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(editorRoot.querySelector('[data-wf-api-code]').textContent); say('Copied the API example.'); }
@@ -285,7 +289,7 @@
           if (opening) return;
           const one = entry(); one.graph = {...one.graph, nodes: graph.nodes, links: graph.links};
           if (!how.layout) one.dirty = true;
-          header(); choices(); editor.runInputs(); plan(); editor.apiExample(language, {name: one.graph.name, base: location.origin});
+          header(); choices(); editor.runInputs(); plan(); editor.apiExample(language, {name: apiName(one), base: location.origin});
         }});
       wire();
       open(current, {quiet: true});

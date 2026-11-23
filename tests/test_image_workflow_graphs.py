@@ -234,3 +234,12 @@ def test_a_run_that_would_only_be_refused_is_not_ready():
         'Advanced settings need an exclusive model entry; this one shares residency with a measured profile. '
         'Clear them, or choose an exclusive entry under Models → Images.']
     assert graph.uses_advanced({'cache_mode': 'off', 'hires': False, 'eta': None}) is False
+
+
+def test_sdxl_image_cfg_without_a_start_image_is_a_problem():
+    document = sample('SDXL two-model refine')
+    for node in document['nodes']:
+        if node['type'] == 'sampler':
+            node['values']['img_cfg'] = 2
+    texts = {(p['node'], p['text']) for p in graph.check(document, MODELS)[1] if p['level'] == 'error'}
+    assert texts == {('base', 'On SDXL, Image CFG scale applies to a pass with a start image; leave it empty or 1 here.')}  # refine has one

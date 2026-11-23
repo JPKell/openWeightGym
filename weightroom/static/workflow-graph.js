@@ -271,6 +271,7 @@ window.SuiteWorkflowGraph = (() => {
         if (linksInto(graph, node.id, 'negative').length && (!family.negative || node.values.cfg_scale <= 1)) push(node, 'warning', 'The negative prompt has no effect at CFG 1 or with this family.');
         if (node.values.hires && linksInto(graph, node.id, 'init').length) push(node, 'warning', 'The hires pass applies to text-to-image passes only.');
         // As the server judges them (mirrorwall/graph.py): a family's caches, and advanced settings on a shared model (QA-093, QA-097).
+        if (model.family === 'sdxl' && ![null, undefined, 1].includes(node.values.img_cfg) && !linksInto(graph, node.id, 'init').length) push(node, 'error', 'On SDXL, Image CFG scale applies to a pass with a start image; leave it empty or 1 here.');
         const cache = node.values.cache_mode || 'off';
         if (cache !== 'off' && family.caches && !family.caches.includes(cache)) push(node, 'error', `The ${cache} cache does not apply to ${family.label}; choose ${['off', ...family.caches].join(' or ')}.`);
         const advanced = ['eta', 'flow_shift', 'img_cfg', 'shifted_timestep', 'clip_skip'].some(key => node.values[key] !== null && node.values[key] !== undefined) ||

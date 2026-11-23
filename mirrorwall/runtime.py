@@ -79,6 +79,19 @@ def reference_size(width,height,megapixels):
     return max(16,round(width*factor/16)*16),max(16,round(height*factor/16)*16)
 
 
+def failure_detail(problem,native,video=False):
+    """What a failed generation says: the engine's own reason when it gave one, never a bare exception name (QA-086)."""
+    if video and isinstance(problem,TimeoutError):
+        return 'Video generation exceeded the profile timeout; reduce the clip length or review its limit.'
+    said=str(problem).strip() or getattr(native,'failure_detail',lambda:'')()
+    if said:
+        return said
+    if isinstance(problem,httpx.TransportError):
+        return (f'The image engine stopped without an answer ({type(problem).__name__}). This model may not support the chosen '
+                'sampler, scheduler or settings; try another combination, or read this node\'s System logs for the engine\'s reason.')
+    return f'The image engine failed ({type(problem).__name__}) without a reason; read this node\'s System logs.'
+
+
 def native_command(job,port):
     """Translate an admitted profile into fixed native arguments, not user CLI text."""
     settings=job["settings"]
@@ -806,7 +819,7 @@ def create_app(job,native=None):
                         yield "event: "+event["type"]+"\ndata: "+json.dumps(event)+"\n\n"
                 except Exception as problem:
                     await native.stop()
-                    detail=('Video generation exceeded the profile timeout; reduce the clip length or review its limit.' if video and isinstance(problem,TimeoutError) else str(problem).strip() or getattr(native,'failure_detail',lambda:'')() or type(problem).__name__)
+                    detail=failure_detail(problem,native,video)
                     yield "event: error\ndata: "+json.dumps({"type":"error","error":{"message":detail}})+"\n\n"
                 finally:
                     await sequence.aclose()
@@ -819,7 +832,7 @@ def create_app(job,native=None):
             return JSONResponse({"created":int(time.time()),"data":output},headers={"cache-control":"no-store"})
         except Exception as problem:
             await native.stop()
-            detail=('Video generation exceeded the profile timeout; reduce the clip length or review its limit.' if video and isinstance(problem,TimeoutError) else str(problem).strip() or getattr(native,'failure_detail',lambda:'')() or type(problem).__name__)
+            detail=failure_detail(problem,native,video)
             return JSONResponse({"error":{"message":detail}},502)
 
     return Starlette(lifespan=lifespan,routes=[Route("/health",health),Route("/load",load,methods=["POST"]),Route("/v1/images/generations",images,methods=["POST"]),Route("/v1/images/edits",images,methods=["POST"]),Route('/v1/videos/generations',images,methods=['POST'])])
