@@ -511,6 +511,16 @@ def test_the_groups_page_adds_a_group_and_its_own_page_changes_it(desk):
     assert page.count('data-ability-category') >= 4 and 'name="do" value="save"' in page and 'id="tools"' in page
     assert "in seconds" not in page and "for each member, in line or being answered" not in page
     assert 'id="move-group"' not in page and 'name="do" value="remove"' in page  # nobody to move yet
+    # A save from a page opened before another change is refused, keeping what was typed (QA-045).
+    opened = re.search(r'name="revision" value="([0-9a-f]+)"', page)[1]
+    assert re.search(r'name="revision" value="([0-9a-f]+)"', browser.get("/groups/readers").text)[1] == opened  # stable while nothing changes
+    assert "Saved." in browser.post("/groups/readers", data={**form, "priority": "high", "revision": opened}).text
+    stale = browser.post("/groups/readers", data={**form, "session_hours": "2", "revision": opened})
+    assert stale.status_code == 400 and "changed elsewhere after this page opened, so nothing was saved" in stale.text
+    assert users.groups.stored("readers")["priority"] == "high" and users.groups.stored("readers")["session_hours"] == 8
+    fresh = re.search(r'name="revision" value="([0-9a-f]+)"', stale.text)[1]
+    assert fresh != opened and "Saved." in browser.post("/groups/readers", data={**form, "session_hours": "2", "revision": fresh}).text
+    browser.post("/groups/readers", data=form)
     # The whole page is saved together, its tools with it.
     tooled = browser.post("/groups/readers", data={**form, "tools": "nas__*"})
     assert "Saved." in tooled.text and users.groups.stored("readers")["tools"] == ["nas__*"]

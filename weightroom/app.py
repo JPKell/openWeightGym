@@ -4949,6 +4949,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await groups_page(request, person, answer.json()["error"]["message"], failed=True, form={"name": name})
         return go(f"/groups/{name}?said=" + quote(f"Added {name}. It allows nothing yet: tick what its members may do, and save."))
 
+    def group_revision(group: dict) -> str:
+        """A short fingerprint of a group as kept, so a save from a page opened before another change can be refused (QA-045)."""
+        import hashlib
+        return hashlib.sha256(json.dumps(group, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
     async def group_page(request: Request, person: Person, said: str = "", failed: bool = False, typed_in: dict | None = None,
                          opened: str = "", form: dict | None = None) -> Response:
         """The directory of groups beside the one chosen, at /groups and /groups/<name>. `typed_in` is what was typed into the
@@ -4966,6 +4971,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         group = next((one for one in groups if one["name"] == name), None) if name else (groups[0] if groups else None)
         if name and group is None:
             return page(request, "refused.html", person, status=404, why=f"There is no group named {name}.")
+        kept = next((one for one in known["groups"] if one["name"] == group["name"]), None) if group else None
         accounts = {one["name"]: {**one, **account_facts(one)} for one in listing[0].json()["users"]} if listing and listing[0].is_success else {}
         showing = {**group, **(typed_in or {})} if group else {}  # what was just typed if saving it failed, otherwise what is kept
         models = list(dict.fromkeys([*person.me.get("models", []), *(showing["models"] if isinstance(showing.get("models"), list) else [])]))
@@ -4973,6 +4979,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     ticks=tick_list(person, known, showing["can"]) if group else [], models=models, form=form or {},
                     members=[accounts.get(member, {"name": member}) for member in (group or {}).get("members", [])],
                     trend_url=f"/groups/{quote(group['name'], safe='')}?part=activity" if group else "",
+                    revision=group_revision(kept) if kept else "",
                     said=said or asked.get("said", ""), failed=failed, opened=opened or asked.get("open", ""))  # fmt: skip
 
     async def change_group(request: Request, person: Person) -> Response:
@@ -5024,6 +5031,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     # A form without the tools leaves them out, as the former combined form did.
                     **({"tools": "*" if "every_tool" in form else names_in(one("tools"))} if "tools" in form or "every_tool" in form else {}),
                 }
+            current = next((group for group in known["groups"] if group["name"] == name), None)
+            if do == "save" and one("revision") and current and one("revision") != group_revision(current):
+                return await group_page(request, person, f"{name} was changed elsewhere after this page opened, so nothing was saved. "
+                                        "It now shows what you typed over the latest settings; review it and save again.", failed=True, typed_in=made)
             if do in ("save", "limits") and any("value-" + entry.name in form for entry in content_contracts()):
                 try:
                     made["limits"] = {entry.name: int(one("value-" + entry.name)) for entry in content_contracts() if one("value-" + entry.name)}

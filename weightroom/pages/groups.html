@@ -116,6 +116,7 @@
        and static/users.js keeps what is typed in it for each group while another is looked at.
        What the compute service would refuse is shown and cannot be sent: a browser greys everything inside a disabled fieldset. #}
     <form method="post" action="{{ here }}" class="account-policy" data-account-draft {{ swaps() }}>
+    {% if revision %}<input type="hidden" name="revision" value="{{ revision }}">{% endif %}
     <fieldset class="account-policy-fields" {{ "disabled" if group.why_not }}>
       {% call card('What members may do', id='group-permissions', class_='account-panel', attrs={'data-panel': 'permissions'}) %}
         <div class="account-permission-tools">
