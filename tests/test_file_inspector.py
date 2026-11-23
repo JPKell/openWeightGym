@@ -169,3 +169,18 @@ def test_companion_and_unreadable_states_remain_usable(inspector, kind):
             playwright.expect(page.get_by_role('button', name='Make the model', exact=True)).to_be_disabled()
         playwright.expect(page.get_by_role('button', name='Copy file', exact=True)).to_be_visible()
         browser.close()
+
+
+def test_a_file_with_no_metadata_says_so_instead_of_offering_to_clear_filters(inspector):
+    server, file, _, _, _ = inspector
+    plain = Path(gguf(file.parent / 'blank.gguf'))
+    server.post('/files', data={'do': 'refresh-files'})
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.goto('http://console.test/file?path=' + quote(str(plain), safe=''))
+        empty = page.locator('[data-file-metadata-empty]')
+        playwright.expect(empty).to_have_text('This file records no metadata.')
+        page.get_by_label('Search metadata').fill('anything')
+        page.get_by_label('Search metadata').fill('')
+        playwright.expect(empty).to_have_text('This file records no metadata.')  # QA-030
+        browser.close()

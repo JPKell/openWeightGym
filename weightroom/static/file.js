@@ -14,7 +14,10 @@
       if (!row.hidden) count++;
     });
     root.querySelector('[data-file-metadata-count]').textContent = `${count} / ${rows.length} entries`;
-    root.querySelector('[data-file-metadata-empty]').hidden = count !== 0;
+    const empty = root.querySelector('[data-file-metadata-empty]');
+    empty.hidden = count !== 0;
+    // A file with no entries has nothing for clearing the filters to reveal (QA-030).
+    if (!rows.length && empty.dataset.none) (empty.querySelector('td') || empty).textContent = empty.dataset.none;
   }
   function distribution(form) {
     const count = form.querySelectorAll('input[name="machine"]:checked:not(:disabled)').length;

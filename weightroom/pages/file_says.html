@@ -39,7 +39,7 @@
     {% for name, value in told.metadata.items() %}
     <tr{% if file_inspector|default(false) %} data-file-metadata-row data-group="{{ name.split('.')[0] }}"{% endif %}><td><code>{{ name }}</code></td><td class="wrap">{% if file_inspector|default(false) and (value|shown)|length > 400 %}<details><summary>{{ (value|shown)|truncate(140, true) }}</summary><pre class="text-wrap mb-0 mt-2"><code>{{ value|shown }}</code></pre></details>{% else %}{{ (value|shown)|truncate(400, true) }}{% endif %}</td></tr>
     {% endfor %}
-    {% if file_inspector|default(false) %}{{ empty_metadata() }}{% endif %}
+    {% if file_inspector|default(false) %}{{ empty_metadata(not told.metadata) }}{% endif %}
     </tbody>
   </table>
   </div>
