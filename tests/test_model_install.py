@@ -177,6 +177,10 @@ def test_catalogue_pills_and_node_settings_render_for_every_model_type(desk, tmp
         assert ('id="copy-model"' if kind == 'llm' else 'Add model to node') in detail.text
         if kind != 'llm':
             assert 'Generation defaults' in detail.text and 'Load-time measurements only.' in detail.text
+            # An image or audio model can be removed from its own page, keeping its files (QA-084).
+            assert 'name="do" value="remove"' in detail.text.split('Danger zone', 1)[1]
+            removed = browser.post('/models/'+included, data={'do':'remove'})
+            assert 'Removed '+included+'. Its file is left where it is.' in removed.text and library.get(included) is None
 
 
 @pytest.mark.parametrize('engine', ['sdcpp', 'audiocpp'])

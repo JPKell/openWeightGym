@@ -163,6 +163,8 @@
     $('model-form').querySelector('section[aria-label="Hardware"] .scope-badge').textContent=model?'This node':'Selected nodes';
     $('heading').textContent = model ? model.name : 'Add ' + (video ? 'video' : 'image') + ' model';
     $('model-form').querySelector('[type=submit]').textContent = model ? 'Save model' : 'Add model';
+    // Removal is confirmed on the model's own page, which keeps its files (QA-084).
+    $('remove').hidden = !model; if (model) $('remove').href = '/models/' + encodeURIComponent(model.name) + '?node=' + encodeURIComponent(activeNode());
     const choose = (name, value) => value ? pick($(name), value, activeNode(), true) : $(name).value='';
     $('name').value = model?.name || ''; $('name').readOnly = Boolean(model); choose('diffusion', model?.flags?.model);
     for (const name of components) choose(name, profile.components?.[name]);

@@ -1,5 +1,5 @@
 {% extends "frame.html" %}
-{% from "parts.html" import card, said_box, page_header, form_section %}
+{% from "parts.html" import card, said_box, page_header, form_section, confirm_loss %}
 {% block title %}{{ model.name }} · Models{% endblock %}
 {% macro values(items) %}<dl class="row mb-0">{% for key, value in items|dictsort %}<dt class="col-md-6 text-secondary fw-normal">{{ key|replace('_', ' ')|capitalize }}</dt><dd class="col-md-6 wrap">{% if value is mapping %}{{ values(value) }}{% elif value is boolean %}{{ 'On' if value else 'Off' }}{% elif value is sequence and value is not string %}{{ value|join(', ') or '—' }}{% else %}{{ value|display }}{% endif %}</dd>{% else %}<dd class="text-secondary">Runtime defaults</dd>{% endfor %}</dl>{% endmacro %}
 {% block main %}
@@ -19,4 +19,8 @@
 </div>{% endcall %}
 {% include 'model_locations.html' %}
 {% call card('Benchmark results', false) %}<p class="form-hint">Load-time measurements only.</p>{% include 'model_benchmark.html' %}{% endcall %}
+{% if 'manage-models' in person.can %}{% call card('Danger zone') %}
+<p class="text-secondary small">Removes this model's configuration on {{ selected_node|node_label }}. It stops being offered at once; requests already being answered or waiting for it are completed, and then it is unloaded. Its files are left where they are.</p>
+<form method="post" action="{{ address(model.name) }}"><button class="btn btn-danger" name="do" value="remove" {{ confirm_loss() }}>Remove</button></form>
+{% endcall %}{% endif %}
 {% endblock %}

@@ -86,6 +86,7 @@ def test_node_dropdown_filters_all_copies_and_edits_the_correct_node(studio,widt
         page.locator('#studio-edit-model').click()
         playwright.expect(page.locator('#mw-ram')).to_have_value('16384')
         playwright.expect(page.locator('#mw-diffusion')).to_have_value('/rig/sketch.safetensors')
+        playwright.expect(page.locator('#mw-remove')).to_have_attribute('href', '/models/sketch?node=rig')  # QA-084
         page.locator('#mw-ram').fill('18000')
         page.get_by_role('button',name='Save model',exact=True).click()
         playwright.expect(page.locator('#model-dialog')).not_to_be_visible()
