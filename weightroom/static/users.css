@@ -50,11 +50,12 @@
 .account-secrets { border-color: var(--suite-accent); }
 .account-secrets pre.secret { font-size: .75rem; }
 .account-panels { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 1rem; align-items: start;
-  grid-template-areas: "activity activity" "access permissions" "keys permissions" "limits permissions" "rest permissions" "save save"; }
+  grid-template-areas: "activity activity" "access permissions" "phones permissions" "keys permissions" "limits permissions" "rest permissions" "save save"; }
 /* The form for permissions, limits and tools lends its cards and save bar to the grid. */
 .account-policy, .account-policy-fields { display: contents; }
 .account-panels > [data-panel=activity] { grid-area: activity; }
 .account-panels > [data-panel=access] { grid-area: access; }
+.account-panels > [data-panel=phones] { grid-area: phones; }
 .account-panels > [data-panel=keys] { grid-area: keys; }
 .account-policy-fields > [data-panel=permissions] { grid-area: permissions; }
 .account-policy-fields > [data-panel=limits] { grid-area: limits; }
@@ -108,7 +109,7 @@
 .account-save-bar { grid-area: save; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem; padding: .8rem 0; position: sticky; bottom: 0; background: var(--bs-body-bg); border-top: 1px solid var(--bs-border-color); z-index: 2; }
 .account-save-bar.is-dirty [data-user-draft-status] { color: var(--suite-accent) !important; font-weight: 600; }
 @media (max-width: 1250px) {
-  .account-panels { grid-template-columns: minmax(0, 1fr); grid-template-areas: "activity" "access" "keys" "permissions" "limits" "save"; }
+  .account-panels { grid-template-columns: minmax(0, 1fr); grid-template-areas: "activity" "access" "phones" "keys" "permissions" "limits" "save"; }
   .group-panels { grid-template-areas: "activity" "members" "permissions" "limits" "models" "save"; }
 
 }

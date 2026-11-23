@@ -36,6 +36,11 @@ def test_directory_fits_every_width_and_filters_accounts(console):
             .filter(el => el.type !== 'hidden' && el.getBoundingClientRect().width)
             .every(el => el.labels?.length || el.getAttribute('aria-label'))'''), width
         assert page.evaluate('''() => { const ids = [...document.querySelectorAll('[id]')].map(el => el.id); return ids.length === new Set(ids).size; }''')
+        # Each account panel has its own place; none covers another (QA-043).
+        assert page.locator('.account-panels [data-panel=phones]').count() == 1
+        assert page.evaluate('''() => { const boxes = [...document.querySelectorAll('.account-panels .account-panel')]
+            .map(el => el.getBoundingClientRect()).filter(box => box.width && box.height);
+            return boxes.every((a, i) => boxes.slice(i + 1).every(b => a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top)); }'''), width
     page.set_viewport_size({'width': 1440, 'height': 1000})
     page.locator('#user-search').fill('car')
     expect(page.locator('[data-user-choice]:visible')).to_have_count(1)
