@@ -2,6 +2,7 @@
 import base64
 import io
 import json
+import re
 import zipfile
 from copy import deepcopy
 from pathlib import Path
@@ -622,4 +623,46 @@ def test_a_shared_cfg_one_model_keeps_its_lora_strength_across_model_switches(st
         playwright.expect(page.locator('[data-lora=miki]')).to_have_value('0.5')
         playwright.expect(page.locator('#mw-cfg')).to_have_value('1')
         assert not errors
+        browser.close()
+
+
+def test_switching_tools_clears_the_last_tools_instruction(canvas):
+    server, _, _, _ = canvas
+    with playwright.sync_playwright() as driver:
+        browser, page = browser_context(driver, server)
+        page.goto('http://console.test/chat/images')
+        playwright.expect(page.locator('#mw-model')).to_have_value('sketch')
+        page.locator('[data-mw-tool=mask]').click()
+        playwright.expect(page.locator('#mw-message')).to_have_text('Add a reference first, then upload its composite mask.')
+        page.locator('[data-mw-tool=resize]').click()
+        playwright.expect(page.locator('#mw-message')).to_be_hidden()  # QA-074
+        browser.close()
+
+
+def test_a_workflow_output_shows_and_exports_its_workflow_and_step_settings(canvas):
+    """A workflow's output has no flat settings; its details and export come from the step that made it (QA-078)."""
+    server, wire, users, library = canvas
+    store = wire.front.state.mirrorwall.store
+    owner = users.by_name('jordan').identity
+    stage = {'model': 'sketch', 'prompt': 'A workflow lighthouse', 'steps': 1, 'sampler': 'euler', 'scheduler': 'discrete', 'cfg_scale': 1, 'seed': 20261120}
+    store.save(owner, picture(color='red'), kind='output', filename='workflow.png', metadata={
+        'seed': 20261120, 'workflow': {'id': 'graph_1', 'api_name': 'qa-flow', 'version': 1}, 'output': 'Final', 'step': 'out',
+        'source': 'base', 'item': 0, 'stages': {'base': stage}})
+    with playwright.sync_playwright() as driver:
+        browser, page = browser_context(driver, server)
+        page.goto('http://console.test/chat/images')
+        page.locator('[data-mw-view=gallery]').click()
+        details = page.locator('.ig-result-details')
+        if not details.evaluate('node => node.open'):
+            details.locator('summary').click()
+        facts = page.locator('#mw-result-settings')
+        fact = lambda label: facts.locator('> div').filter(has=page.locator('dt', has_text=re.compile(f'^{label}$'))).locator('dd')
+        playwright.expect(fact('Workflow')).to_have_text('workflow:qa-flow · version 1')
+        playwright.expect(fact('Model')).to_have_text('sketch')
+        playwright.expect(facts.locator('.ig-fact-wide')).to_contain_text('A workflow lighthouse')
+        with page.expect_download() as saved:
+            page.locator('#mw-export-settings').click()
+        exported = json.loads(Path(saved.value.path()).read_text())
+        assert exported['workflow'] == {'id': 'graph_1', 'api_name': 'qa-flow', 'version': 1} and exported['output'] == 'Final'
+        assert exported['settings'] == stage and exported['stages'] == {'base': stage}
         browser.close()

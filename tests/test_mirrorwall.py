@@ -312,3 +312,11 @@ def test_image_models_remain_available_without_entering_language_chat(desk,tmp_p
     me=TestClient(switch.front).get('/loadcoach/me',headers={'authorization':'Bearer '+browser.cookies['weightroom']}).json()
     assert 'image-only' in me['models']
     assert me['chat']['models']['image-only']['image_generation']
+
+
+def test_a_file_that_is_not_an_image_says_so_plainly():
+    """Not PIL's text, which names a Python object at a memory address (QA-085)."""
+    from mirrorwall.store import Store
+    with pytest.raises(ValueError) as refused:
+        Store.decoded(b'plain text, not an image')
+    assert str(refused.value) == 'This file could not be read as an image. Choose a PNG, JPEG or WebP image.'

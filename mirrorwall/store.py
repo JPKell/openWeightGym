@@ -48,7 +48,11 @@ class Store:
         maximum=128*2**20 if output else MAX_BYTES
         if not isinstance(content,bytes) or not content or len(content)>maximum:
             raise ValueError("Image exceeds its upload/output byte limit.")
-        with Image.open(io.BytesIO(content)) as source:
+        try:
+            opened=Image.open(io.BytesIO(content))
+        except (OSError,SyntaxError) as problem:  # PIL's own text names a Python object (QA-085)
+            raise ValueError("This file could not be read as an image. Choose a PNG, JPEG or WebP image.") from problem
+        with opened as source:
             if source.format not in ("PNG","JPEG","WEBP") or source.width*source.height>limit_value(limits, "image_max_megapixels")*2**20:
                 raise ValueError(f"Use a PNG, JPEG or WebP image up to {limit_value(limits, 'image_max_megapixels')} Mi pixels.")
             source.load()

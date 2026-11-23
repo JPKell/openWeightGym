@@ -76,6 +76,12 @@
       node.value = values.loras?.[node.dataset.lora] ?? node.dataset.default;
     });
   }
+  /** The settings an image was made with: an ordinary job's own, or for a workflow output the step that made its image. */
+  function settingsOf(metadata) {
+    if (metadata?.settings && Object.keys(metadata.settings).length) return metadata.settings;
+    const stages = metadata?.stages || {};
+    return stages[metadata?.source] || stages[metadata?.step] || {};
+  }
   function chooseModel(reset = true) {
     const one = state.models.find(row => row.id === $('model').value);
     if (!one) { $('family-caption').textContent='';$('model-description').textContent='No model available';return; }
@@ -265,8 +271,10 @@
       $('download').href=address+'?download=1';
       $('image-info').textContent=one.width+' × '+one.height+' · seed '+(one.metadata?.seed??'unknown')+(one.temporary?' · temporary':'');
       $('favorite').textContent=favorites.has(one.id)?'★':'☆';$('favorite').setAttribute('aria-pressed',String(favorites.has(one.id)));
-      const values=one.metadata?.settings || {};
-      const facts={Model:values.model || 'Unavailable',Seed:one.metadata?.seed??'Unknown',Size:one.width+' × '+one.height,
+      const values=settingsOf(one.metadata);
+      const workflow=one.metadata?.workflow;
+      const facts={...(workflow?{Workflow:'workflow:'+workflow.api_name+(workflow.draft?' · unsaved draft':workflow.version?' · version '+workflow.version:''),
+        Output:one.metadata.output||'Output'}:{}),Model:values.model || (workflow&&!one.metadata.stages?.[one.metadata.source]?'None (no model step)':'Unavailable'),Seed:one.metadata?.seed??'Unknown',Size:one.width+' × '+one.height,
         Steps:values.steps??'Unknown',Sampler:values.sampler||'Unknown',Scheduler:values.scheduler||'Unknown'};
       if(values.cfg_scale!==undefined&&values.cfg_scale!==null)facts.CFG=values.cfg_scale;
       if(values.guidance!==undefined&&values.guidance!==null)facts.Guidance=values.guidance;
@@ -518,6 +526,7 @@
     document.dispatchEvent(new CustomEvent('weightroom:image-view',{detail:{view}}));
   }
   function setTool(tool) {
+    message('');  // an instruction for the tool before, such as the mask's, does not belong to this one (QA-074)
     const mode=tool==='resize'?'resize':'generate';
     if(mode!==activeTool){rememberDraft();activeTool=mode;references=[];mask=null;chooseModel();}
     setView('generate');
@@ -600,7 +609,11 @@
   $('favorite').onclick=()=>{if(!selected)return;if(favorites.has(selected))favorites.delete(selected);else favorites.add(selected);renderGallery();};
   $('toggle-preview').onclick=()=>{viewerMode=viewerMode==='preview'&&livePreview()?'images':'preview';showSelected();};
   $('preview').addEventListener('change',showSelected);
-  $('export-settings').onclick=()=>{const one=state.assets.find(row=>row.id===selected);if(one)downloadJSON({seed:one.metadata?.seed,settings:one.metadata?.settings||{},width:one.width,height:one.height});};
+  // A workflow's output keeps its workflow, its output and every step's settings; the export carries them all (QA-078).
+  $('export-settings').onclick=()=>{const one=state.assets.find(row=>row.id===selected);if(!one)return;
+    const kept=Object.fromEntries(['workflow','output','step','source','item','stages','model_id','fingerprint','build','request_id']
+      .filter(key=>one.metadata?.[key]!==undefined&&one.metadata?.[key]!==null).map(key=>[key,one.metadata[key]]));
+    downloadJSON({seed:one.metadata?.seed,settings:settingsOf(one.metadata),width:one.width,height:one.height,...kept});};
   $('compare').onclick=()=>{const enabled=$('compare-pane').hidden;$('compare-pane').hidden=!enabled;$('canvas').classList.toggle('is-comparing',enabled);$('compare').setAttribute('aria-pressed',String(enabled));if(enabled)$('compare-pane').querySelector('img').src=imageURL($('compare-with').value,'content');};
   $('compare-with').onchange=()=>{if(!$('compare-pane').hidden)$('compare-pane').querySelector('img').src=imageURL($('compare-with').value,'content');};
   $('fullscreen').onclick=()=>{if(document.fullscreenElement)document.exitFullscreen?.();else $('canvas').requestFullscreen?.().catch(()=>message('Expanded viewing is unavailable in this browser.'));};
