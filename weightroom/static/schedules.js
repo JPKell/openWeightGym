@@ -2,7 +2,9 @@
 (() => {
   'use strict';
   const drafts = new Map(), baselines = new WeakMap(), savedFields = new Map(), needsPreview = new WeakSet();
-  const view = {search: '', status: 'all', kind: 'all'};
+  // The directory filters start from the address and are kept there, so a bookmark keeps them (QA-060).
+  const asked = name => window.suiteAddress?.read(name);
+  const view = {search: asked('find') || '', status: asked('status') || 'all', kind: asked('function') || 'all'};
   let initialized = null, pending = null;
   const root = () => document.querySelector('[data-schedule-studio]');
   const formOf = page => page.querySelector('[data-schedule-form]');
@@ -34,6 +36,8 @@
     const count = rows.filter(row => !row.hidden).length;
     page.querySelector('#schedule-count').textContent = `${count} of ${rows.length} schedules`;
     page.querySelector('#schedule-no-matches').hidden = !rows.length || count > 0;
+    window.suiteAddress?.keep({find: view.search.trim() || null, status: view.status === 'all' ? null : view.status,
+                               function: view.kind === 'all' ? null : view.kind});
   }
   function showScope(page) {
     const form = formOf(page), kind = form.elements.kind.value, readonly = form.dataset.canEdit !== 'yes';
@@ -80,6 +84,9 @@
     page.querySelector('#schedule-search').value = view.search;
     page.querySelector('#schedule-status-filter').value = view.status;
     page.querySelector('#schedule-kind-filter').value = view.kind;
+    // A bookmarked choice this page no longer offers shows everything.
+    if (!page.querySelector('#schedule-status-filter').value) page.querySelector('#schedule-status-filter').value = view.status = 'all';
+    if (!page.querySelector('#schedule-kind-filter').value) page.querySelector('#schedule-kind-filter').value = view.kind = 'all';
     showScope(page); showDrafts(page); filter(page);
     if (drafts.has(page.dataset.selected) || failed) needsPreview.add(page);
   }

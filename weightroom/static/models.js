@@ -49,7 +49,7 @@
   }
   document.addEventListener('click',event => {
     if (event.target.closest('[data-catalogue-clear]')) {
-      field('search').value = ''; field('status').value = 'all'; apply(); field('search').focus();
+      field('search').value = ''; field('status').value = 'all'; apply(); window.suiteAddress?.sync(); field('search').focus();
       return;
     }
     const row = event.target.closest('#models-table [data-catalogue-row]');

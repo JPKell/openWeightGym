@@ -1,7 +1,7 @@
 {% extends "frame.html" %}
 {% from "parts.html" import said_box, page_header %}
 {% block title %}Files · openWeightGym{% endblock %}
-{% block scripts %}<script src="/static/files.js?v=2" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/files.js?v=3" defer></script>{% endblock %}
 {% block main %}
 {% call page_header('Files', 'Manage model files in cache, storage and compute locations.') %}
   <form method="post" action="/files"><input type="hidden" name="back" value="{{ here }}"><button class="btn btn-outline-secondary btn-sm" name="do" value="refresh-files" title="Look through every model folder again now, instead of waiting for the next check">Refresh files</button></form>

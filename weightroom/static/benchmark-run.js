@@ -22,7 +22,11 @@
     const headings = [...table.tHead.rows[0].cells];
     const fields = headings.map(th => names[th.textContent.trim()]);
     let filtered = records.slice(), selected = null, view = data.embedding ? 'Embedding receipt' : 'Graded final answer';
-    let columns = 'results', sortKey = 'id', ascending = true, timer;
+    // The columns and sort are kept in the address beside the filters, so a bookmark opens the same view (QA-067).
+    const asked = name => window.suiteAddress?.read(name) || '';
+    let columns = ['results', 'timing', 'memory', 'all'].includes(asked('columns')) ? asked('columns') : 'results', timer;
+    let sortKey = asked('order').replace(/^-/, '') || 'id', ascending = !asked('order').startsWith('-');
+    if (!fields.includes(sortKey)) { sortKey = 'id'; ascending = true; }
     const tabKey = `weightroom-run-evidence:${document.documentElement.dataset.themeUser || 'anonymous'}:${data.id}`;
     try { view = sessionStorage.getItem(tabKey) || view; } catch { /* Storage may be disabled. */ }
     const changes = new Map((data.regression?.rows || []).map(row => [row.case, row.status]));
@@ -49,6 +53,9 @@
       headings.forEach((th, index) => { th.hidden = columns !== 'all' && !chosen.has(fields[index]); });
       records.forEach(record => [...record.element.cells].forEach((cell, index) => { cell.hidden = headings[index].hidden; }));
       $$('[data-columns]').forEach(button => { const active = button.dataset.columns === columns; button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active)); });
+      window.suiteAddress?.keep({columns: columns === 'results' ? null : columns,
+                                 order: sortKey === 'id' && ascending ? null : (ascending ? '' : '-') + sortKey});
+      window.suiteAddress?.sync();
       const empty = $('[data-filter-empty] td, [data-empty-row] td');
       if (empty) empty.colSpan = headings.filter(th => !th.hidden).length;
     }

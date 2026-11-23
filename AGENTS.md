@@ -168,6 +168,11 @@ For UI changes, run the component audit in [test_ui_consistency.py](tests/test_u
 and the affected feature tests by name (a plain `pytest` leaves out browser tests; `--browser` runs all). Shared component changes also require the all-page browser
 checks there, including narrow layouts, empty/error states and dynamic replacements.
 
+A view worth bookmarking keeps itself in the address through [sort.js](weightroom/static/sort.js):
+mark a filter control `data-url="NAME"` and a sortable table `data-url-sort="NAME"`; state a page holds
+itself (a page of rows, a column set) goes through `suiteAddress.keep({...})`. Addresses are restored
+before page scripts start and survive htmx address replacement. Do not add another URL-sync helper.
+
 A form whose unsent changes must survive a polling refresh of its fragment carries
 `data-hold-refresh`; [pieces.js](weightroom/static/pieces.js) then defers the swap, as it does
 for selected text.

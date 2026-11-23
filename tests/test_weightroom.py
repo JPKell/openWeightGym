@@ -400,6 +400,9 @@ def test_the_users_page_adds_an_account_and_its_own_page_changes_it(desk):
     # Its page: what it asked for over three spans, the last of which can be chosen.
     page = browser.get("/users/ada").text
     assert all(span in page for span in (">Last 24 hours<", ">Last 7 days<", ">Last 28 days<")) and ">Last 3 days<" in browser.get("/users/ada?days=3").text
+    # The day field shows the period applied, not 28 (QA-042).
+    assert re.search(r'id="days" name="days"[^>]*value="3"', browser.get("/users/ada?days=3").text)
+    assert re.search(r'id="days" name="days"[^>]*value="28"', page)
     assert "Asked for" not in page and 'data-user-draft-status' in page and 'data-state="invited"' in page
     order = [page.index(f'class="card-heading">{title}</h2>') for title in ("Activity", "Sign-in &amp; group", "API keys", "Permissions", "Limits &amp; tools")]
     assert order == sorted(order) and page.index('value="enabled-no"') < page.index('<dl class="account-facts">')

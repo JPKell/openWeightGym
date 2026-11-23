@@ -4,7 +4,7 @@
 {% from 'system_log_parts.html' import summary, journal_panel, inspector, templates %}
 {% block title %}System logs · openWeightGym{% endblock %}
 {% block page_class %}console-page system-logs-page{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/system-logs.css?v=1"><script src="/static/system-logs.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/system-logs.css?v=1"><script src="/static/system-logs.js?v=2" defer></script>{% endblock %}
 {% block main %}
 <div id="system-log-explorer" data-node="{{ selected_node }}" data-source="{{ source }}" data-offline="{{ 'true' if offline else 'false' }}">
 {% set actions %}<button type="button" class="btn btn-outline-secondary btn-sm" id="export"{{ ' disabled' if not lines }}>Export filtered logs</button><button type="submit" form="journal-filters" class="btn btn-primary btn-sm" id="refresh">Refresh</button>{% endset %}

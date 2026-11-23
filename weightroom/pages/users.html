@@ -5,7 +5,7 @@
 {% from "user_parts.html" import account_choice, account_avatar, account_status, ability_categories, phone_numbers_section %}
 {% from 'kpi_parts.html' import kpi_row, kpi %}
 {% block title %}{{ user.name }} · Users · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/usage.css?v=2"><link rel="stylesheet" href="/static/users.css?v=4"><script src="/static/users.js?v=2" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/usage.css?v=2"><link rel="stylesheet" href="/static/users.css?v=4"><script src="/static/users.js?v=3" defer></script>{% endblock %}
 {% block main %}
 {# The directory of accounts beside the chosen one, as Compute nodes lays out its machines. /users chooses the first.
    Every form names its account's address itself: the page is also shown at /users, straight after an account is added. #}
@@ -101,11 +101,12 @@
   <div class="account-panels">
     {% call card('Activity', id='account-activity', class_='account-panel', attrs={'data-panel': 'activity'}, hint='Requests by this account. The full report is on Usage.') %}
       <div id="usage">
+        {# Set outside the figures' call block, so the day field below sees it too (QA-042). #}
+        {% set last = user.usage|last %}
         {% call kpi_row('Account activity', class_='account-figures') %}
           {% for row in user.usage %}
           {{ kpi('Last 24 hours' if row.days == 1 else 'Last %d days'|format(row.days), '{:,}'.format(row.requests), 'request' if row.requests == 1 else 'requests', attrs={'data-figure':'requests'}) }}
           {% endfor %}
-          {% set last = user.usage|last %}
           {% if last %}{{ kpi('Tokens · ' ~ ('24 hours' if last.days == 1 else '%d days'|format(last.days)), (last.prompt_tokens + last.answer_tokens)|count, (last.prompt_tokens|count) ~ ' in · ' ~ (last.answer_tokens|count) ~ ' out', attrs={'data-figure':'input_tokens'}, value_attrs={'title':'{:,}'.format(last.prompt_tokens + last.answer_tokens)}) }}{% endif %}
         {% endcall %}
         <form method="get" action="{{ here }}" class="account-days" {{ swaps("usage", true) }}>

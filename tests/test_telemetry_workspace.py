@@ -446,3 +446,22 @@ def test_empty_unknown_and_large_fleets(telemetry_server):
         page.set_viewport_size({'width':390,'height':1000})
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         browser.close()
+
+
+def test_choosing_a_host_or_history_range_puts_it_in_the_address(telemetry_server):
+    """Hosts and history ranges are bookmarkable, while the poll leaves the address alone (QA-022)."""
+    from test_console_browser import browser_context, playwright
+    server, _, _ = telemetry_server
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.goto('http://console.test/telemetry')
+        page.locator(f'.tw-host-link[data-host]').first.click()
+        playwright.expect(page.locator('#history-range')).to_be_visible()
+        assert page.url != 'http://console.test/telemetry' and '/telemetry' in page.url
+        host = page.url
+        page.locator('#history-preset').select_option('6')
+        playwright.expect(page).to_have_url(re.compile(r'hours=6'))
+        assert page.url.split('?')[0] == host.split('?')[0]
+        page.reload()
+        assert float(page.locator('#hours').input_value()) == 6
+        browser.close()

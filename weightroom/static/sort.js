@@ -12,11 +12,96 @@
 
 const chosen = {};  // a table's id -> the columns it is sorted by, as [{ column, down }], most important first
 
+// A view worth bookmarking is kept in the address, so a reload, a new tab or a bookmark opens it again.
+//
+// A control marked data-url="NAME" (or just data-url, to use its name) is kept as ?NAME=value while it
+// differs from how the page rendered it; data-url-default="VALUE" names that value instead. A table marked
+// data-url-sort="NAME" keeps its sorted columns as ?NAME=2,-5: the second column smallest first, then the
+// fifth largest first. Values in the address are put back before the page's own scripts start, which all
+// load after this one, so they find the restored view. A page with more state of its own, such as which
+// page of rows is showing, keeps it with suiteAddress.keep({ page: 2 }); null or "" takes a name out.
+// htmx replacing the address with a form's own fields does not drop these.
+const suiteAddress = window.suiteAddress = {
+  read: name => new URLSearchParams(location.search).get(name),
+  write(values) {
+    const url = new URL(location.href);
+    for (const [name, value] of Object.entries(values)) {
+      if (value === null || value === undefined || value === "") url.searchParams.delete(name);
+      else url.searchParams.set(name, String(value));
+    }
+    if (url.href !== location.href) history.replaceState(history.state, "", url);
+  },
+};
+const kept = {};  // names this page keeps with suiteAddress.keep, put back when htmx replaces the address
+let keptSection = "";  // the first part of the path they were kept on: /users/cleo and /users/dana are one section
+const section = () => location.pathname.split("/")[1] || "";
+
+/** The address name and current value of a bookmarkable control. */
+function addressOf(control) {
+  const name = control.dataset.url || control.name;
+  if (control.type === "checkbox") return [name, control.checked ? (control.value === "on" ? "1" : control.value) : ""];
+  if (control.type === "radio") return [name, control.checked ? control.value : null];
+  return [name, control.value];
+}
+
+/** Note how each new bookmarkable control rendered, then show the address's value in it. */
+function restoreAddressControls(root = document) {
+  const params = new URLSearchParams(location.search);
+  for (const control of root.querySelectorAll?.("[data-url]") || []) {
+    if (control.dataset.urlReady) continue;
+    control.dataset.urlReady = "1";
+    const [name, value] = addressOf(control);
+    if (control.type !== "radio") control.dataset.urlDefault ??= value;
+    if (!name || !params.has(name)) continue;
+    const wanted = params.get(name);
+    if (control.type === "checkbox") control.checked = wanted !== "" && wanted !== "0";
+    else if (control.type === "radio") control.checked = control.value === wanted;
+    else if (control.tagName !== "SELECT" || [...control.options].some(option => option.value === wanted)) control.value = wanted;
+  }
+}
+
+/** Write every bookmarkable control and sorted table on the page into the address. */
+function rememberView() {
+  if (keptSection !== section()) for (const name of Object.keys(kept)) delete kept[name];  // htmx went to another page
+  const values = { ...kept };
+  for (const control of document.querySelectorAll("[data-url]")) {
+    const [name, value] = addressOf(control);
+    if (!name) continue;
+    if (control.type === "radio") { if (value !== null) values[name] = control.dataset.urlDefault === value ? null : value; continue; }
+    values[name] = value === control.dataset.urlDefault ? null : value;
+  }
+  for (const table of document.querySelectorAll("table[data-url-sort]")) {
+    values[table.dataset.urlSort] = (chosen[table.id] || []).map(pick => (pick.down ? "-" : "") + (pick.column + 1)).join(",");
+  }
+  suiteAddress.write(values);
+}
+suiteAddress.keep = values => {
+  if (keptSection !== section()) for (const name of Object.keys(kept)) delete kept[name];
+  keptSection = section(); Object.assign(kept, values); suiteAddress.write(values);
+};
+suiteAddress.sync = rememberView;  // for a page that sets its bookmarkable controls itself, as a Clear button does
+restoreAddressControls();
+// A finding box below that came back from the address filters its table once the page is ready.
+document.addEventListener("DOMContentLoaded", () => {
+  for (const box of document.querySelectorAll("[data-url][data-filter]")) if (box.value) box.dispatchEvent(new Event("input", { bubbles: true }));
+});
+document.addEventListener("input", event => { if (event.target.matches?.("[data-url]")) rememberView(); });
+document.addEventListener("change", event => { if (event.target.matches?.("[data-url]")) rememberView(); });
+document.addEventListener("htmx:afterSwap", event => restoreAddressControls(event.detail?.target?.parentNode || document));
+for (const type of ["htmx:replacedInHistory", "htmx:pushedIntoHistory"]) document.addEventListener(type, rememberView);
+
 // New console tables inherit sortable, keyboard-accessible headings.
 function prepareSortableTables() {
   document.querySelectorAll('table.sortable').forEach((table, index) => {
     if (!table.tHead || !table.tBodies.length) return;
     table.id ||= 'console-table-' + index;
+    if (table.dataset.urlSort && !(table.id in chosen)) {
+      // A sort named in the address: "2,-5" is the second column smallest first, then the fifth largest first.
+      chosen[table.id] = (suiteAddress.read(table.dataset.urlSort) || "").split(",").filter(Boolean)
+        .map(one => ({ column: Math.abs(parseInt(one, 10)) - 1, down: one.startsWith("-") }))
+        .filter(pick => pick.column >= 0 && pick.column < (table.tHead.querySelector('[data-sort-columns]') || table.tHead.rows[0]).cells.length);
+      if (chosen[table.id].length) sortTable(table);
+    }
     [...(table.tHead.querySelector('[data-sort-columns]') || table.tHead.rows[0]).cells].forEach(head => {
       if (!head.textContent.trim() || head.querySelector('input, select, button')) return;
       head.dataset.sort ||= 'text';
@@ -72,6 +157,7 @@ document.addEventListener("click", event => {
   else if (picks[place].down === downFirst) picks[place].down = !downFirst;       // second: the other way
   else picks.splice(place, 1);                                                    // third: out
   sortTable(table);
+  if (table.dataset.urlSort) rememberView();
 });
 
 // A table that htmx has just swapped in is a new one. Put its remembered order back on it.

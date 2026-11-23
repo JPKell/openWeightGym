@@ -139,11 +139,23 @@
     else if (pages[current]?.next) await load(pages[current].next);
     $('status').scrollIntoView({block: 'nearest'});
   });
-  for (const name of ['type', 'base']) $(name).onchange = safe(async () => { if (query) await load('', true); });
-  $('format').onchange = () => { if (pages.length) renderResults(); };
+  // The search and its filters are kept in the address, and a bookmark searches again (QA-059).
+  const remember = () => window.suiteAddress?.keep({q: query || null, kind: $('type').value || null,
+                                                    base: $('base').value || null, format: $('format').value || null});
+  for (const name of ['type', 'base']) $(name).onchange = safe(async () => { remember(); if (query) await load('', true); });
+  $('format').onchange = () => { remember(); if (pages.length) renderResults(); };
   $('search').onsubmit = safe(async event => {
-    event.preventDefault(); query = $('q').value.trim(); if (!query) return;
+    event.preventDefault(); query = $('q').value.trim(); remember(); if (!query) return;
     await load('', true);
   });
   controls();
+  const asked = name => window.suiteAddress?.read(name) || '';
+  for (const [name, key] of [['type', 'kind'], ['base', 'base'], ['format', 'format']]) {
+    const value = asked(key);
+    if (!value) continue;
+    // Model types and base models are offered as results bring them, so a bookmarked one is offered at once.
+    if (name !== 'format' && ![...$(name).options].some(option => option.value === value)) $(name).add(new Option(value, value));
+    if ([...$(name).options].some(option => option.value === value)) $(name).value = value;
+  }
+  if (asked('q')) { $('q').value = query = asked('q'); safe(() => load('', true))(); }
 })();

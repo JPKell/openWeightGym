@@ -3,7 +3,7 @@
 {% from 'navigation_parts.html' import pager %}
 {% from 'schedule_parts.html' import overview, choice, state, form_fields, history_row, inventory_footer, behavior_notes %}
 {% block title %}Schedules · openWeightGym{% endblock %}
-{% block scripts %}<script src="/static/schedules.js?v=2" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/schedules.js?v=3" defer></script>{% endblock %}
 {% block main %}
 <link rel="stylesheet" href="/static/schedules.css?v=2">
 <div id="schedule-studio" data-schedule-studio data-selected="{{ selected.id if selected else 'new' }}" data-save-failed="{{ 'yes' if failed else 'no' }}">

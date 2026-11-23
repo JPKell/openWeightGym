@@ -3,6 +3,10 @@
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 
+# What a return link keeps of the archive's view: its filters, and the rows, page and sort the browser chose (QA-028).
+VIEW = ('start', 'model', 'context', 'view', 'rows', 'page', 'sort')
+
+
 def directory_url(value: str) -> str:
     """Keep the record's return link within this archive, without nested return links."""
     try:
@@ -12,7 +16,7 @@ def directory_url(value: str) -> str:
     if parsed.scheme or parsed.netloc or parsed.path != '/fingerprints':
         return '/fingerprints'
     query = {key: item for key, item in parse_qsl(parsed.query)
-             if key in ('start', 'model', 'context', 'view')}
+             if key in VIEW}
     query['view'] = 'directory'
     return '/fingerprints?' + urlencode(query)
 
@@ -38,7 +42,8 @@ def fingerprint_context(records: list[dict], params) -> dict:
     selected = next((record for record in records if record['fingerprint'] == peek and (not peek_node or record.get('node', '') == peek_node)),
                     None) if peek else (found[0] if found else None)
     current = '/fingerprints?' + urlencode({key: value for key, value in
-        [('start', start), ('model', model), ('context', context), ('view', 'directory')] if value})
+        [('start', start), ('model', model), ('context', context), ('view', 'directory'),
+         *((key, params.get(key, '')) for key in ('rows', 'page', 'sort'))] if value})
     back = directory_url(params.get('return', '/fingerprints'))
 
     def record_url(record):

@@ -11,7 +11,8 @@
   const kindOf = page => page.dataset.directory;
   const chosen = page => page.dataset[kindOf(page)];
   const key = (page, name = chosen(page)) => `${kindOf(page)}:${name}`;
-  const view = page => (views[kindOf(page)] ||= {search: '', filter: 'all', addOpen: null});
+  // A directory's search and filter start from the address and are kept there, so a bookmark keeps them (QA-041).
+  const view = page => (views[kindOf(page)] ||= {search: window.suiteAddress?.read('find') || '', filter: window.suiteAddress?.read('show') || 'all', addOpen: null});
   const find = (page, part) => page.querySelector(`[data-${kindOf(page)}-${part}]`);
   const choices = page => [...page.querySelectorAll(`[data-${kindOf(page)}-choice]`)];
   const draftForm = page => page.querySelector('form[data-account-draft]');
@@ -63,6 +64,7 @@
     const count = listed.filter(choice => !choice.hidden).length;
     find(page, 'count').textContent = count;
     find(page, 'empty').hidden = count > 0;
+    window.suiteAddress?.keep({find: search.trim() || null, show: filter === 'all' ? null : filter});
   }
   function showAdd(page, open, focus = false) {
     const panel = page.querySelector('[data-add-panel]'), toggle = page.querySelector('[data-toggle-add]');

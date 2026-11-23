@@ -4,7 +4,7 @@
 {% from 'outside_parts.html' import editor, identity, add_form, cloud_model_row %}
 {% from 'icons.html' import icon %}
 {% block title %}Cloud APIs · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/cloud-apis.css?v=1"><script src="/static/cloud-apis.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/cloud-apis.css?v=1"><script src="/static/cloud-apis.js?v=2" defer></script>{% endblock %}
 {% block main %}
 <div class="ca-workspace" data-cloud-apis data-cloud-account="{{ selected_account.name if selected_account else '' }}" data-cloud-section="{{ section }}">
 {% call page_header('Cloud APIs') %}<a class="btn btn-primary" href="/cloud-apis?open=add" data-add aria-controls="add-account" aria-expanded="{{ 'true' if adding else 'false' }}">+ Add account</a>{% endcall %}

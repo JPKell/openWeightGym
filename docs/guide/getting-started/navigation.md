@@ -25,6 +25,16 @@ Use the category menu to reach the pages your account is allowed to use.
 | **My account** | Open the account menu by selecting your name. |
 | **Chat options** / **Main menu** | Switch the smaller-screen chat drawer between conversation controls and navigation. |
 
+## Bookmarks and shared links
+
+A page's address keeps the view you chose: its searches, filters, sort order and page of
+results. Reload it, open it in another tab, bookmark it or send it, and the same view opens.
+This covers Fingerprints, Files, Models, System logs, Databases, Cloud APIs, Users, Groups,
+Schedules, Civitai searches, benchmark run samples, Telemetry hosts and history ranges, and
+the paged ledgers. A page number past the end opens the last page. An opened Fingerprints
+record's **All fingerprints** link returns to the archive's rows, page and sort. Unsaved form
+changes are not part of the address.
+
 ## Forms and confirmations
 
 Add/Create forms place their primary action after the fields, with secondary actions and

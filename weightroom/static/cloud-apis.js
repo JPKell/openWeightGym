@@ -3,7 +3,8 @@
   'use strict';
   const drafts = new Map(), baselines = new WeakMap();
   let initialized, pending = null;
-  const view = {search:'', filter:'all', addOpen:null};
+  // The directory filters start from the address and are kept there, so a bookmark keeps them (QA-039).
+  const view = {search:window.suiteAddress?.read('find') || '', filter:window.suiteAddress?.read('state') || 'all', addOpen:null};
   const root = () => document.querySelector('[data-cloud-apis]');
   const fields = form => [...form.elements].filter(field => field.name && !['hidden','submit','button','reset'].includes(field.type));
   const values = form => fields(form).map(field => ({name:field.name,type:field.type,value:field.value,checked:field.checked}));
@@ -39,6 +40,7 @@
       choice.hidden = !choice.dataset.cloudSearch.toLowerCase().includes(view.search.toLowerCase().trim()) ||
         (view.filter !== 'all' && choice.dataset.cloudState !== view.filter);
     });
+    window.suiteAddress?.keep({find:view.search.trim() || null, state:view.filter === 'all' ? null : view.filter});
     page.querySelectorAll('.ca-provider-group').forEach(group => { group.hidden = ![...group.querySelectorAll('[data-cloud-choice]')].some(choice => !choice.hidden); });
     const count = choices.filter(choice => !choice.hidden).length;
     const label = page.querySelector('#result-count');

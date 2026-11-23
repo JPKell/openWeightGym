@@ -4,7 +4,7 @@
 {% from "parts.html" import page_header, form_section, more, node_state %}
 {% from 'models_parts.html' import overview, node_targets %}
 {% block title %}Models · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/models.css?v=2"><script src="/static/model-files.js?v=4" defer></script><script src="/static/models.js?v=2" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/models.css?v=2"><script src="/static/model-files.js?v=4" defer></script><script src="/static/models.js?v=3" defer></script>{% endblock %}
 {% block main %}
 {% call page_header('Models', 'Choose a model type to manage its files, settings and availability.') %}{% if kind == 'llm' %}{% include 'models_measure.html' %}{% endif %}<a class="btn btn-primary" href="{{ '#add-model' if kind in ('all', 'llm', 'classifier') else '/models/images?new=1' if kind == 'image' else '/models/audio?new=1' }}">Add model</a>{% endcall %}
 {{ said_box(said, failed) }}
@@ -17,9 +17,9 @@
 {% for node in node_choices %}{{ pill_link(node.name, '/models?node=' ~ node.name|urlencode ~ kind_query, node.name == shown_node) }}{% endfor %}
 {% endcall %}{% endif %}
 <div class="inventory-toolbar mb-3" data-catalogue-filters>
-  <div><label for="catalogue-search" class="form-label small">Find a model</label><input id="catalogue-search" type="search" class="form-control" placeholder="Name, engine, family or node…" autocomplete="off"></div>
-  <div><label for="catalogue-status" class="form-label small">Availability</label><select id="catalogue-status" class="form-select"><option value="all">All installed</option><option value="active">In memory</option><option value="in-use">In use</option><option value="loading">Loading</option><option value="offline">Node unavailable</option><option value="missing">File missing</option><option value="disabled">Placement disabled</option></select></div>
-  <div><label for="catalogue-sort" class="form-label small">Sort models</label><select id="catalogue-sort" class="form-select"><option value="order">Configured order</option><option value="name">Name A–Z</option><option value="coverage">Most nodes</option><option value="size">Smallest file</option></select></div>
+  <div><label for="catalogue-search" class="form-label small">Find a model</label><input id="catalogue-search" type="search" data-url="search" class="form-control" placeholder="Name, engine, family or node…" autocomplete="off"></div>
+  <div><label for="catalogue-status" class="form-label small">Availability</label><select id="catalogue-status" data-url="status" class="form-select"><option value="all">All installed</option><option value="active">In memory</option><option value="in-use">In use</option><option value="loading">Loading</option><option value="offline">Node unavailable</option><option value="missing">File missing</option><option value="disabled">Placement disabled</option></select></div>
+  <div><label for="catalogue-sort" class="form-label small">Sort models</label><select id="catalogue-sort" data-url="sort" class="form-select"><option value="order">Configured order</option><option value="name">Name A–Z</option><option value="coverage">Most nodes</option><option value="size">Smallest file</option></select></div>
 </div>
 {% call pills('Model type', class_='gap-2 mb-3') %}
 {% from 'navigation_parts.html' import model_type_choices %}

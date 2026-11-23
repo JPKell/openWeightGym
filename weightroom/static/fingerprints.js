@@ -3,7 +3,8 @@
   'use strict';
   const $ = selector => document.querySelector(`[data-fingerprint-page] ${selector}`);
   const $$ = selector => [...document.querySelectorAll(`[data-fingerprint-page] ${selector}`)];
-  let currentPage = 0;
+  // The page showing is kept in the address as ?page=2, beside the Rows choice and sort (QA-028).
+  let currentPage = Math.max(0, (parseInt(window.suiteAddress?.read('page'), 10) || 1) - 1);
   function paginate(reset = false) {
     const select = $('#page-size');
     if (!select) return;
@@ -12,6 +13,7 @@
     if (reset) currentPage = 0;
     currentPage = Math.max(0, Math.min(currentPage, Math.ceil(rows.length / size) - 1));
     rows.forEach((row, index) => { row.hidden = index < currentPage * size || index >= (currentPage + 1) * size; });
+    window.suiteAddress?.keep({page: currentPage ? currentPage + 1 : null});
     $('#page-summary').textContent = rows.length ? `Showing ${currentPage * size + 1}–${Math.min((currentPage + 1) * size, rows.length)} of ${rows.length}` : '0 results';
     $$('[data-fingerprint-page-step]').forEach(button => {
       button.disabled = Number(button.dataset.fingerprintPageStep) < 0 ? currentPage === 0 : (currentPage + 1) * size >= rows.length;
@@ -53,6 +55,14 @@
     rows.forEach(row => { row.hidden = !row.textContent.toLowerCase().includes(query); });
     $('#no-settings').hidden = rows.some(row => !row.hidden);
   });
+  // A record opened from here returns to the archive as it is now: its filters, rows, page and sort.
+  document.addEventListener('click', event => {
+    const link = event.target.closest?.('[data-fingerprint-page] a[href*="return="]');
+    if (!link) return;
+    const url = new URL(link.href, location.origin);
+    url.searchParams.set('return', location.pathname + location.search);
+    link.href = url.pathname + url.search;
+  }, true);
   document.addEventListener('click', event => {
     const row = event.target.closest('[data-fingerprint-page] #fingerprint-rows [data-record]');
     if (row && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey &&

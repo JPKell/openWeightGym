@@ -2,7 +2,8 @@
 {% from 'navigation_parts.html' import pills, pill_button %}
 {% from 'telemetry_parts.html' import amount, state, meter, snapshot, gpu_table, host_tile, host_header, service_pill %}
 {% from 'kpi_parts.html' import kpi_row, kpi %}
-<div id="telemetry-workspace" data-host-identity="{{ host.identity if host else '' }}" data-range="{{ hours }}:{{ until }}" hx-get="{{ refresh_url }}" hx-trigger="every {{ poll }}s" hx-target="this" hx-swap="outerHTML show:none" hx-push-url="false" hx-sync="this:replace">
+{# The poll keeps the address; hosts and history ranges below it put theirs in the address bar (QA-022). #}
+<div id="telemetry-workspace" data-host-identity="{{ host.identity if host else '' }}" data-range="{{ hours }}:{{ until }}" hx-get="{{ refresh_url }}" hx-trigger="every {{ poll }}s" hx-target="this" hx-swap="outerHTML show:none" hx-push-url="false" hx-disinherit="hx-push-url" hx-sync="this:replace">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
     {{ page_header('Telemetry') }}
     <div class="d-flex flex-wrap align-items-center gap-2"><span class="small text-secondary">Snapshot {{ snapshot_at|timestamp }}</span><button type="button" class="btn btn-outline-secondary btn-sm" hx-get="{{ refresh_url }}" hx-target="#telemetry-workspace" hx-swap="outerHTML show:none">Refresh</button></div>

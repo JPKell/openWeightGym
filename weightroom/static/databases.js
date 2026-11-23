@@ -11,7 +11,9 @@
     const number = value => value == null ? '—' : Number(value).toLocaleString();
     const size = value => value == null ? 'Unknown' : value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} GiB` : value >= 1024 ** 2 ? `${(value / 1024 ** 2).toFixed(1)} MiB` : `${(value / 1024).toFixed(1)} KiB`;
     const when = value => new Date(value * 1000).toLocaleString();
-    const state = window.databaseDeskState ||= {selected: new Set(), expanded: new Set(), search: '', node: 'all', engine: 'all'};
+    // The filters start from the address, and are kept there, so a bookmark opens the same inventory (QA-037).
+    const read = name => window.suiteAddress?.read(name);
+    const state = window.databaseDeskState ||= {selected: new Set(), expanded: new Set(), search: read('find') || '', node: read('node') || 'all', engine: read('engine') || 'all'};
     let snapshot = JSON.parse($('database-snapshot').textContent), details = new Map(), pending = new Set();
     let exportScope, cleanupKeys = [], review = null, refreshing = false, jobsBusy = false;
     const jobStates = new Map();
@@ -53,6 +55,8 @@
       nodeFilter.replaceChildren(new Option('All nodes', 'all'), ...snapshot.nodes.map(node => new Option(window.suiteNodeLabel(node.name), node.name)));
       if (![...nodeFilter.options].some(option => option.value === state.node)) state.node = 'all';
       nodeFilter.value = state.node;
+      window.suiteAddress?.keep({find: state.search.trim() || null, node: state.node === 'all' ? null : state.node,
+                                 engine: state.engine === 'all' ? null : state.engine});
       $('node-strip').replaceChildren(...snapshot.nodes.map(node => {
         const button = document.createElement('button'); button.type = 'button';
         button.className = `btn btn-sm ${state.node === node.name ? 'btn-primary' : 'btn-outline-secondary'}`;

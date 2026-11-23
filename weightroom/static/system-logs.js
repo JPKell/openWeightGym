@@ -14,7 +14,10 @@
     $('printed').caption?.remove();
     const entries = JSON.parse($('journal-data').textContent).entries;
     const key = JSON.stringify([document.documentElement.dataset.themeUser, root.dataset.node, root.dataset.source]);
-    const state = remembered.get(key) || {search:'', level:'all', order:'newest', wrap:true, page:0, selected:null};
+    // A first visit starts from the view the address names, so a bookmark opens the same journal view (QA-035).
+    const read = name => window.suiteAddress?.read(name);
+    const state = remembered.get(key) || {search:read('find') || '', level:read('level') || 'all', order:read('order') || 'newest',
+      wrap:read('wrap') !== '0', page:Math.max(0, (parseInt(read('page'), 10) || 1) - 1), selected:null};
     let filtered = [], page = state.page, selected = state.selected;
     const clock = new Intl.DateTimeFormat(undefined, {hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23'});
     const fullTime = new Intl.DateTimeFormat(undefined, {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', timeZoneName:'short'});
@@ -37,6 +40,8 @@
         question:$('words')?.value || '', model:$('ask-model')?.value || '',
         selection:root.querySelector('[data-log-selection]')?.value || ''});
       remembered.delete(key); remembered.set(key,state);
+      window.suiteAddress?.keep({find:state.search.trim() || null, level:state.level === 'all' ? null : state.level,
+        order:state.order === 'newest' ? null : state.order, wrap:state.wrap ? null : '0', page:page ? page + 1 : null});
       if (remembered.size > 8) remembered.delete(remembered.keys().next().value);
     }
     capture = save;

@@ -159,14 +159,14 @@
 <input type="hidden" name="do" value="arrange"><input type="hidden" name="file_type" value="{{ file_type }}">
 {% for column in columns %}<input type="hidden" name="column" value="{{ column.name }}">{% endfor %}
 <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
-  <label class="visually-hidden" for="files-search">Search files</label><input id="files-search" type="search" class="form-control form-control-sm w-auto flex-grow-1" placeholder="Search files…" data-file-search>
-  <label class="visually-hidden" for="files-source">From</label><select id="files-source" name="source" class="form-select form-select-sm w-auto" data-file-source>
+  <label class="visually-hidden" for="files-search">Search files</label><input id="files-search" type="search" class="form-control form-control-sm w-auto flex-grow-1" placeholder="Search files…" data-file-search data-url="search">
+  <label class="visually-hidden" for="files-source">From</label><select id="files-source" name="source" class="form-select form-select-sm w-auto" data-file-source data-url="from">
     <option value="">All locations</option>{% for column in columns %}<option value="{{ column.name }}"{% if machine|default('') == column.name or not machine|default('') and tier|default('storage') == 'cache' and column.name == 'cache' %} selected{% endif %}{% if column.why %} disabled{% endif %}>{{ column.label }}</option>{% endfor %}
   </select>
   <span class="small text-secondary" data-selected-count aria-live="polite">Select files to transfer</span>
 </div>
 <div class="table-responsive">
-<table id="files-storage-table" class="table table-sm table-hover align-middle sortable">
+<table id="files-storage-table" class="table table-sm table-hover align-middle sortable" data-url-sort="sort">
   <thead><tr><th><input type="checkbox" class="form-check-input" data-select-files aria-label="Select all visible files"></th><th data-sort="text">File</th><th data-sort="value">Size</th><th data-sort="text">It says it is</th>
     {% for column in columns %}<th class="text-center text-nowrap"{% if column.why %} title="{{ column.why }}"{% endif %}>{{ column.label }}<input type="checkbox" class="form-check-input d-block mx-auto mt-1" data-check-column="{{ loop.index0 }}" aria-label="Tick every {{ column.label }} box"{% if column.why %} disabled{% endif %}></th>{% endfor %}
   </tr></thead>
