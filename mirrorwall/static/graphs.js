@@ -28,7 +28,7 @@
   /** Read the library; unsaved drafts and edited saved workflows stay as they are. */
   async function load(prefer = null) {
     library = await api('graphs');
-    models = (library.models || []).map(one => ({id: one.id, label: one.id, family: one.family, control: Boolean(one.control)}));
+    models = (library.models || []).map(one => ({id: one.id, label: one.id, family: one.family, control: Boolean(one.control), exclusive: one.exclusive !== false}));
     const kept = new Map(entries.filter(one => one.dirty || one.kind === 'draft').map(one => [one.key, one]));
     const next = library.workflows.map(row => {
       const before = kept.get('saved:' + row.id);
@@ -75,7 +75,7 @@
     const errors = editor.problems().filter(problem => problem.level === 'error').length;
     editorRoot.querySelector('[data-wf-run-plan]').textContent = errors ? `Fix ${errors} problem${errors === 1 ? '' : 's'} before running or publishing.` :
       `Run plan: ${stages.length} step${stages.length === 1 ? '' : 's'} · ${loads} model load${loads === 1 ? '' : 's'}`;
-    editorRoot.querySelector('[data-wf-run-button]').disabled = Boolean(errors) || Boolean(running);
+    editorRoot.querySelector('[data-wf-run-button]').disabled = Boolean(errors) || Boolean(running) || busy;
     editorRoot.querySelector('[data-wf-run-stop]').hidden = !running;
   }
   function refresh() {
@@ -126,9 +126,9 @@
 
   async function act(work) {
     if (busy) return;
-    busy = true; header();
+    busy = true; header(); if (editor) plan();
     try { await work(); } catch (error) { say(error.message, true); }
-    finally { busy = false; header(); }
+    finally { busy = false; header(); if (editor && entry()) plan(); }
   }
 
   async function save() {
@@ -164,7 +164,8 @@
 
   /** Start a test run: the saved version as it is, or the workflow on screen when it has unsaved changes. */
   async function run() {
-    if (running) return;
+    // While a save, publish or deletion settles, the workflow on screen is being replaced; wait for it (QA-080).
+    if (running || busy || !entry()) return;
     let inputs;
     try { inputs = editor.runValues(); } catch (error) { say(error.message, true); return; }
     const one = entry(), saved = one.kind === 'saved' && !one.dirty;
@@ -293,7 +294,9 @@
       if (root.dataset.preset) {
         const presets = (await api('workflows')).presets || [], preset = presets.find(one => one.id === root.dataset.preset);
         if (!preset) throw new Error('That simple workflow is not available to you.');
-        addDraft(G.fromPreset(preset, library.catalogue, models), `Converted “${preset.name}” into a one-sampler workflow. Save it to keep it; the simple workflow is unchanged.`);
+        const converted = G.fromPreset(preset, library.catalogue, models), notes = converted.nodes.filter(one => one.type === 'note').length;
+        addDraft(converted, `Converted “${preset.name}” into a ${converted.nodes.some(one => one.type === 'upscale') ? 'sampler and upscale' : 'one-sampler'} workflow.` +
+          (notes ? ` Read its ${notes === 1 ? 'note' : notes + ' notes'} about settings it could not carry over.` : '') + ' Save it to keep it; the simple workflow is unchanged.');
       }
     } catch (error) { say(error.message, true); }
     finally { header(); }

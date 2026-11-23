@@ -17,8 +17,9 @@ window.SuiteWorkflowEditor = (() => {
     const title = id => G.find(state, id)?.title || id;
     const portLabel = (node, name, side) => (side === 'in' ? G.inputs : G.outputs)(catalogue, node).find(port => port.name === name)?.label || name;
 
-    function commit(change, {inspect = true} = {}) {
-      undo.push(JSON.stringify(state)); redo = [];
+    // `from` is the workflow as it was before a change already shown while typing, so Undo returns to it.
+    function commit(change, {inspect = true, from = null} = {}) {
+      undo.push(from ?? JSON.stringify(state)); redo = [];
       if (undo.length > 100) undo.shift();
       try { change(); } catch (error) { state = JSON.parse(undo.pop()); announce(error.message, 'danger'); return false; }
       render(inspect); onChange(state);
@@ -250,8 +251,16 @@ window.SuiteWorkflowEditor = (() => {
       const label = make('label', field.label, field.kind === 'toggle' ? 'form-check-label' : 'form-label'); label.htmlFor = id;
       if (field.kind === 'toggle') wrap.append(control, label); else wrap.append(label, control);
       const read = () => field.kind === 'toggle' ? control.checked : field.kind === 'number' ? (control.value === '' ? null : Number(control.value)) : control.value;
-      control.addEventListener('change', () => commit(() => { G.find(state, node.id).values[field.name] = read(); }, {inspect: ['hires', 'model'].includes(field.name) || field.kind === 'model'}));
-      if (['textarea', 'text'].includes(field.kind) || field.kind === 'number') control.addEventListener('input', () => { G.find(state, node.id).values[field.name] = read(); render(false); onChange(state); });
+      // Typing shows at once; the change it makes is one Undo step back to before the typing began (QA-081).
+      let typed = null;
+      control.addEventListener('change', () => {
+        const from = typed; typed = null;
+        commit(() => { G.find(state, node.id).values[field.name] = read(); }, {inspect: ['hires', 'model'].includes(field.name) || field.kind === 'model', from});
+      });
+      if (['textarea', 'text'].includes(field.kind) || field.kind === 'number') control.addEventListener('input', () => {
+        typed ??= JSON.stringify(state);
+        G.find(state, node.id).values[field.name] = read(); render(false); onChange(state);
+      });
       if (G.spec(catalogue, node.type).exposed !== undefined || ['prompt', 'negative', 'seed', 'size', 'load_image', 'combine'].includes(node.type)) {
         const expose = make('label', undefined, 'form-check wf-expose');
         const box = make('input', undefined, 'form-check-input'); box.type = 'checkbox'; box.checked = (node.exposed || []).includes(field.name);
@@ -449,8 +458,10 @@ window.SuiteWorkflowEditor = (() => {
     }
     /** Values typed into the test-run form, by caller key; an override outside its bounds raises with the reason. */
     function runValues() {
-      // Numbers go as numbers; an image left unchosen is left out, so the run says which one it needs.
-      const values = Object.fromEntries([...root.querySelectorAll('[data-wf-run-inputs] [data-key]')].filter(input => input.value !== '' || input.tagName === 'TEXTAREA')
+      // Numbers go as numbers; an image or number left empty is left out, so the run says which one it needs or keeps
+      // its saved value. Cleared text is sent as empty text: a cleared separator joins with nothing (QA-089).
+      const values = Object.fromEntries([...root.querySelectorAll('[data-wf-run-inputs] [data-key]')]
+        .filter(input => input.value !== '' || input.tagName === 'TEXTAREA' || input.type === 'text')
         .map(input => [input.dataset.key, input.type === 'number' ? Number(input.value) : input.value]));
       for (const [key, value] of Object.entries(values)) {
         const [id, name] = key.split('.'), node = G.find(state, id), range = name && node?.overridable?.[name];

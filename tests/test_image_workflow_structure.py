@@ -198,3 +198,17 @@ def test_tiled_detail_needs_an_sdxl_model_and_a_sensible_overlap():
     assert any('less than half' in one['text'] for one in graph.problems(document, MODELS))
     next(node for node in document['nodes'] if node['id'] == 'model')['values']['model'] = 'klein-4b'
     assert any('tiled detail needs an SDXL model' in one['text'] for one in graph.problems(document, MODELS))
+
+
+def test_tiled_detail_of_a_loaded_image_saves_the_seed_its_tiles_used():
+    """The image came from the library, not a sampler, so its seed is the one Tiled detail generated with (QA-091)."""
+    document, _ = graph.check({'name': 'Detail a photo', 'nodes': [
+        {'id': 'photo', 'type': 'load_image', 'exposed': ['asset']}, {'id': 'model', 'type': 'model', 'values': {'model': 'sdxl-base'}},
+        {'id': 'prompt', 'type': 'prompt', 'values': {'text': 'crisp'}}, {'id': 'seed', 'type': 'seed', 'values': {'mode': 'fixed', 'value': 20261120}},
+        {'id': 'tiles', 'type': 'tiled_detail', 'values': {'tile': 512, 'overlap': 64}}, {'id': 'out', 'type': 'output'}],
+        'links': [{'from': ['photo', 'image'], 'to': ['tiles', 'image']}, {'from': ['model', 'model'], 'to': ['tiles', 'model']},
+                  {'from': ['prompt', 'text'], 'to': ['tiles', 'prompt']}, {'from': ['seed', 'seed'], 'to': ['tiles', 'seed']},
+                  {'from': ['tiles', 'image'], 'to': ['out', 'image']}]}, MODELS)
+    events, engine = run(document, {'image': encoded(256, 256)}, models=MODELS)
+    assert {body['seed'] for _, body in engine.sent} == {20261120}
+    assert next(event for event in events if event['type'] == 'workflow.output')['seed'] == 20261120

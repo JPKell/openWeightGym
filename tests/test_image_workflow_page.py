@@ -2,6 +2,7 @@
 
 import asyncio
 import copy
+import time
 
 import pytest
 
@@ -247,6 +248,96 @@ def test_renaming_connected_steps_carries_their_links(site):
         sources = page.locator('.wf-inspector select[id^="wf-from-render-"]').evaluate_all('all => all.map(one => one.value)')
         assert any(value.startswith('subject.') for value in sources), sources
         expect(page.locator('[data-wf-problems]')).to_have_attribute('data-state', 'ready')
+        assert not errors
+    finally:
+        browser.close(); engine.stop()
+
+
+def test_the_editor_refuses_to_run_what_the_server_would_refuse(site):
+    """The editor's readiness agrees with the server's: field ranges, planned steps, family caches, shared models (QA-082/088/093/097)."""
+    sign_in(site, 'jordan')
+    engine, browser, page, errors = editor(site)
+    try:
+        library = site.get('/mirrorwall-api/graphs').json()
+        models = [{**one, 'exclusive': one['id'] != 'sdxl-photo'} for one in library['models']]
+        base = next(one for one in library['templates'] if one['name'] == 'SDXL two-model refine')
+
+        def changed(node, **values):
+            document = copy.deepcopy(base)
+            next(one for one in document['nodes'] if one['id'] == node)['values'].update(values)
+            return document
+        planned = copy.deepcopy(base)
+        mask = graph.COMPONENTS['mask']
+        planned['nodes'].append({'id': 'mask1', 'type': 'mask', 'title': 'Mask', 'at': [0, 0], 'exposed': [], 'overridable': {},
+                                 'values': {field['name']: field['default'] for field in mask.get('fields', [])}})
+        cases = [changed('size', width=0), changed('size', width=8193), changed('base', cache_mode='easycache'),
+                 changed('base', cache_mode='ucache'), changed('refine', cache_mode='ucache'), changed('refine', vae_tiling=True),
+                 planned]
+        mine = page.evaluate('''([cases, catalogue, models]) => cases.map(graph =>
+            SuiteWorkflowGraph.validate(graph, catalogue, models).filter(one => one.level === 'error').map(one => one.text))''',
+            [cases, library['catalogue'], models])
+        def refused(case):
+            try:
+                return [one['text'] for one in graph.check(case, models)[1] if one['level'] == 'error']
+            except ValueError as error:  # the server refuses a value out of range outright, on save as on a run
+                return [str(error)]
+        theirs = [refused(case) for case in cases]
+        assert [bool(one) for one in mine] == [bool(one) for one in theirs] == [True, True, True, False, True, True, True]
+        assert mine[0] == theirs[0] == ['Width must be a number from 256 to 4096.'] and mine[2] == theirs[2]
+        assert mine[4] == theirs[4] and 'exclusive model entry' in mine[4][0]
+        assert not errors
+    finally:
+        browser.close(); engine.stop()
+
+
+def test_open_as_advanced_keeps_a_fixed_seed_and_the_enlargement_and_notes_the_count(site, monkeypatch):
+    async def catalogue(self, user, kind):
+        return [{'id': m['id'], 'image_workflow': {'family': m['family'], 'upscaling': True}} for m in MODELS]
+    monkeypatch.setattr(Front, 'media_catalogue', catalogue)
+    sign_in(site, 'jordan')
+    saved = site.post('/mirrorwall-api/presets', json={'name': 'Fixed SDXL', 'model': 'sdxl-base', 'settings': {
+        'size': '1024x1024', 'steps': 2, 'seed': 20261121, 'n': 2, 'upscale': 1.5}})
+    assert saved.status_code == 200, saved.text
+    engine, browser, page, errors = editor(site, path='/models/image-workflows?preset=' + saved.json()['id'])
+    try:
+        expect(page.locator('#graph-status')).to_contain_text('sampler and upscale workflow')
+        expect(page.locator('#graph-status')).to_contain_text('Read its 2 notes')
+        expect(page.locator('.wf-nodes [data-node="seed1"]')).to_contain_text('20261121')
+        expect(page.locator('.wf-nodes [data-node="upscale1"]')).to_be_visible()
+        expect(page.locator('.wf-nodes [data-node="output1"] [data-port="in:image"]')).to_contain_text('Upscale')
+        assert not errors
+    finally:
+        browser.close(); engine.stop()
+
+
+def test_undo_returns_typed_values_and_run_waits_for_a_save(site):
+    """Typed numbers and text are one Undo step each (QA-081); Run test waits while a save settles (QA-080)."""
+    sign_in(site, 'jordan')
+    engine, browser, page, errors = editor(site)
+    try:
+        page.locator('#graph-new').click()
+        page.locator('.wf-nodes [data-node="size1"]').click()
+        width = page.locator('.wf-inspector [data-field="width"]')
+        before = width.input_value()
+        width.fill('512'); width.press('Tab')
+        expect(page.locator('.wf-nodes [data-node="size1"]')).to_contain_text('512')
+        page.locator('[data-wf-undo]').click()
+        expect(page.locator('.wf-inspector [data-field="width"]')).to_have_value(before)
+        page.locator('[data-wf-redo]').click()
+        expect(page.locator('.wf-inspector [data-field="width"]')).to_have_value('512')
+        page.locator('.wf-nodes [data-node="output1"]').click()
+        label = page.locator('.wf-inspector [data-field="label"]')
+        was = label.input_value()
+        label.fill('qa edited label'); label.press('Tab')
+        page.locator('[data-wf-undo]').click()
+        expect(page.locator('.wf-inspector [data-field="label"]')).to_have_value(was)
+        # Saving holds Run test until the saved entry is on screen.
+        page.locator('#graph-name').fill('Undo check')
+        page.route('**/mirrorwall-api/graphs', lambda route: (time.sleep(.3), route.fallback()) if route.request.method == 'POST' else route.fallback())
+        page.locator('#graph-save').click()
+        expect(page.locator('[data-wf-run-button]')).to_be_disabled()
+        expect(page.locator('#graph-version')).to_have_text('Version 1')
+        expect(page.locator('[data-wf-run-button]')).to_be_enabled()
         assert not errors
     finally:
         browser.close(); engine.stop()

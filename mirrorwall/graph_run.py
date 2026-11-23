@@ -385,7 +385,7 @@ async def run(document, count, images, *, models, upscalers, send, image_of=None
                 settings[label] = {**{key: one for key, one in common.items() if key not in ('stream', 'n')},
                                    'tile': int(values['tile']), 'overlap': int(values['overlap']), 'tiles': len(boxes)}
                 origin[label] = (model, where)
-                seeds[label] = seeds.get(sources(node, 'image')[0][0])
+                seeds[label] = common['seed']  # its tiles are generated with this seed, as a Sampler's image is (QA-091)
                 yield {'type': 'workflow.step', 'step': label, 'title': node['title'], 'item': item, 'state': 'completed',
                        'index': finished, 'total': total, 'seed': common['seed'], 'node': where, 'tiles': len(boxes),
                        'width': made[(label, 'image')].width, 'height': made[(label, 'image')].height}

@@ -20,7 +20,10 @@ Models are installed separately under **Models → Images** with
 1. Open **Models → Image workflows**, under the **Image setup** heading. Choose a sample from the chooser, or **New workflow**,
    which starts with a prompt, model, seed, size, sampler and output, already connected.
    To start from a simple per-model workflow, open it under **Models → Images** and choose
-   **Open as advanced**; the simple workflow is unchanged.
+   **Open as advanced**; the simple workflow is unchanged. Its model, size, sampling settings,
+   negative prompt and a fixed seed carry over, and an enlargement becomes an Upscale step whose
+   upscaler you choose. Notes on the canvas name what does not carry over, such as LoRA strengths
+   and the number of images, which a caller sets with `n`.
 2. Add steps from **Add a component**. A new step connects to the obvious sources; with a step
    selected, **Add after** inserts one between it and its destinations.
 3. Select a step to edit it on the right. **Use from** chooses each input's source and
@@ -28,7 +31,10 @@ Models are installed separately under **Models → Images** with
 4. Mark fields callers may set (**Callers set this**) or override within bounds
    (**Callers may override**). Callers address overrides by step label, such as `refine.steps`.
    Changing a step's **Step label** keeps its links: every source and destination follows the new label.
-5. Fix everything listed under the lanes, then try it with **Run test** (see below).
+5. Fix everything listed under the lanes, then try it with **Run test** (see below). The list
+   names anything a run would refuse: a value outside its field's range, a step planned for a
+   later phase, a step cache the model's family does not take, and advanced settings on a
+   shared-residency model. **Run test** stays off until they are fixed.
 6. **Save version** and **Publish**.
 
 ## Test runs
@@ -37,7 +43,9 @@ Models are installed separately under **Models → Images** with
 when nothing changed, otherwise the unsaved changes as they are. Each step shows its progress
 and the node that ran it; Output and Compare images are saved to your image library and shown
 below the steps. **Stop** abandons the step in progress and starts nothing after it; finished
-images stay. Load image steps choose from your reference images. At most two test runs of yours
+images stay. Load image steps choose from your reference images. A text field cleared in the
+run panel is sent empty, so a cleared separator joins texts with nothing; an empty number keeps
+the saved value. At most two test runs of yours
 run at a time, and a finished run's progress is kept in memory for an hour.
 
 ## Lanes, canvas and outline
@@ -148,12 +156,12 @@ with images). The run panel's **Call this workflow from the API** shows the exac
 A workflow holds at most 64 components, 128 links and 32 steps, and one call runs at most 128
 steps in all (steps × `n`). Unsaved changes stay in page
 memory when you switch workflows, but reloading the page loses them. Steps marked with a later
-phase (masks, composite, face detail) can be saved but not published. The
+phase (masks, composite, face detail) can be saved but not run or published. The
 editor does not set LoRA strengths yet; a converted simple workflow notes them on the canvas.
 A step that fails stops the run and is named in the error, for example
 `Refine: That upscaler is not installed on this node.` A shared-residency model refuses a step
-that uses advanced settings, or a CFG other than 1 when its profile was measured at CFG 1; use an exclusive model
-entry for those steps. Image generation does not list workflows yet; run them here or through the
+that uses advanced settings (the editor lists it before a run), or a CFG other than 1 when its profile was measured
+at CFG 1; use an exclusive model entry for those steps. A Tiled detail output records the seed its tiles used. Image generation does not list workflows yet; run them here or through the
 API.
 
 ## Related

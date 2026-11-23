@@ -36,6 +36,17 @@ FAMILIES = {
     'krea2': {'label': 'Krea 2', 'negative': True, 'guidance': False, 'init': False, 'references': 0, 'alignment': 16},
 }
 
+# The step caches each family's network takes: SDXL is a UNet, the others are DiT block caches (QA-093).
+for _name, _family in FAMILIES.items():
+    _family['caches'] = list(_model.UNET_CACHES if _name == 'sdxl' else _model.DIT_CACHES)
+
+
+def uses_advanced(values):
+    """Whether a sampler sets any of the native settings a shared-residency model refuses (graph_run._advanced sends them)."""
+    return (any(values.get(key) is not None for key in ('eta', 'flow_shift', 'img_cfg', 'shifted_timestep', 'clip_skip'))
+            or bool(values.get('vae_tiling')) or values.get('cache_mode', 'off') != 'off' or bool(values.get('hires')))
+
+
 # Sampler defaults per family; `basis` says where each comes from (docs/advanced-workflow-plan.md).
 DEFAULTS = {
     'flux2-klein': {'steps': 6, 'sampler': 'euler', 'scheduler': 'flux2', 'cfg_scale': 1, 'basis': 'App profile; upstream distilled example uses 4 steps'},
@@ -551,6 +562,13 @@ def problems(document, models=None, upscalers=None):
             sized = next(iter(into(node, 'size')), None)
             if sized and (found[sized]['values']['width'] % family['alignment'] or found[sized]['values']['height'] % family['alignment']):
                 push(node, 'error', f"{family['label']} needs width and height in multiples of {family['alignment']}.")
+            cache = node['values'].get('cache_mode', 'off')
+            if cache != 'off' and cache not in family['caches']:
+                push(node, 'error', f"The {cache} cache does not apply to {family['label']}; choose "
+                                    + ' or '.join(['off', *family['caches']]) + '.')
+            if not model.get('exclusive', True) and uses_advanced(node['values']):
+                push(node, 'error', 'Advanced settings need an exclusive model entry; this one shares residency with a measured '
+                                    'profile. Clear them, or choose an exclusive entry under Models → Images.')
             if model.get('family') == 'sdxl' and node['values'].get('flow_shift') is not None:
                 push(node, 'error', 'Flow shift applies to flow-matching models, not SDXL.')
             if model.get('family') != 'sdxl' and any(node['values'].get(key) is not None for key in ('clip_skip', 'shifted_timestep')):

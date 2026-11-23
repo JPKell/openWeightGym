@@ -237,9 +237,18 @@ window.SuiteWorkflowGraph = (() => {
       const definition = spec(catalogue, node.type);
       if (labels.has(node.id)) push(node, 'error', 'Two components share the label ' + node.id + '.');
       labels.add(node.id);
-      if (definition.phase > (catalogue.runnable_phase ?? 4)) push(node, 'warning', `${definition.label} is planned for Phase ${definition.phase}; it cannot run yet.`);
+      // As the server judges it: a planned component is saved, but a run of it would only fail (QA-088).
+      if (definition.phase > (catalogue.runnable_phase ?? 4)) push(node, 'error', `${definition.label} is planned for Phase ${definition.phase}; it cannot run yet.`);
       for (const input of definition.inputs || []) {
         if (input.required && !linksInto(graph, node.id, input.name).length) push(node, 'error', `${input.label} needs a source.`);
+      }
+      // A number out of its field's range is refused on save, as the server's _value refuses it (QA-082).
+      for (const field of definition.fields || []) {
+        const value = node.values?.[field.name];
+        if (field.kind !== 'number' || (value === null || value === undefined) && field.default === null) continue;
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < (field.min ?? -Infinity) || value > (field.max ?? Infinity)) {
+          push(node, 'error', `${field.label} must be a number from ${field.min} to ${field.max}.`);
+        }
       }
       if (node.type === 'model' && !models.some(model => model.id === node.values.model)) push(node, 'error', 'Choose an installed image model.');
       if (node.type === 'upscale' && !node.values.upscaler) push(node, 'error', 'Choose an upscaler.');
@@ -261,6 +270,12 @@ window.SuiteWorkflowGraph = (() => {
         if (linksInto(graph, node.id, 'init').length && !family.init) push(node, 'error', `${family.label} has no start-image pass here; use reference images or an SDXL model.`);
         if (linksInto(graph, node.id, 'negative').length && (!family.negative || node.values.cfg_scale <= 1)) push(node, 'warning', 'The negative prompt has no effect at CFG 1 or with this family.');
         if (node.values.hires && linksInto(graph, node.id, 'init').length) push(node, 'warning', 'The hires pass applies to text-to-image passes only.');
+        // As the server judges them (mirrorwall/graph.py): a family's caches, and advanced settings on a shared model (QA-093, QA-097).
+        const cache = node.values.cache_mode || 'off';
+        if (cache !== 'off' && family.caches && !family.caches.includes(cache)) push(node, 'error', `The ${cache} cache does not apply to ${family.label}; choose ${['off', ...family.caches].join(' or ')}.`);
+        const advanced = ['eta', 'flow_shift', 'img_cfg', 'shifted_timestep', 'clip_skip'].some(key => node.values[key] !== null && node.values[key] !== undefined) ||
+          Boolean(node.values.vae_tiling) || cache !== 'off' || Boolean(node.values.hires);
+        if (model.exclusive === false && advanced) push(node, 'error', 'Advanced settings need an exclusive model entry; this one shares residency with a measured profile. Clear them, or choose an exclusive entry under Models → Images.');
         const size = linksInto(graph, node.id, 'size')[0], sized = size && find(graph, size.from[0]);
         if (sized && (sized.values.width % family.alignment || sized.values.height % family.alignment)) push(node, 'error', `${family.label} needs width and height in multiples of ${family.alignment}.`);
       }
@@ -284,7 +299,10 @@ window.SuiteWorkflowGraph = (() => {
       return one;
     };
     const known = (name, value) => value !== undefined && value !== null && value !== '' && (catalogue.components.sampler.fields.find(field => field.name === name) ? true : false);
-    node('prompt'); node('model', {model: preset.model || ''}); node('seed', {mode: 'random'});
+    // A fixed seed stays fixed; -1 or none is the simple workflow's random seed (QA-092).
+    const seed = Number(settings.seed);
+    node('prompt'); node('model', {model: preset.model || ''});
+    node('seed', Number.isInteger(seed) && seed >= 0 ? {mode: 'fixed', value: seed} : {mode: 'random'});
     node('size', {width: width || settings.width || 1024, height: height || settings.height || 1024});
     if (settings.negative_prompt) node('negative', {text: settings.negative_prompt});
     const values = {...defaults};
@@ -292,7 +310,17 @@ window.SuiteWorkflowGraph = (() => {
     if (sampler && catalogue.samplers.includes(sampler)) values.sampler = sampler;
     const base = node('sampler', values, 'Base');
     if (settings.negative_prompt) connect(graph, catalogue, ['negative1', 'text'], [base.id, 'negative']);
-    node('output', {label: 'Final'});
+    // The simple workflow's enlargement used the model's configured AI upscaler, which an Upscale step names itself.
+    const factor = Number(settings.upscale);
+    const upscale = factor > 1 ? add(graph, catalogue, 'upscale', {near: base.id, values: {factor}, models}) : null;
+    const output = node('output', {label: 'Final'});
+    if (upscale) {
+      for (const link of linksInto(graph, output.id, 'image')) disconnect(graph, link.from, link.to);
+      connect(graph, catalogue, [upscale.id, 'image'], [output.id, 'image']);
+      node('note', {text: `The simple workflow enlarged its images ${factor}× with the model's configured upscaler. Choose that upscaler in the Upscale step.`});
+    }
+    const count = Number(settings.n);
+    if (count > 1) node('note', {text: `The simple workflow made ${count} images at a time. A workflow makes as many as its caller asks for: set n in the API call.`});
     if (settings.loras && Object.keys(settings.loras).length) node('note', {text: 'The simple workflow set LoRA strengths (' + Object.entries(settings.loras).map(([name, scale]) => name + ' ' + scale).join(', ') + '). Advanced workflows do not set LoRA strengths yet, so the model\'s configured strengths apply.'});
     graph.links.forEach(link => { delete link.auto; });
     return graph;

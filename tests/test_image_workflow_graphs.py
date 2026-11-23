@@ -218,3 +218,19 @@ def test_workflow_api_needs_the_ability_to_change_and_access_to_every_model_to_r
     assert browser.delete(f"/mirrorwall-api/graphs/{draft['id']}?version=2").status_code == 409
     assert browser.delete(f"/mirrorwall-api/graphs/{draft['id']}?version=1").json() == {'removed': draft['id']}
     assert browser.get(f"/mirrorwall-api/graphs/{draft['id']}").status_code == 404
+
+
+def test_a_run_that_would_only_be_refused_is_not_ready():
+    """Step caches a family does not take, and advanced settings on a shared-residency model (QA-093, QA-097)."""
+    def problems(models, **values):
+        document = sample('SDXL two-model refine')
+        next(node for node in document['nodes'] if node['id'] == 'base')['values'].update(values)
+        return [p['text'] for p in graph.check(document, models)[1] if p['level'] == 'error' and p['node'] == 'base']
+    assert problems(MODELS, cache_mode='easycache') == ['The easycache cache does not apply to SDXL; choose off or ucache or spectrum.']
+    assert problems(MODELS, cache_mode='ucache') == []
+    shared = [{**model, 'exclusive': model['id'] != 'sdxl-base'} for model in MODELS]
+    assert problems(shared) == []
+    assert problems(shared, cache_mode='ucache') == problems(shared, vae_tiling=True) == [
+        'Advanced settings need an exclusive model entry; this one shares residency with a measured profile. '
+        'Clear them, or choose an exclusive entry under Models → Images.']
+    assert graph.uses_advanced({'cache_mode': 'off', 'hires': False, 'eta': None}) is False
