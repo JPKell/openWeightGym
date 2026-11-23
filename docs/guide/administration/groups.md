@@ -20,7 +20,7 @@ Use [group-management access](/docs/system/abilities#ability-manage-groups). The
 
 ## Limits and troubleshooting
 
-A new group allows nothing until configured. Individual account overrides can further alter or narrow effective access. Blank content-limit overrides inherit live global policy; explicit values remain subject to catalogue validation. Deleting a group and moving its members are separate actions; review both before confirming. A group page left open in another tab cannot bring back a group that was removed: saving it says the group no longer exists and saves nothing.
+A new group allows nothing until configured. **Signed-in session** hours are above 0 and at most 8760 (one year); a group saved earlier with more ends its sessions after a year. Individual account overrides can further alter or narrow effective access. Blank content-limit overrides inherit live global policy; explicit values remain subject to catalogue validation. Deleting a group and moving its members are separate actions; review both before confirming. A group page left open in another tab cannot bring back a group that was removed: saving it says the group no longer exists and saves nothing.
 
 ## Related
 

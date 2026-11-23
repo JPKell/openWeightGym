@@ -157,7 +157,7 @@
           </div>
           <div class="col-sm-6">
             <label for="session_hours" class="form-label">Signed-in session <small class="text-secondary">hours</small></label>
-            <input id="session_hours" name="session_hours" type="number" min="0" step="any" class="form-control form-control-sm" value="{{ showing.session_hours }}">
+            <input id="session_hours" name="session_hours" type="number" min="0" max="8760" step="any" class="form-control form-control-sm" value="{{ showing.session_hours }}">
           </div>
           <div class="col-sm-6 d-flex align-items-end">
             <div class="form-check form-switch mb-1">

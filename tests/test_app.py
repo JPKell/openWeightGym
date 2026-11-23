@@ -3362,3 +3362,19 @@ def test_a_launch_failure_kept_before_it_was_told_apart_is_read_as_unmeasured(tm
     assert library.measurements("a", settings) == [] and not library.calibrated("a", settings)
     library.measured("a", settings, None, "CUDA error: out of memory")
     assert [point["error"] for point in library.measurements("a", settings)] == ["CUDA error: out of memory"]
+
+
+def test_a_session_longer_than_a_year_is_refused_and_an_older_one_is_bounded(fake_llama_server):
+    """QA-096: a group's session hours could be saved beyond what a sign-in can represent, and then nobody in it could sign in."""
+    from loadcoach.groups import SESSION_HOURS_MAX
+    with gateway(fake_llama_server, groups=SIGNING_IN) as caller:
+        admin, front, keys = people(caller, pat="plain")
+        group = lambda **what: caller.patch("/loadcoach/groups/plain", json=what, headers=admin)  # noqa: E731
+        refused = group(session_hours=100000000)
+        assert refused.status_code == 400 and f"at most {SESSION_HOURS_MAX}" in refused.text
+        listed = caller.get("/loadcoach/groups", headers=admin).json()["groups"]
+        assert next(one for one in listed if one["name"] == "plain")["session_hours"] == 12  # unchanged
+        assert group(session_hours=SESSION_HOURS_MAX).status_code == 200
+        assert sign_in(caller, front, "pat").status_code == 201
+    # A group saved before the limit still loads, and its sessions end within a year.
+    assert read_group("g", {"session_hours": 100000000}).session_hours == SESSION_HOURS_MAX

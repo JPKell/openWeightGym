@@ -19,6 +19,7 @@ Nothing here knows about keys, passwords or the web.
 from __future__ import annotations
 
 import json
+import math
 import re
 import sqlite3
 from dataclasses import dataclass, replace, field
@@ -26,6 +27,8 @@ from fnmatch import fnmatchcase
 
 from db import migrate
 from db.schemas import GROUPS
+
+SESSION_HOURS_MAX = 8760  # a signed-in session lasts at most a year
 
 # What a group's `can` list may contain.
 ABILITIES = {
@@ -145,8 +148,10 @@ def read_group(name: str, section: dict) -> Group:
     if max_sensitivity not in LEVELS:
         raise ValueError(f"group {name!r}: max_sensitivity must be one of {', '.join(LEVELS)}")
     session_hours, second_step = section.get("session_hours", 12), section.get("second_step", False)
-    if isinstance(session_hours, bool) or not isinstance(session_hours, int | float) or session_hours <= 0:
+    if isinstance(session_hours, bool) or not isinstance(session_hours, int | float) or not 0 < session_hours < math.inf:
         raise ValueError(f"group {name!r}: session_hours must be a number above 0")
+    # A group saved before the limit may hold more; its sessions end within the limit instead.
+    session_hours = min(session_hours, SESSION_HOURS_MAX)
     if not isinstance(second_step, bool):
         raise ValueError(f"group {name!r}: second_step must be true or false")
     max_hold = section.get("max_hold", 120)

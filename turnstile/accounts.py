@@ -18,7 +18,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from loadcoach.groups import ABILITIES, LEVELS, NOTHING, OWN_KEY, OWN_SETTINGS, adjusted, beyond, read_group, section_of
+from loadcoach.groups import ABILITIES, LEVELS, NOTHING, OWN_KEY, OWN_SETTINGS, adjusted, beyond, read_group, section_of, SESSION_HOURS_MAX
 from loadcoach.log import Log
 from loadcoach.users import ANONYMOUS, SignInRefused, User, Users, check_password
 
@@ -497,6 +497,9 @@ def routes(users: Users, log: Log, caller, ask_compute, roles_for, outside=lambd
         if name == user.group_name:
             return error(403, ONES_GROUP)  # rule 2
         kept = {**users.groups.stored(name), **asked} if existing and request.method == "PATCH" else asked
+        hours = asked.get("session_hours")
+        if isinstance(hours, int | float) and not isinstance(hours, bool) and hours > SESSION_HOURS_MAX:
+            return error(400, f"Signed-in session hours must be at most {SESSION_HOURS_MAX} (one year).")
         try:
             wanted = read_group(name, kept)
         except (ValueError, TypeError) as problem:
