@@ -77,7 +77,7 @@
       const state = row.state === 'waiting' && active ? 'running' : row.state;
       tile.dataset.state = state;
       const frame = tile.querySelector('.cg-frame'), image = tile.querySelector('img'), placeholder = tile.querySelector('[data-placeholder]');
-      frame.setAttribute('aria-label', label + (state === 'failed' ? ', failed' : state === 'done' ? '' : ', not finished'));
+      frame.setAttribute('aria-label', label + (state === 'failed' ? ', failed' : state === 'deleted' ? ', image deleted' : state === 'done' ? '' : ', not finished'));
       tile.querySelector('[data-detail]').textContent = [
         !caption.includes('seed') && `seed ${row.seed ?? '—'}`, !caption.includes('steps') && row.steps != null && `${row.steps} steps`,
         !caption.includes('cfg_scale') && row.cfg_scale != null && `CFG ${row.cfg_scale}`,
@@ -91,8 +91,10 @@
         image.hidden = false; placeholder.hidden = true;
         if (row.width && row.height) grid.style.setProperty('--cg-aspect', row.width + ' / ' + row.height);
       } else if (row.state !== 'done') {
+        // An image shown before it was deleted goes too, rather than staying behind the placeholder.
+        image.hidden = true; image.removeAttribute('src'); delete image.dataset.asset;
         placeholder.hidden = false;
-        placeholder.textContent = state === 'failed' ? (row.error || 'Failed') : state === 'running' ? (progress?.stage === 'queued' ? 'Waiting for the GPU' : 'Generating' + (progress?.step ? ` · step ${progress.step}` : '')) : 'Waiting';
+        placeholder.textContent = state === 'failed' ? (row.error || 'Failed') : state === 'deleted' ? 'Image deleted' : state === 'running' ? (progress?.stage === 'queued' ? 'Waiting for the GPU' : 'Generating' + (progress?.step ? ` · step ${progress.step}` : '')) : 'Waiting';
       }
       filter();
     }
@@ -177,5 +179,11 @@
     return {reset, line, keep, kept, get size() { return tiles.size; }};
   }
 
-  window.SuiteComparisonGrid = {create, axes, part, total, comparable};
+  /** "3 of 4 done · 1 failed · 2 deleted": a line whose image was deleted after it finished is not waiting (QA-076). */
+  function summary(lines) {
+    const count = state => lines.filter(line => line.state === state).length, failed = count('failed'), deleted = count('deleted');
+    return `${count('done')} of ${lines.length} done` + (failed ? ` · ${failed} failed` : '') + (deleted ? ` · ${deleted} deleted` : '');
+  }
+
+  window.SuiteComparisonGrid = {create, axes, part, total, comparable, summary};
 })();

@@ -56,8 +56,7 @@
   function draw(found) {
     const next = found.lines.find(line => line.state === 'waiting');
     for (const line of found.lines) grid.line(line, {active: running(found.status) && found.status !== 'paused' && line === next, progress: found.progress});
-    const done = found.lines.filter(line => line.state === 'done').length, failed = found.lines.filter(line => line.state === 'failed').length;
-    const summary = `${done} of ${found.lines.length} done` + (failed ? ` · ${failed} failed` : '');
+    const summary = SuiteComparisonGrid.summary(found.lines);
     clearTimeout(timer);
     if (running(found.status)) {
       say((found.status === 'paused' ? 'Paused · ' : 'Running · ') + summary);

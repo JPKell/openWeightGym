@@ -183,15 +183,14 @@
     runButtons();
     let next = found.lines.find(line => line.state === 'waiting');
     for (const line of found.lines) grid.line(line, {active: running(found.status) && found.status !== 'paused' && line === next, progress: found.progress});
-    const done = found.lines.filter(line => line.state === 'done').length, failed = found.lines.filter(line => line.state === 'failed').length;
-    const summary = `${done} of ${found.lines.length} done` + (failed ? ` · ${failed} failed` : '');
+    const summary = SuiteComparisonGrid.summary(found.lines);
     $('pause').hidden = $('stop').hidden = !running(found.status);
     $('pause').textContent = found.status === 'paused' ? 'Resume' : 'Pause';
     if (running(found.status)) {
       say((found.status === 'paused' ? 'Paused · ' : found.status === 'cancelling' ? 'Stopping · ' : 'Running · ') + summary + (found.progress?.stage === 'queued' ? ' · waiting for the GPU' : ''));
       timer = setTimeout(refresh, found.status === 'paused' ? 4000 : 1500);
     } else {
-      say(`Comparison ${found.status === 'completed' ? 'complete' : found.status}: ${summary}.` + (failed ? ' Failed combinations show the reason; a sampler or scheduler this model’s runtime does not offer is refused.' : ''));
+      say(`Comparison ${found.status === 'completed' ? 'complete' : found.status}: ${summary}.` + (found.lines.some(line => line.state === 'failed') ? ' Failed combinations show the reason; a sampler or scheduler this model’s runtime does not offer is refused.' : ''));
     }
     count();
   }

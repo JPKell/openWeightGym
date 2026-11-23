@@ -500,7 +500,8 @@ class Front:
             failed=bool(outcome and outcome.get('status_code',200)>=400)
             found=images.get(str(line))
             lines.append({'line':line,**{key:body.get(key) for key in ('sampler','scheduler','seed','steps','cfg_scale','guidance','width','height')},
-                          'state':'failed' if failed else 'done' if found else 'waiting',
+                          # finished with no image left: its image was deleted (QA-076)
+                          'state':'failed' if failed else 'done' if found else 'deleted' if outcome else 'waiting',
                           'error':((outcome.get('body') or {}).get('error') or {}).get('message','Generation failed.') if failed else None,
                           **(found or {})})
         batch=self.batches.store.get(number)

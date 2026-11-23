@@ -86,7 +86,11 @@ def test_job_lines_report_order_images_and_failures_only_to_the_owner(comparison
     assert lines['lines'][1]['error'] == 'The runtime does not offer the sampler lcm.' and lines['lines'][0]['asset_id'].startswith('image_')
     assert lines['lines'][0]['seed'] == 77 and lines['status'] == 'in_progress'
     run(number)
-    assert server.get(f'/mirrorwall-api/jobs/{number}/lines').json()['status'] == 'completed'
+    finished = server.get(f'/mirrorwall-api/jobs/{number}/lines').json()
+    assert finished['status'] == 'completed'
+    # A finished line whose image was deleted says so, rather than waiting for ever (QA-076).
+    assert server.delete(f"/mirrorwall-api/assets/{finished['lines'][0]['asset_id']}").status_code == 200
+    assert server.get(f'/mirrorwall-api/jobs/{number}/lines').json()['lines'][0]['state'] == 'deleted'
     sign_in(server, 'pat')
     assert server.get(f'/mirrorwall-api/jobs/{number}/lines').status_code in (403, 404)
     assert server.delete(f'/mirrorwall-api/jobs/{number}').status_code == 404
