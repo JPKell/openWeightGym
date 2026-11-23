@@ -36,6 +36,19 @@ def test_bracketed_citations_link_only_visible_local_guides():
     assert '<script>' not in html
 
 
+def test_bare_bracketed_paths_and_footnote_sources_become_links():
+    """Answers observed citing `[/docs/…]` and `[^1]: /docs/…` link their sources too (QA-083)."""
+    from weightroom.docs_help import presentation
+    person = SimpleNamespace(can=frozenset({'use-tools'}))
+    guide = '/docs/getting-started/navigation#forms-and-confirmations'
+    text = (f'Save keeps a version [{guide}]. Publishing is separate[^1].\n\n[^1]: {guide}\n\n'
+            f'[Already a link]({guide}) [/docs/no-such-guide] [/docs/api/developer-tools]')
+    html, sources = presentation(text, person)
+    assert [source['url'] for source in sources] == [guide]
+    assert html.count(f'href="{guide}"') == 3, html
+    assert 'href="/docs/no-such-guide"' not in html and 'href="/docs/api/developer-tools"' not in html
+
+
 @pytest.fixture
 def help_desk(docs_gateway, tmp_path):
     server, users, caller = docs_gateway

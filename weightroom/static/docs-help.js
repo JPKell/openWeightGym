@@ -32,9 +32,10 @@
         const label = document.createElement('strong'); label.textContent = (row.role === 'user' ? 'You' : 'Documentation') + ': ';
         paragraph.append(label);
         let start = 0;
-        for (const match of row.content.matchAll(/\[([^\]]+)\]\((\/docs\/[a-zA-Z0-9_./?=%:#-]+)\)/g)) {
+        // A Markdown link, or a bare bracketed docs path as some models write it (QA-083).
+        for (const match of row.content.matchAll(/\[([^\]]+)\]\((\/docs\/[a-zA-Z0-9_./?=%:#-]+)\)|\[(\/docs\/[a-zA-Z0-9_./?=%:#-]+)\](?!\()|(?<=\[\^[^\]]+\]: ?)(\/docs\/[a-zA-Z0-9_./?=%:#-]+)/g)) {
           paragraph.append(document.createTextNode(row.content.slice(start, match.index)));
-          const anchor = document.createElement('a'); anchor.textContent = match[1]; anchor.href = match[2]; paragraph.append(anchor);
+          const anchor = document.createElement('a'); anchor.textContent = match[1] || match[4] || 'Source'; anchor.href = match[2] || match[3] || match[4]; paragraph.append(anchor);
           start = match.index + match[0].length;
         }
         paragraph.append(document.createTextNode(row.content.slice(start))); list.append(paragraph);

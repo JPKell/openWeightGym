@@ -2,7 +2,7 @@
 {% from 'parts.html' import page_header, alert %}
 {% import 'docs_library_parts.html' as library %}
 {% block title %}{{ 'Gaps' if help_mode == 'gaps' else 'Ask' }} · Documentation · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/docs.css?v=1"><script src="/static/docs-help.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/docs.css?v=1"><script src="/static/docs-help.js?v=2" defer></script>{% endblock %}
 {% block main %}
 <div class="docs-workspace" id="docs-help-workspace" data-owner="{{ person.me.get('identity') or person.name }}">
 {{ library.modes(person, help_mode) }}

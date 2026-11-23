@@ -44,6 +44,18 @@ def presentation(text, person):
     # Normalize only catalogue-backed links under the same caller visibility rules.
     text = re.sub(r'【(/docs/[^\s【】]+)】',
                   lambda match: f'[Source]({match[1]})' if link(match[1]) else match[0], text)
+    # Others write a bare bracketed path, or a footnote whose definition is a path (QA-083).
+    text = re.sub(r'(?<![\]\w])\[(/docs/[^\s\[\]()]+)\](?![(:])',
+                  lambda match: f'[Source]({match[1]})' if link(match[1]) else match[0], text)
+    notes = {}
+    def note(match):
+        """Keep a footnote whose source is a visible guide as a link at its marker, and drop its definition line."""
+        if not link(match[2]):
+            return match[0]
+        notes[match[1]] = match[2]
+        return ''
+    text = re.sub(r'^\[\^([^\]]+)\]:\s*<?(/docs/[^\s>]+)>?[ \t]*$\n?', note, text, flags=re.M)
+    text = re.sub(r'\[\^([^\]]+)\](?!:)', lambda match: f'[{match[1]}]({notes[match[1]]})' if match[1] in notes else match[0], text).strip()
     sources, seen = [], set()
     for url in re.findall(r'\]\(([^\s)]+)\)', text):
         if link(url) and url not in seen:
