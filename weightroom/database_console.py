@@ -25,6 +25,7 @@ MAX_EXPORT_BYTES = 2 * 1024 ** 3
 class NodeRefused(OperationRefused):
     """The owning node answered and refused, with its own reason and status (QA-050)."""
     def __init__(self, message, status):
+        """Keep the node's HTTP status beside its message."""
         super().__init__(message)
         self.status = status
 
