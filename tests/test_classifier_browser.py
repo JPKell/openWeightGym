@@ -89,3 +89,29 @@ def test_classifier_empty_unavailable_and_disabled(desk):
     saved = server.post('/settings/weightroom', data={'value-allow_classifiers': 'false'})
     assert saved.status_code == 200
     assert server.get('/chat/classifier').status_code == 403
+
+
+def test_request_json_follows_question_edits_before_any_run(desk):
+    """The draft request shows the questions as they are edited, added and removed (QA-101)."""
+    server, _, _ = desk
+    sign_in(server, 'jordan')
+    def mock(route):
+        route.fulfill(json={'models': [{'id': 'first', 'capabilities': {'classifier': 'kev', 'limits': {'choices': 255}}}],
+                            'nodes': [{'name': 'compute', 'cards': [{'card': 'GPU0'}]}], 'manage': True, 'downloads': True})
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server)
+        page.route('**/chat/classifier/api/*', mock)
+        page.goto('http://console.test/chat/classifier')
+        playwright.expect(page.locator('#classifier-model option')).to_have_count(1)
+        page.locator('#classifier-starter').select_option('urgency')
+        page.locator('[data-load-starter]').click()
+        page.get_by_text('Developer drawer', exact=True).click()
+        page.locator('#classifier-code').select_option('request')
+        drafted = lambda: json.loads(page.locator('#classifier-developer').text_content())['questions']
+        page.locator('[data-question-id]').first.fill('qa-current-id')
+        page.locator('[data-instructions]').first.fill('Rate how urgent this is.')
+        page.locator('[data-instructions]').first.blur()
+        assert list(drafted()) == ['qa-current-id'] and drafted()['qa-current-id']['instructions'] == 'Rate how urgent this is.'
+        page.locator('[data-add-question]').click()
+        assert list(drafted()) == ['qa-current-id', 'question_2']
+        browser.close()

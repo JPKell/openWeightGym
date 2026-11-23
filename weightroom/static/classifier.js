@@ -223,6 +223,9 @@
     model.addEventListener('change', () => { saveDraft(); showModel(); });
     root.querySelectorAll('[data-state-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.stateMode)));
     state.addEventListener('input', () => { estimate(); developer(); }); $('#classifier-code').addEventListener('change',developer);
+    // The draft request follows every question edit, addition and removal (QA-101).
+    ['input', 'change'].forEach(type => questions.addEventListener(type, developer));
+    new MutationObserver(developer).observe(questions, {childList: true});
     $('#classifier-image').addEventListener('change', async event => {
       const file=event.target.files[0]; image=null; if (!file) return;
       if (file.size > 45000) { event.target.value=''; return error('Use an image smaller than 45 KB to fit the 64 KiB request limit.'); }
