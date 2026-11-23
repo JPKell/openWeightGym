@@ -40,6 +40,9 @@ def test_reranker_matrix_control_roundtrip_and_type_filter(setup_desk,tmp_path,w
         playwright.expect(page.locator('main .page-header a, main header a', has_text='Add model').first).to_have_attribute('href', '#add-model')
         playwright.expect(page.locator('#model-reranking')).to_be_checked()
         assert page.locator('a[href^="/models/audio"]', has_text='Add').count() == 0
+        # Reranker rows show their context, so the column says so, not Family (QA-034).
+        playwright.expect(page.locator('#models-table th, table th', has_text='Max context').first).to_be_visible()
+        assert page.locator('table th', has_text='Family').count() == 0
         page.goto('http://console.test/hub?kind=rerank&q=acme')
         playwright.expect(page.locator('#hub-kind')).to_have_value('rerank')
         playwright.expect(page.locator('#hub-results a.discovery-repository').first).to_have_attribute('href', '/hub?repository=acme/tiny-GGUF&kind=rerank')

@@ -44,7 +44,7 @@
 <div class="inventory-legend small text-secondary px-3 py-2" aria-label="Availability legend">{% for state,label in [('in-use','In use'),('loaded','Loaded'),('installed','Installed'),('loading','Loading'),('offline','Node unavailable'),('missing','File missing'),('disabled','Disabled')] %}<span class="inventory-state" data-state="{{ state }}"><span class="inventory-dot" aria-hidden="true"></span>{{ label }}</span>{% endfor %}</div>
 <div class="inventory-table-scroll" role="region" tabindex="0" aria-label="Installed models and compute nodes; scroll to browse all models">
 <table id="models-table" class="table table-hover align-middle mb-0 inventory-table">
-  <thead><tr><th scope="col">Model</th><th scope="col">Installed on</th><th scope="col">{{ 'Context / family' if kind == 'all' else 'Max context' if kind == 'llm' else 'Family' }}</th><th scope="col">File size</th><th scope="col">In memory</th></tr></thead>
+  <thead><tr><th scope="col">Model</th><th scope="col">Installed on</th><th scope="col">{{ 'Context / family' if kind == 'all' else 'Max context' if kind in ('llm', 'rerank') else 'Family' }}</th><th scope="col">File size</th><th scope="col">In memory</th></tr></thead>
   <tbody>
   {% for row in catalogue.rows %}{% set model = row.model %}
   {% set model_kind = 'classifier' if model.get('capabilities', {}).get('classifier') else {'sdcpp':'image', 'audiocpp':'audio', 'whispercpp':'audio'}.get(model.engine, 'llm') %}
