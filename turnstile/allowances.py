@@ -19,6 +19,7 @@ from .accounts import address, error, read_json, signed_in
 from .reporting import ReportTimeout, run as run_report
 
 FLUSH_SECONDS = 5  # as long as the Usage report waits for a node's log
+ENDING_SLACK = 86400  # seconds an ending's clock may run behind its request's
 
 
 class Allowances:
@@ -162,11 +163,13 @@ class Allowances:
         # Unresolved means no retained ending, not proof that the request is still executing.
         # The unary plus on e.at keeps the planner on the parent index; scanning every earlier
         # request by time took 41 s on 48k events and stalled turnstile's event loop.
+        # An ending comes after its request, so only endings from the window (less a day for
+        # clocks that disagree) are compared: PostgreSQL otherwise hashed every ending ever kept (QA-073).
         ending_parent = log.json_value('e.detail', 'of', 'integer')
         records = log.db.execute(f"SELECT a.detail FROM events a WHERE a.kind='request' AND a.what='asked' "
             f"AND a.at>=? AND a.at<=? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.kind='request' "
-            f"AND e.what IN ({marks}) AND +e.at<=? AND {ending_parent}=+COALESCE(a.source,a.id) "
-            "AND COALESCE(e.machine,'')=COALESCE(a.machine,''))", (since,now,*ENDINGS,now))
+            f"AND e.what IN ({marks}) AND +e.at<=? AND +e.at>=? AND {ending_parent}=+COALESCE(a.source,a.id) "
+            "AND COALESCE(e.machine,'')=COALESCE(a.machine,''))", (since,now,*ENDINGS,now,since-ENDING_SLACK))
         for (raw,) in records:
             data = json.loads(raw)
             for key in (('user',data.get('account_id')), ('key',data.get('key_id')), ('group',data.get('group'))):

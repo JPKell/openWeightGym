@@ -254,3 +254,20 @@ def test_the_allowance_report_runs_off_the_event_loop_and_bounds_its_log_flush(t
     assert took < 5  # the flush gave up instead of waiting on the silent node
     assert longest < 0.3, longest  # the loop kept serving while the tally ran
     log.db.close(); users.db.close()
+
+
+def test_unresolved_count_reads_only_endings_from_the_window(tmp_path):
+    """Comparing every ending ever kept made the report slow on a long log (QA-073); an old ending cannot end a new request."""
+    users, log, key = store(str(tmp_path / 'front.db')); pat = users.by_key(key)
+    old = log.add('request', 'asked', 'pat', account_id=pat.identity, key_id=pat.key_identity, group='plain')
+    log.add('request', 'done', 'pat', of=old, account_id=pat.identity, key_id=pat.key_identity, group='plain', cost=1)
+    log.db.execute("UPDATE events SET at = at - 90 * 86400")
+    ending(log, pat, 1)
+    log.add('request', 'asked', 'pat', account_id=pat.identity, key_id=pat.key_identity, group='plain')
+    asked = []
+    log.db.raw.set_trace_callback(lambda sql: asked.append(sql) if 'NOT EXISTS' in sql else None)
+    row = target(Allowances(users, log).report(pat), 'user', pat.identity)
+    log.db.raw.set_trace_callback(None)
+    assert row['unresolved'] == 1 and row['requests'] == 1
+    assert '+e.at>=' in asked[0]
+    log.db.close(); users.db.close()
