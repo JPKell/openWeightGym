@@ -118,6 +118,9 @@ def test_usage_api_and_page_enforce_scope_and_validate_filters(desk, tmp_path, m
     assert "private-model" not in page.text and 'name="user"' not in page.text
     assert browser.get("/usage?user=jordan&complete=1").status_code == 403
     assert browser.get("/usage?start=bad&complete=1").status_code == 400
+    # A refused range is refused again on retry, so the section also offers the page without filters (QA-071).
+    refused = browser.get("/usage?start=2026-11-17&end=2026-11-15&part=report")
+    assert refused.status_code == 400 and 'Retry loading' in refused.text and 'href="/usage">Clear filters</a>' in refused.text
     browser.post("/sign-out")
     sign_in(browser, "jordan")
     page = browser.get("/usage?start=2026-10-01&end=2026-10-02&group_by=user&input_rate=2.5&output_rate=5&complete=1")

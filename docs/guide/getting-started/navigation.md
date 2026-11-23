@@ -33,7 +33,8 @@ This covers Fingerprints, Files, Models, System logs, Databases, Cloud APIs, Use
 Schedules, Civitai searches, benchmark run samples, Telemetry hosts and history ranges, and
 the paged ledgers. A page number past the end opens the last page. An opened Fingerprints
 record's **All fingerprints** link returns to the archive's rows, page and sort. Unsaved form
-changes are not part of the address.
+changes are not part of the address. A section that refuses its filters offers **Retry loading** and
+**Clear filters**, which reopens the page without them.
 
 ## Forms and confirmations
 

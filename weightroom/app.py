@@ -1092,8 +1092,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 why = answer.json().get('error', {}).get('message') or why
             except (ValueError, AttributeError):
                 pass
-        return page(request, 'deferred_error.html', person, status=answer.status_code,
-                    region=region, why=why, retry_url=fragment_url(request, part))
+        # A refused filter would be refused again on retry: offer the page without its filters too (QA-071).
+        filtered = any(key not in ('part', 'complete') for key in request.query_params)
+        return page(request, 'deferred_error.html', person, status=answer.status_code, region=region, why=why,
+                    retry_url=fragment_url(request, part), reset_url=request.url.path if answer.status_code == 400 and filtered else '')
 
     async def http_error(request: Request, problem: HTTPException) -> Response:
         """Keep missing pages and HTTP refusals inside the console, without changing their status."""

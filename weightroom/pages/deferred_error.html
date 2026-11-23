@@ -2,4 +2,5 @@
 {% call alert('warning', role='alert', attrs={'id': (region), 'data-load-error': ''}) %}
   <p>{{ why }}</p>
   <button type="button" class="btn btn-outline-secondary btn-sm" data-deferred-loader hx-get="{{ retry_url }}" hx-target="#{{ region }}" hx-swap="outerHTML">Retry loading</button>
+  {% if reset_url %}<a class="btn btn-outline-secondary btn-sm" href="{{ reset_url }}">Clear filters</a>{% endif %}
 {% endcall %}
