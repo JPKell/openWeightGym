@@ -22,7 +22,7 @@
 .file-metadata #metadata th:first-child { width: 48%; }
 .file-metadata #metadata td { overflow-wrap: anywhere; padding-block: .38rem; }
 .file-metadata #metadata thead { position: sticky; top: 0; background: var(--tblr-bg-surface-secondary); z-index: 1; }
-.file-metadata #metadata code { color: var(--bs-body-color); font-size: inherit; }
+.file-metadata #metadata code { color: var(--bs-body-color); font-size: inherit; white-space: normal; overflow-wrap: anywhere; }  /* a long key wraps in its own cell (QA-031) */
 .transfer-fields { display: grid; grid-template-columns: 85px minmax(0, 1fr) auto; gap: .5rem; align-items: end; }
 .file-delete summary { cursor: pointer; font-size: .8rem; }
 [data-layout="inspector"] .file-layout { grid-template-columns: minmax(180px, .65fr) minmax(0, 1.6fr) minmax(280px, 1fr); }

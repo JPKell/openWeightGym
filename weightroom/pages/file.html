@@ -6,7 +6,7 @@
 {% set facts = told.facts if told else file.facts|default({}, true) %}
 {% set file_inspector = true %}
 {% block title %}{{ name }} · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/file.css?v=1"><script src="/static/file.js?v=1" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/file.css?v=2"><script src="/static/file.js?v=1" defer></script>{% endblock %}
 {% block main %}
 <div id="file-workspace" data-file-page data-layout="inspector">
 {% call page_header(name) %}

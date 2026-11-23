@@ -34,7 +34,7 @@ def inspector(library_desk):
     server, compute, cache, storage, node = library_desk
     file = Path(gguf(cache / 'llm' / 'inspector.gguf', general__name='Inspector <test>',
                      general__architecture='qwen3', general__size_label='32B',
-                     qwen3__context_length=40960, qwen3__block_count=64,
+                     qwen3__context_length=40960, qwen3__block_count=64, qwen3__attention__layer_norm_rms_epsilon='9.999999974752427e-07',
                      tokenizer__chat_template='safe <script>window.badMetadata = true</script> ' + 'long metadata ' * 50))
     server.post('/files', data={'do': 'refresh-files'})
     return server, file, storage, node, compute
@@ -73,6 +73,9 @@ def test_inspector_search_sort_full_values_dynamic_replacement_and_resizing(insp
             for width in (1920, 1440, 1024, 768, 390, 320):
                 page.set_viewport_size({'width': width, 'height': 1000})
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (width, theme)
+                # A long key stays inside its own cell, clear of its value (QA-031).
+                assert page.evaluate('''() => [...document.querySelectorAll('#metadata tbody tr:not([hidden])')].filter(row => row.cells.length === 2 && row.offsetParent)
+                    .every(row => row.cells[0].querySelector('code').getBoundingClientRect().right <= row.cells[1].getBoundingClientRect().left + 1)'''), (width, theme)
         page.set_viewport_size({'width': 1440, 'height': 1000})
         page.get_by_label('Search metadata').fill('')
         page.get_by_label('Metadata group').select_option('all')
