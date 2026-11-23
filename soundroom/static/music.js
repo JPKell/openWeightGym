@@ -384,6 +384,8 @@
     if (!older.length) nextPage = latest.next;
     const newest = new Set(latest.assets.map(row => row.id));
     state = {...latest, assets: [...latest.assets, ...older.filter(row => !newest.has(row.id))]};
+    // The chosen take is the refreshed copy, so its dialogs show what was just saved (QA-066).
+    if (selected) selected = state.assets.find(row => row.id === selected.id) || selected;
     $('older').hidden = !nextPage;
     const wanted = state.models.filter(ours);
     const current = $('model').value;

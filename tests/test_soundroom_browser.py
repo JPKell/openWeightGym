@@ -632,3 +632,33 @@ def test_a_take_says_when_its_length_differs_from_the_one_asked_for(desk):
         page.locator("#sr-list button").nth(1).click()
         playwright.expect(page.locator("#sr-info")).not_to_contain_text("asked for")
         browser.close()
+
+
+def test_share_shows_the_groups_just_saved(desk):
+    """Reopening Share after Save shows what was saved, both sharing and revoking (QA-066)."""
+    server, _, _ = desk
+    sign_in(server, "jordan")
+    take = asset(1)
+    payload = state(assets=[take], groups=["qa-listeners"])
+    audio = capture_audio(payload, [])
+
+    def capture(route, path):
+        if path == f"/soundroom-api/assets/{take['id']}" and route.request.method == "POST":
+            take["shared_with"] = route.request.post_data_json["groups"]
+            route.fulfill(content_type="application/json", body=json.dumps(take))
+            return True
+        return audio(route, path)
+    with playwright.sync_playwright() as engine:
+        browser, page = browser_context(engine, server, capture=capture)
+        page.goto("http://console.test/chat/music")
+        page.locator("#sr-list button").first.click()
+        box = page.locator("#sr-dialog input[value=qa-listeners]")
+        for share in (True, False):
+            page.locator("#sr-share").click()
+            box.set_checked(share)
+            page.locator("#sr-dialog button", has_text="Save").click()
+            playwright.expect(page.locator("#sr-dialog")).not_to_be_visible()
+            page.locator("#sr-share").click()
+            (playwright.expect(box).to_be_checked if share else playwright.expect(box).not_to_be_checked)()
+            page.keyboard.press("Escape")
+        browser.close()
