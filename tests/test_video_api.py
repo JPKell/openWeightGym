@@ -78,6 +78,12 @@ def test_no_log_video_never_creates_sql_jobs_or_files(api,monkeypatch):
     monkeypatch.setattr(api.front,'execute_line',execute)
     before={table:api.front.store.db.execute('SELECT COUNT(*) FROM '+table).fetchone()[0]
             for table in ('mirrorwall_assets','mirrorwall_jobs','batches','files')}
+    # Compute's live policy refuses no-log work by default, even for an account with the ability.
+    refused=api.post('/v1/videos',json={'model':'wan','prompt':'Private rain','temporary':True})
+    assert refused.status_code==403 and 'no-log generation' in refused.text
+    async def allowed(user):
+        return user.can('unlogged')
+    monkeypatch.setattr(api.front.batches,'can_unlogged',allowed)  # as when compute's policy allows it
     response=api.post('/v1/videos',json={'model':'wan','prompt':'Private rain','temporary':True})
     assert response.status_code==202,response.text
     row=response.json();assert row['temporary']

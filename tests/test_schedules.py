@@ -21,7 +21,6 @@ from loadcoach.users import Users
 from weightroom.schedules import Schedules, ScheduleWorker
 from test_weightroom import GROUPS, desk, sign_in  # noqa: F401
 from front_helpers import front_of
-from sqlite3 import connect
 
 
 ZONE = ZoneInfo('America/Vancouver')
@@ -298,7 +297,7 @@ def test_schedule_ui_authorization_pause_resume_csrf_and_backup(desk, tmp_path, 
     backup_keys.configure(tmp_path / 'backups')
     backup_keys.configure(tmp_path / 'data/backups')
     browser, wire, users = desk
-    core = connect(str(tmp_path / 'loadcoach.db'))  # the grants are compute's; the accounts are the control node's
+    core = wire.front.state.task_records.batches.db  # the control node keeps the grants
     sign_in(browser, 'pat')
     assert browser.get('/schedules').status_code == 403
     assert browser.post('/schedules', data={}).status_code == 403
@@ -321,7 +320,9 @@ def test_schedule_ui_authorization_pause_resume_csrf_and_backup(desk, tmp_path, 
     store.db.execute('UPDATE recurring_schedules SET next_at=? WHERE id=?',(due,row['id'])); store.db.commit()
     browser.portal.call(browser.app.state.schedule_worker.tick, due)
     assert store.occurrences()[0]['state'] == 'completed'
-    assert 'Paired recovery set' in browser.get('/schedules').text
+    # Each node's archive is verified on its own and reported in the run history.
+    assert store.occurrences()[0]['message'] == 'compute: verified; front: verified'
+    assert 'compute: verified; front: verified' in browser.get('/schedules').text
     assert 'weightroom.schedules' in browser.get('/backups').text
 
 
@@ -432,8 +433,13 @@ def test_schedule_dispatch_is_scoped_idempotent_and_preserves_model_access(tmp_p
     assert caller.post(path,headers=headers,json={'due_at':due}).status_code == 403
     core.execute('UPDATE schedule_grants SET valid_from=? WHERE id=?',(due,identifier)); core.commit()
     first=caller.post(path,headers=headers,json={'due_at':due})
-    assert first.status_code == 201
-    assert caller.post(path,headers=headers,json={'due_at':due}).json()['id'] == first.json()['id']
+    # A backup occurrence reports one verified archive per node; a repeated dispatch reuses it.
+    assert first.status_code == 200, first.text
+    made = first.json()['nodes']
+    assert [row['state'] for row in made] == ['verified'] * len(made) and made
+    again = caller.post(path,headers=headers,json={'due_at':due}).json()['nodes']
+    assert [row['id'] for row in again] == [row['id'] for row in made]
+    assert all(row['message'] == 'Previously verified; no retry needed.' for row in again)
     assert caller.post(path,headers=headers,json={'due_at':due+1}).status_code == 400
     assert caller.get('/loadcoach/me',headers={'authorization':'Bearer '+token}).status_code == 401
     users.change('owner',enabled=False)

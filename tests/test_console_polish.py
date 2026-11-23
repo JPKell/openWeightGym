@@ -26,6 +26,7 @@ def test_image_editor_roundtrips_pinned_hardware_and_structured_defaults(desk, t
         assert page.locator('textarea').count() == 0
         page.get_by_role('link', name='Edit settings', exact=True).click()
         playwright.expect(page.locator('#mw-name')).to_have_value('picture')
+        page.locator('#studio-edit-model').click()  # the studio opens the model setup dialog
         playwright.expect(page.locator('[data-hardware-mode][value="pin"]')).to_be_checked()
         playwright.expect(page.locator('#mw-default-width')).to_have_value('512')
         page.locator('#mw-default-width').fill('768')
@@ -34,6 +35,7 @@ def test_image_editor_roundtrips_pinned_hardware_and_structured_defaults(desk, t
         assert library.stored('picture')['gpus'] == ['A']
         assert library.stored('picture')['sdcpp']['defaults']['width'] == 768
         page.reload()
+        page.locator('#studio-edit-model').click()
         playwright.expect(page.locator('#mw-default-width')).to_have_value('768')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), page.evaluate("[...document.querySelectorAll('main *')].filter(e=>e.getBoundingClientRect().right>innerWidth).slice(0,10).map(e=>[e.tagName,e.id,e.className,e.getBoundingClientRect().right,e.textContent,e.parentElement.outerHTML.slice(0,700)])")
         folder = Path('data/qualification/console-polish/after'); folder.mkdir(parents=True, exist_ok=True)
@@ -122,6 +124,7 @@ def test_llm_hardware_modes_keep_the_legacy_post_shape(desk, tmp_path):
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
         page.goto('http://console.test/models/language')
+        page.locator('#model-group-hardware [data-model-edit]').click()
         page.get_by_text('CPU only', exact=True).click()
         fields = lambda: page.locator('[data-model-settings]').evaluate('form => [...new FormData(form)]')
         assert ['cpu', 'yes'] in fields() and not any(key == 'gpu_card' for key, _ in fields())
@@ -131,6 +134,7 @@ def test_llm_hardware_modes_keep_the_legacy_post_shape(desk, tmp_path):
         page.get_by_text('Automatic GPU', exact=True).click()
         assert not any(key == 'gpu_card' for key, _ in fields())
         playwright.expect(page.locator('#allow-split')).to_be_visible()
+        page.locator('#model-group-context [data-model-edit]').click()
         page.locator('#parallel-enabled').check()
         page.locator('#parallel-count').fill('3')
         page.locator('#parallel-context').fill('4096')

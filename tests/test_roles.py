@@ -93,7 +93,7 @@ def test_a_role_is_asked_for_like_a_model_and_every_answer_says_what_was_picked_
 def test_a_role_passes_over_what_cannot_answer_and_tries_the_next_if_a_pick_will_not_load(fake_llama_server, tmp_path):
     eyes = tmp_path / "eyes.gguf"
     eyes.touch()
-    models = {"broken": model("broken.gguf", 1, fail=True), "blind": model("blind.gguf", 1), "seeing": model("seeing.gguf", 1, mmproj=str(eyes)), "short": model("short.gguf", 1, **{"ctx-size": 16})}
+    models = {"broken": model("broken.gguf", 1, fail=True), "blind": model("blind.gguf", 1), "seeing": model("seeing.gguf", 1, mmproj=str(eyes), **{"ctx-size": 8192}), "short": model("short.gguf", 1, **{"ctx-size": 16})}
     picture = [{"role": "user", "content": [{"type": "text", "text": "what is this"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}]}]
     with gateway(fake_llama_server, models) as caller:
         jordan = add_user(caller, "jordan", "admin")
@@ -104,7 +104,8 @@ def test_a_role_passes_over_what_cannot_answer_and_tries_the_next_if_a_pick_will
         chat = lambda name, messages: caller.post("/v1/chat/completions", json={"model": name, "messages": messages}, headers=jordan)  # noqa: E731
         words = [{"role": "user", "content": "hello there, how are you today, and what is the weather like where you are"}]
 
-        sees = chat("look", words), chat("look", picture)  # with words, the top of the list. With a picture, only a model that sees
+        # With words, the top of the list. With a picture, only a model that sees, and has room for the picture's tokens.
+        sees = chat("look", words), chat("look", picture)
         warm = chat("look", words)  # both are loaded now, and both are near the top: the higher of them
         longer = chat("brief", words)  # more than the first model's context holds
         works = chat("work:best", words)  # the top of the list does not load: the next one answers, and the caller is not told to try again

@@ -10,6 +10,7 @@ from loadcoach.log import Log
 from turnstile.app import with_power_state
 from turnstile.machines import Machines
 from weightroom.app import worded
+from weightroom.display import node_label
 
 
 def test_two_instances_on_one_host_share_readings_and_front_history_survives_outage():
@@ -99,6 +100,7 @@ def test_telemetry_cards_show_individual_devices_and_compact_nav_stays_unchanged
     pages = Path(__file__).parents[1] / "weightroom/pages"
     env = Environment(loader=FileSystemLoader(pages), autoescape=True)
     env.filters["worded"] = lambda value, name: "—" if value is None else worded(name, value)
+    env.filters["node_label"] = node_label
     host = {"fingerprint": "a" * 64, "hostname": "compute", "machines": ["compute"],
             "state": "ready", "age": 1, "loaded": [{"model": "qwen-test", "state": "ready", "machine": "compute"}],
             "models_unknown": False, "telemetry": {"cards": [

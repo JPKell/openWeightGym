@@ -71,7 +71,7 @@ def test_private_credentials_and_build_survive_the_front_request_path(settings, 
                     engines={"strata": asdict(replace(node, host_ram_mib=2048))}, max_wait=3,
                     front="http://front:8442", machine_key_file=str(tmp_path/"machine.key"))
     users = Users(":memory:", GROUPS)
-    with front_of(lambda front: build_app(config, front=front), users, tmp_path) as caller:
+    with front_of(lambda front: build_app(config, front=front), users, tmp_path, node="compute") as caller:
         owner = add_user(caller, "owner", "admin")
         for path, extra in (("/v1/embeddings", {}), ("/v1/chat/completions", {"tools": []})):
             denied = caller.post(path, headers=owner, json={"model": "hybrid", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 8, **extra})
@@ -209,7 +209,7 @@ def policy_node(settings, node, fake_llama_server, tmp_path, monkeypatch):
         front="http://front:8442", machine_key_file=str(tmp_path/"machine.key"))
     groups = {**GROUPS, "quiet": Group(can=frozenset({"load", "unlogged"})),
               "cleared": Group(can=frozenset({"load"}), max_sensitivity="sensitive")}
-    with front_of(lambda front: build_app(config, front=front), Users(":memory:", groups), tmp_path) as caller:
+    with front_of(lambda front: build_app(config, front=front), Users(":memory:", groups), tmp_path, node="compute") as caller:
         owner = add_user(caller, "owner", "admin")
         plain = add_user(caller, "plain", "plain", by=owner)
         quiet = add_user(caller, "quiet", "quiet", by=owner)

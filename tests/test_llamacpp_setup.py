@@ -8,6 +8,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tarfile
 
 import pytest
@@ -68,6 +69,10 @@ fi
         "pkg-config": """[[ $1 == --exists ]] || exit 1
 shift
 for library; do [[ ! -e $TEST_REQUIREMENTS/$library ]] || exit 1; done
+""",
+        # audio.cpp probes the espeak runtime library; it is present unless a test marks it missing.
+        "python3": '[[ $* == *libespeak-ng* ]] || exec ' + shlex.quote(sys.executable) + """ "$@"
+[[ ! -e $TEST_REQUIREMENTS/libespeak-ng ]]
 """,
         "sudo": """printf 'sudo %s\\n' "$*" >>"$TEST_CALLS"
 [[ $1 != -n ]] || shift

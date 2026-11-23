@@ -976,13 +976,18 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 notification_targets = delivery_feed.get('targets',[]) if delivery_feed is not None else None
                 for source in ('model failures', 'spending'):
                     alerts.observe(source, coach.get(source) if coach else None, now)
+                # Turnstile combines every node's spotter; one that did not answer has no evidence, not an empty one.
+                silent = set(machine.get('unavailable_nodes') or ()) if machine else set()
+                if machine and silent and not set(machine.get('nodes') or ()) - silent:
+                    machine = None
                 if machine:
                     services, heat = machine_conditions(machine, settings.alert_gpu_temperature)
                     alerts.observe('services', services, now, missing_recovers=False)
                     alerts.observe('GPU temperature', heat, now, missing_recovers=False)
                     # Unit results remain usable if kernel access fails; absence does not
-                    # close any event, so this partial snapshot is safe to retain.
-                    alerts.observe('memory kills', machine['memory kills'], now)
+                    # close any event, so this partial snapshot is safe to retain. A node
+                    # that did not answer cannot show that its memory kills are over.
+                    alerts.observe('memory kills', machine['memory kills'], now, missing_recovers=not silent)
                     alerts.observe('kernel journal', [] if machine['kernel_available'] else None, now)
                 else:
                     for source in ('services', 'GPU temperature', 'memory kills', 'kernel journal'):
@@ -2758,7 +2763,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             for batch in found['batches']:
                 if batch['status'] != 'in_progress' or (batch['user'] != person.name and 'stop' not in person.can):
                     continue
-                answer = await ask("POST", f"/v1/batches/{quote(batch['id'], safe='')}/cancel", person.key)
+                answer = await ask("POST", batch_cancel_path(batch['id'], batch.get('node')), person.key)
                 if answer.status_code == 200:
                     cancelled += 1
                 else:
@@ -2768,10 +2773,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 return await batches_page(request, person, message + f" Could not stop {failed} batches.", failed=True)
             return batch_redirect(message)
         number = form.get("batch", "")
-        answer = await ask("POST", f"/v1/batches/{quote(number, safe='')}/cancel", person.key)
+        answer = await ask("POST", batch_cancel_path(number, form.get("node")), person.key)
         if answer.status_code != 200:
             return await batches_page(request, person, answer.json()["error"]["message"], failed=True)
         return batch_redirect("Cancelled. The answers there were are kept, and the rest is not asked.")
+
+    def batch_cancel_path(number: str, node: str | None) -> str:
+        """Cancel a batch where it is kept: an older node's record is named, since only its owner can look it up."""
+        return f"/v1/batches/{quote(number, safe='')}/cancel" + ('?' + urlencode({'node': node}) if node else '')
 
     async def batch_file(request: Request, person: Person) -> Response:
         """A batch's answers, or its errors, as a file to keep: one line for each request."""
@@ -5490,11 +5499,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         said = (f"Asked {name} to wake." if answer.is_success else answer.json()["error"]["message"])
         return go(destination + "?" + ("" if answer.is_success else "failed=1&") + "said=" + quote(said))
 
-    async def physical_host_controls(person: Person, fingerprint: str) -> tuple[dict | None, str]:
-        """Read compute's service/power controls only for its verified physical host."""
+    async def physical_host_controls(person: Person, fingerprint: str, node: str = '') -> tuple[dict | None, str]:
+        """Read a node's service/power controls only for its verified physical host."""
+        if not node:
+            return None, 'Choose an available compute node.'
         try:
-            answer = await ask_spotter('GET', '/spotter/now', person.key,
-                                       params={'system_services': ','.join(settings.third_party_services)}, timeout=5)
+            answer = await ask_spotter('GET', '/spotter/now', person.key, timeout=5,
+                                       params={'system_services': ','.join(settings.third_party_services), 'node': node})
         except MachineOff:
             return None, 'Host controls are unavailable while Spotter is not answering.'
         if answer.status_code != 200:
@@ -5573,7 +5584,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                       "initial_group": 'gpu-' + asked['gpu'] if asked.get('gpu', '').isdigit() else 'processor'}
         template = "telemetry_workspace.html" if asked.get("part") == "workspace" else "telemetry_host.html" if host else "machines.html"
         if host and host.get('fingerprint') and not host.get('retained_only'):  # verify the exact physical host
-            snapshot, _ = await physical_host_controls(person, host['fingerprint'])
+            snapshot, _ = await physical_host_controls(person, host['fingerprint'], next(iter(host.get('machines') or []), ''))
             if snapshot:
                 uptime = number(snapshot.get('up_for'))
                 host['uptime'] = uptime if uptime is not None and uptime >= 0 else None
@@ -5661,7 +5672,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             if not node:
                 return machine_action_result(destination, 'Choose an available compute node.', failed=True)
         if fingerprint:
-            _, why = await physical_host_controls(person, fingerprint)
+            _, why = await physical_host_controls(person, fingerprint, node)
             if why:
                 return machine_action_result(destination, why, failed=True)
         if name in THIRD_PARTY_NAMES and name not in settings.third_party_services:
@@ -5678,12 +5689,16 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         """Put compute to sleep, restart it, switch it off, or call that off. spotter decides whether this person may, and does it."""
         action, form = request.path_params["action"], await typed(request)
         destination, fingerprint = machine_action_destination(form)
+        node = node_named(person, form.get('node') or form.get('machine') or '')
+        if not node:
+            return machine_action_result(destination, 'Choose an available compute node.', failed=True)
         if fingerprint:
-            _, why = await physical_host_controls(person, fingerprint)
+            _, why = await physical_host_controls(person, fingerprint, node)
             if why:
                 return machine_action_result(destination, why, failed=True)
         try:
-            answer = await ask_spotter("POST", f"/spotter/power/{quote(action, safe='')}", person.key, json={"force": "force" in form})
+            answer = await ask_spotter("POST", f"/spotter/power/{quote(action, safe='')}", person.key, json={"force": "force" in form},
+                                       params={'node': node})
         except MachineOff:
             return machine_action_result(destination, 'spotter is not answering.', failed=True)
         if answer.status_code not in (200, 202):

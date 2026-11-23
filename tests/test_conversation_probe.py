@@ -272,7 +272,7 @@ def test_native_receipts_and_rejections_are_visible_without_rendering_model_mark
     assert page.status_code==200
     assert 'Native conversation response' in page.text and 'Native usage and timings' in page.text
     assert 'Requested response format' in page.text and 'Unavailable at generation' in page.text
-    assert 'Score: —' in page.text and '<th>Unsupported</th>' in page.text
+    assert '<strong class="kpi-value" id="run-score">—</strong>' in page.text and '<th>Unsupported</th>' in page.text
     assert '<script>never_run()' not in page.text and '<script>schema unsupported' not in page.text
     from pathlib import Path
     from playwright.sync_api import sync_playwright
@@ -291,8 +291,9 @@ def test_native_receipts_and_rejections_are_visible_without_rendering_model_mark
             route.fulfill(status=response.status_code,content_type=response.headers.get('content-type','text/html'),body=response.content)
         context.route('http://native.test/**',serve)
         page.goto('http://native.test/benchmarks/run/'+number)
-        page.locator('#sample-1 > summary').click()
-        page.locator('#sample-1 summary').filter(has_text='Native conversation response').click()
+        # The briefing selects a sample from its row and shows each evidence section as a tab.
+        page.locator('a[href="#sample-1"]').click()
+        page.get_by_role('button', name='Native conversation response', exact=True).click()
         assert 'private' not in page.locator('#sample-1').inner_text()
         assert 'never_run()' in page.locator('#sample-1').inner_text()  # escaped data, never script
         folder=Path('data/m101-verification');folder.mkdir(parents=True,exist_ok=True)

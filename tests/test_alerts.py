@@ -165,7 +165,7 @@ def test_spotter_memory_evidence_heat_and_compute_outage(desk_with_machine, tmp_
     kernel.write_text('#!/bin/sh\necho \'{"__CURSOR":"event-1","__REALTIME_TIMESTAMP":"10000000","MESSAGE":"private process arguments"}\'\n')
     sign_in(browser, 'jordan')
     page = browser.get('/alerts')
-    assert 'GPU 1 temperature' in page.text and 'loadcoach service failed' in page.text
+    assert 'GPU compute:1 temperature' in page.text and 'compute: loadcoach service failed' in page.text  # each node's evidence is named
     assert 'Kernel memory kill' in page.text and 'private process arguments' not in page.text
     kept = browser.app.state.alerts
     count = len(kept.rows(open_only=True))
@@ -177,7 +177,7 @@ def test_spotter_memory_evidence_heat_and_compute_outage(desk_with_machine, tmp_
     compute.off = False
     machine.off = True
     page = browser.get('/alerts')
-    heat = next(row for row in kept.rows(open_only=True) if row['condition'] == 'gpu:1')
+    heat = next(row for row in kept.rows(open_only=True) if row['condition'] == 'gpu:compute:1')
     assert heat['state'] == 'unknown' and page.status_code == 200
 
 
@@ -237,11 +237,12 @@ def test_installer_and_migration_know_alert_store(tmp_path, monkeypatch):
                for row in support.configured_targets(config, 'weightroom'))
 
 
-def test_alert_store_is_backed_up_and_exported(desk):
+def test_alert_store_is_backed_up_and_exported(desk, tmp_path, backup_keys):
+    backup_keys.configure(tmp_path / 'data/backups')
     browser, _, _ = desk
     sign_in(browser, 'jordan')
     browser.app.state.alerts.observe('GPU temperature', [condition(key='gpu:0')])
-    assert browser.post('/backups/create').status_code == 200
+    assert browser.post('/backups/create', data={'node': 'front'}).status_code == 200
     assert 'weightroom.alerts' in browser.get('/backups').text
     exported = browser.get('/databases/front/alerts.db/dump?table=operational_alerts')
     assert exported.status_code == 200 and 'GPU hot' in exported.text
@@ -282,7 +283,10 @@ def test_alert_collection_marks_all_monitoring_sources_no_wake(desk_with_machine
     monkeypatch.setattr(httpx.AsyncClient, 'get', inspect)
     assert browser.get('/alerts').status_code == 200
     assert observed == paths
-    assert not any(row['available'] for row in browser.app.state.alerts.sources() if row['source'] != 'observability')
+    # Node evidence is unknown while every node is off. Control-node records (allowances and the
+    # retained fleet inventory that reports node silence) still answer.
+    control_node = {'observability', 'Allowances', 'Node silence', 'Disk space', 'GPU memory', 'Host RAM'}
+    assert not any(row['available'] for row in browser.app.state.alerts.sources() if row['source'] not in control_node)
 
 
 def test_inflight_alert_snapshot_is_discarded_when_maintenance_starts(desk, tmp_path, monkeypatch):

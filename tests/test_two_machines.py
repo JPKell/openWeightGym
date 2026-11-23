@@ -187,7 +187,7 @@ def test_offline_navigation_reuses_metadata_without_retrying_workers(metadata_fr
         response = browser.get(path)
         assert response.status_code == 200
         if '?' not in path:
-            assert 'Node unavailable: compute, rig' in response.text
+            assert 'compute is not answering' in response.text and 'rig is not answering' in response.text
         assert wire.calls == before, (path, wire.calls[len(before):])
     assert wire.calls == before
     # Explicit reads still probe a node without the page's passive-read header.
@@ -227,7 +227,8 @@ def test_metadata_refresh_is_deduplicated_and_does_not_block_authentication(meta
 def test_chat_and_roles_use_background_inventory_without_request_fanout(metadata_front, monkeypatch, tmp_path):
     front, wire, users, _, _ = metadata_front
     # A monitor refresh sees a different resident without any chat asking the fleet.
-    wire.wires[9442] = httpx.ASGITransport(app=worker(str(tmp_path / "rig.key"), "rig", True))
+    # A warm copy with a free slot can start now, so it is preferred over loading a cold one.
+    wire.wires[9442] = httpx.ASGITransport(app=worker(str(tmp_path / "rig.key"), "rig", True, {"free_now": True}))
     front.app.state.log.db.execute("UPDATE node_discovery SET at=0")
     front.portal.call(front.app.state.machines.poll)
     users.add("newcomer", "plain")
@@ -255,14 +256,22 @@ def test_chat_and_roles_use_background_inventory_without_request_fanout(metadata
     assert wire.calls == []
 
 
-def test_missing_routing_inventory_waits_for_monitor_without_probing_fleet(metadata_front):
+def test_missing_routing_inventory_is_primed_once_and_refuses_while_nodes_are_down(metadata_front):
     front, wire, _, key, _ = metadata_front
+    headers = {"authorization": "Bearer " + key}
     front.app.state.log.db.execute("DELETE FROM node_discovery")
     wire.calls.clear()
-    answer = front.post("/v1/chat/completions", headers={"authorization": "Bearer " + key},
-                        json={"model": "small", "messages": []})
+    # The first call after a restart establishes inventory with one signed read per node.
+    answer = front.post("/v1/chat/completions", headers=headers, json={"model": "small", "messages": []})
+    assert answer.status_code == 200, answer.text
+    assert sorted(port for port, path in wire.calls if path == "/loadcoach/facts") == [8442, 9442]
+    front.app.state.log.db.execute("DELETE FROM node_discovery")
+    wire.down = True
+    wire.calls.clear()
+    answer = front.post("/v1/chat/completions", headers=headers, json={"model": "small", "messages": []})
     assert answer.status_code == 503 and answer.headers["retry-after"] == "5"
-    assert "inventory is not ready" in answer.text and wire.calls == []
+    assert "inventory is not ready" in answer.text
+    assert all(path == "/loadcoach/facts" for _, path in wire.calls)  # nothing is sent for inference
 
 
 def test_required_file_store_gets_one_longer_retry_after_a_short_timeout(tmp_path):
@@ -436,7 +445,7 @@ def test_warm_machine_is_chosen_then_a_lost_machine_is_replaced_before_output(tm
     primary_key = machine_key(tmp_path)
     rig_key = str(tmp_path / "rig.key")
     statement.replace_key(rig_key, "r" * 40)
-    rig_state = {"refuse": False}
+    rig_state = {"refuse": False, "free_now": True}  # warm with a free slot: it can start now
     wire = Two(worker(primary_key, "compute", False), worker(rig_key, "rig", True, rig_state))
     settings = Settings(compute="compute", data=str(tmp_path), machine_key_file=primary_key,
                         auth_key_file=str(tmp_path / "weightroom.key"), machines={"rig": {"compute": "http://compute:9442", "machine_key_file": rig_key}},

@@ -21,7 +21,8 @@ from loadcoach.runner import ConfiguredRamCapacity, Refusal, Runner, Server, Tic
 @pytest.fixture
 def hybrid(tmp_path, monkeypatch):
     monkeypatch.setitem(engines._ENGINES, "strata", SimpleNamespace(id="strata", model=model,
-        host_ram_budget=resources.host_ram_budget))
+        host_ram_budget=resources.host_ram_budget,
+        installation=lambda config: SimpleNamespace(enabled=config.engines.get("strata", {}).get("enabled", False))))
     tokenizer = tmp_path / "tokenizer"
     tokenizer.mkdir()
     for name in model.TOKENIZER_FILES:

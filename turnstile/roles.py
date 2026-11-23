@@ -346,6 +346,9 @@ class Routing:
         except (ValueError, AttributeError):  # not JSON, or JSON that is not an object: compute says what is wrong with it
             name = None
             asked = {}
+        if not isinstance(name, str):  # a model that is not a name: compute says what is wrong with it
+            name = None
+        named = 'node' in asked  # only a body that named its node is rewritten; any other passes through unchanged
         target = asked.pop('node', '')
         if not isinstance(target, str):
             return error(400, 'node must be a configured node name.')
@@ -357,7 +360,8 @@ class Routing:
             if target not in self.node_names():
                 return error(404, f'No node called {target}.')
             request.state.route_node = target
-        body = json.dumps(asked).encode()
+        if named:
+            body = json.dumps(asked).encode()
         hosted = self.hosted
         if hosted and isinstance(name, str) and name in hosted.offered(user):  # a model at an outside service: asked for from here
             if not self.platform().model_enabled(hosted.models()[name]):

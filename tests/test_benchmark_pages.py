@@ -1,5 +1,6 @@
 """Benchmark design pages use the caller's catalogue and never enqueue preview selections."""
 
+import httpx
 import pytest
 import json
 from dataclasses import replace
@@ -114,18 +115,20 @@ def test_categories_keep_detail_pages_and_voice_in_their_section():
 
 
 def test_benchmark_page_fetches_the_authorized_catalogue_once(desk, monkeypatch):
-    browser, switch, _ = desk
+    browser, _, _ = desk
     sign_in(browser, 'pat')
-    paths = []
-    original = switch.handle_async_request
+    asked = []
+    send = httpx.AsyncClient.send
 
-    async def counted(request):
-        paths.append(request.url.path)
-        return await original(request)
+    async def counted(self, request, **more):
+        # The page's own reads of the control node; weightroom's background watch keeps its own key.
+        if request.headers.get('authorization') == 'Bearer ' + browser.cookies['weightroom']:
+            asked.append(request.url.path)
+        return await send(self, request, **more)
 
-    monkeypatch.setattr(switch, 'handle_async_request', counted)
+    monkeypatch.setattr(httpx.AsyncClient, 'send', counted)
     assert browser.get('/benchmarks').status_code == 200
-    assert paths.count('/v1/models') == 1
+    assert asked.count('/v1/models') == 1, asked
 
 
 def test_benchmark_pages_filter_models_before_rendering_or_comparing(desk, tmp_path):
@@ -324,10 +327,10 @@ def test_a_model_page_has_a_card_with_its_result_on_each_benchmark(desk, tmp_pat
         store.keep(number, "load-1", {"context_tokens": 2048, "success": True, "load_seconds": 4.0 if mark == "an-older-fingerprint" else 2.0}, "", "")
         store.finish(number, "completed")
         store.synced(number)
-    # Settings stay above saved results; the results card has a pill for every benchmark.
+    # Configuration groups stay above saved results; the results card has a pill for every benchmark.
     whole = browser.get("/models/scored-model").text
     card = whole.split('<span class="card-heading">Benchmark results</span>')[1].split("</details>")[0]
-    assert whole.index('class="card-heading">Settings</span>') < whole.index('class="card-heading">Benchmark results</span>') and card.count('class="nav-link') == len([bench for bench in store.definitions() if not bench.get('embedding')])
+    assert whole.index('id="model-group-context"') < whole.index('class="card-heading">Benchmark results</span>') and card.count('class="nav-link') == len([bench for bench in store.definitions() if not bench.get('embedding') and not bench.get('classifier')])
     assert '<a class="nav-link py-1 active" href="/models/scored-model?benchmark=load#benchmark" aria-current="page" hx-get="/models/scored-model?part=benchmark&amp;benchmark=load">' in card
     # Its figures, two to a row: the score, then what was measured. They lead to the run they came from.
     assert "Score <small>1/s</small></th>" in card and '<td class="w-25">0.5<' in card and "Load time <small>s</small></th>" in card and ">2.0</td>" in card

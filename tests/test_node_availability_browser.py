@@ -12,6 +12,8 @@ def test_offline_node_controls_in_browser(desk, width):
     server, switch, users = desk
     users.change("jordan", own={"add": ["front-wake"]})
     sign_in(server, "jordan")
+    # Wake settings belong to the control node; the offline notice offers Wake only once they exist.
+    assert server.post("/settings/machines", data={"machine": "compute", "value-wake_mac": "00:11:22:33:44:55"}).status_code == 200
     assert server.get("/compute-nodes").status_code == 200
     switch.off = True
     with sync_playwright() as engine:
@@ -23,12 +25,12 @@ def test_offline_node_controls_in_browser(desk, width):
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto("http://offline.test/compute-nodes")
-        expect(page.locator("#node-availability")).to_contain_text("Node unavailable: compute")
+        expect(page.locator("#node-availability")).to_contain_text("compute is not answering")
         buttons = page.locator('form[action="/compute-nodes/engines"] button')
         assert buttons.count() > 0
         for button in buttons.all():
             expect(button).to_be_disabled()
-        expect(page.locator('form[action="/wake"] button')).to_be_enabled()
+        expect(page.locator('#node-availability form[action="/telemetry/nodes/compute/wake"] button')).to_be_enabled()
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.goto("http://offline.test/account/appearance")
         for button in page.locator('form[method="post"] button.btn-primary').all():

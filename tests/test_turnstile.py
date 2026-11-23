@@ -13,7 +13,7 @@ from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from front_helpers import KEY, machine_key
+from front_helpers import KEY, machine_key, with_node
 from loadcoach import statement
 from loadcoach.groups import Group
 from loadcoach.users import Users
@@ -30,7 +30,7 @@ class Compute(httpx.AsyncBaseTransport):
         async def answer(request: Request):
             said = getattr(request.state, "said", None)
             body = (await request.body()).decode()
-            if request.url.path == "/":
+            if request.url.path == "/public":
                 return JSONResponse({"page": "for anyone"})
             if request.url.path == "/forged":
                 return JSONResponse({"from": "somewhere else"}, headers={statement.PROOF: "0" * 64})
@@ -62,7 +62,7 @@ def front(tmp_path, monkeypatch):
     good = {"authorization": "Bearer " + users.new_key("pat")}
     compute, woken = Compute(machine_key(tmp_path)), []
     settings = Settings(compute="compute", data=str(tmp_path), wake_mac=MAC, wake_address="10.0.0.255", wait=0.5, machine_key_file=str(tmp_path / "machine.key"))
-    app = build_app(settings, httpx.AsyncClient(transport=compute), lambda *sent: woken.append(sent), users=users)
+    app = with_node(build_app(settings, httpx.AsyncClient(transport=compute), lambda *sent: woken.append(sent), users=users), "compute")
     # These ports belong to one process: start its lifespan once, not once per client.
     with TestClient(app, base_url="http://front:8442") as coach:
         door = TestClient(app, base_url="http://front:8443")
@@ -89,7 +89,7 @@ def test_a_request_goes_on_with_a_statement_in_place_of_its_key(front):
     tries = compute.tries
     refused = coach.get("/v1/models", headers={"authorization": "Bearer lc_wrong"})
     assert refused.status_code == 401 and refused.json()["error"]["message"] == "Missing or wrong API key." and compute.tries == tries
-    assert coach.get("/").json() == {"page": "for anyone"}  # no key at all goes on unsigned, and compute says what it allows
+    assert coach.get("/public").json() == {"page": "for anyone"}  # no key at all goes on unsigned, and compute says what it allows
     assert coach.get("/v1/models").status_code == 401
 
     # Compute's answer comes back as it was, a stream as a stream, without the proof that is for turnstile alone.
@@ -124,12 +124,12 @@ def test_front_becomes_ready_while_optional_observation_sweep_is_running(tmp_pat
 def test_any_valid_key_wakes_compute_and_no_other(front):
     coach, door, _, compute, woken, good = front
     compute.asleep = 1
-    assert coach.get("/v1/models").status_code == 503  # no key: told it is off, and not woken
+    assert coach.get("/v1/models").status_code == 401  # no key: nothing to route by, and not woken
     assert coach.get("/v1/models", headers={"authorization": "Bearer lc_wrong"}).status_code == 401
     assert woken == []
 
     compute.asleep = 3  # the first try fails, then two more while it wakes
-    answered = door.post("/mcp", content="{}", headers=good)
+    answered = door.post("/v1/embeddings?node=compute", content="{}", headers=good)  # a request that names its node wakes it only for model work
     assert answered.status_code == 200 and answered.json()["port"] == 8443  # the caller waited, and got its answer
     assert woken == [(MAC, "10.0.0.255")] * 3  # a packet before each further try, since one can be lost
 
@@ -164,7 +164,7 @@ def test_monitoring_never_wakes_compute_even_without_client_header(front, path, 
     response = coach.get(path, headers=good)
     assert response.status_code == expected
     if expected == 503:
-        assert response.headers['x-turnstile'] == 'compute-off'
+        assert response.headers['retry-after']  # told to come back, never held while a node wakes
     assert compute.tries == before + attempts and not woken
 
 
@@ -288,7 +288,8 @@ def test_a_full_pool_is_turned_away_at_once_and_never_held_here(tmp_path, monkey
     machine_key(tmp_path)
     settings = Settings(compute="compute", data=str(tmp_path), machine_key_file=str(tmp_path / "machine.key"), max_in_flight=7, busy_retry_seconds=3)
     with TestClient(build_app(settings, httpx.AsyncClient(transport=Full()), lambda *sent: None, users=users), base_url="http://front:8442") as coach:
-        for request in (lambda: coach.get("/v1/models", headers=good), lambda: coach.post("/v1/chat/completions", content='{"model": "small"}', headers=good)):
+        # A model request first needs the fleet's inventory; a request to a named node meets the full pool at once.
+        for request in (lambda: coach.get("/v1/models", headers=good), lambda: coach.get("/loadcoach/status?node=compute", headers=good)):
             busy = request()
             assert busy.status_code == 503 and busy.headers["retry-after"] == "3" and busy.headers["x-turnstile"] == "busy"
             assert "already carrying 7 requests" in busy.json()["error"]["message"]

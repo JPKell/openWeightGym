@@ -37,6 +37,7 @@ GROUPS = {
     # Each ability by name, as a file would list them, and the most sensitive work: nobody hands out what they may not do themselves.
     "admin": Group(can=frozenset(ABILITIES) - OWN_KEY - {"superuser"}, max_sensitivity="restricted"),
     "plain": Group(can=frozenset({"load"})),
+    "tools": Group(can=frozenset({"load", "use-tools"})),  # a request that offers the model tools needs use-tools
     "careful": Group(can=frozenset({"load"}), second_step=True),
     "waker": Group(can=frozenset({"load", "front-wake"})),
     "superuser": read_group("superuser", {"can": ["superuser"]}),
@@ -155,10 +156,12 @@ def test_rename_from_users_page_and_case_insensitive_login(desk):
 
     # With compute off the accounts are still here, with the same spelling and the same count of wrong tries.
     switch.off = True
-    assert "Node unavailable: compute" in sign_in(browser, "WaNdA").text and browser.cookies["weightroom"].startswith("lc_")
-    for name in ("WANDA", "wanda", "Wanda", "wAnda", "waNda"):
+    assert "compute is not answering" in sign_in(browser, "WaNdA").text and browser.cookies["weightroom"].startswith("lc_")
+    for name in ("WANDA", "wanda", "Wanda", "wAnda"):
         assert "Wrong name or password" in sign_in(browser, name, "wrong").text
-    assert "Too many wrong tries" in sign_in(browser, "WANda").text
+    locked = sign_in(browser, "waNda", "wrong")  # the fifth wrong try locks the name, whatever its spelling
+    assert locked.status_code == 429 and "Too many sign-in failures" in locked.text
+    assert "Too many sign-in failures" in sign_in(browser, "WANda").text
 
 
 def test_signing_in_is_checked_by_loadcoach_and_the_browser_gets_a_session(desk, tmp_path):
@@ -251,22 +254,23 @@ def test_with_compute_off_it_says_so_and_anyone_may_sign_in_since_the_accounts_a
 
     switch.off = True
     off = browser.get("/")
-    assert off.status_code == 200 and "Node unavailable: compute" in off.text  # the first page, with the last it saw
-    assert "compute off<span class=\"reading\"> since" in browser.get("/pulse").text
+    assert off.status_code == 200 and "compute is not answering" in off.text  # the first page, with the last it saw
+    assert "<b>Control node</b>" in browser.get("/pulse").text  # the pulse is the control node's; compute's notice is above
     assert browser.get("/models?complete=1").status_code == 403  # permissions are checked before the compute lookup
     assert browser.cookies["weightroom"] == session  # the sign-in is kept for when compute is back
     switch.off = False
-    assert '<h1 class="page-title wrap">Status</h1>' in browser.get("/").text and "<b>compute</b>" in browser.get("/pulse").text
+    assert '<h1 class="page-title wrap">Status</h1>' in browser.get("/").text and "compute is not answering" not in browser.get("/").text
     assert "Your group may not wake compute." in browser.post("/wake").text and woken == []
 
     # Off again. Turnstile checks a password on this machine, so anyone may sign in, and see what compute last did.
     switch.off = True
     assert "Wrong name or password" in sign_in(browser, "wanda", "wrong horse").text
-    assert "Node unavailable: compute" in sign_in(browser, "pat").text and '<form method="post" action="/wake"' not in browser.get("/").text
+    assert "compute is not answering" in sign_in(browser, "pat").text and '<form method="post" action="/wake"' not in browser.get("/").text
     home = sign_in(browser, "wanda")
-    assert "Node unavailable: compute" in home.text and '<h1 class="page-title wrap">Status</h1>' in home.text
+    assert "compute is not answering" in home.text and '<h1 class="page-title wrap">Status</h1>' in home.text
     # Waking compute is the one thing to do while it is off, for those whose group may.
-    assert '<form method="post" action="/wake"' in home.text and woken == []
+    # The notice offers a node's own Wake button only for nodes with wake settings; the page's /wake still sends weightroom's packet.
+    assert woken == []
     assert "Asked compute to wake." in browser.post("/wake").text and woken == [("bc:fc:e7:3d:90:6c", "10.0.0.255")]
 
     # A superuser may do everything, which includes what the control node itself lets people do.
@@ -302,8 +306,9 @@ def test_front_owned_pages_remain_available_when_every_loadcoach_is_down(desk):
     assert not unavailable, unavailable
     assert "Saved benchmark results remain available" in browser.get("/benchmarks").text
     assert "saved-model" in browser.get(f"/benchmarks/run/{number}").text
-    reliability = browser.get("/reliability").text
-    assert "Showing saved reliability evidence" in reliability and "saved-model" in reliability
+    # The control node keeps its last fleet inventory, so saved evidence for a model it no longer lists is historical.
+    reliability = browser.get("/reliability?fingerprints=all").text
+    assert "compute is not answering" in reliability and "saved-model" in reliability
 
 
 def test_a_form_sent_from_another_site_is_refused(desk):
@@ -335,7 +340,10 @@ def test_the_settings_file_names_where_the_key_is(tmp_path):
         legacy.write('\n[deploy.nodes.old]\nssh = "obsolete host"\n')
     assert 'deploy' not in load_settings(file).file
 
-    for wrong in ('compute = "http://x"\n', 'compute = "http://x"\nkey_file = "nowhere"\n', 'key_file = "weightroom.key"\n', 'compute = "x"\nkey_file = "weightroom.key"\ncolour = 1\n', 'compute = "http://x"\nkey_file = "weightroom.key"\nmock_input_rate = -1\n', 'compute = "http://x"\nkey_file = "weightroom.key"\nthird_party_services = ["docker", "other"]\n'):
+    # `compute` is retired (the nodes are turnstile's [machines.NAME]), so a file without it still starts.
+    file.write_text('key_file = "weightroom.key"\n')
+    assert load_settings(file).compute == ""
+    for wrong in ('compute = "http://x"\n', 'compute = "http://x"\nkey_file = "nowhere"\n', 'compute = "x"\nkey_file = "weightroom.key"\ncolour = 1\n', 'compute = "http://x"\nkey_file = "weightroom.key"\nmock_input_rate = -1\n', 'compute = "http://x"\nkey_file = "weightroom.key"\nthird_party_services = ["docker", "other"]\n'):
         file.write_text(wrong)
         with pytest.raises(SystemExit):
             load_settings(file)
@@ -472,8 +480,8 @@ def test_the_groups_page_adds_a_group_and_its_own_page_changes_it(desk):
     listed = browser.get("/groups").text
     # A directory of every group beside the first one's page.
     directory = re.findall(r'href="/groups/([^"/]+)"[^>]*data-group-choice="\1"', listed)
-    assert len(directory) == 6 and "plain" in directory and 'aria-current="page"' in listed and 'id="selected-group"' in listed
-    assert "6</strong> groups" in listed and 'data-group-filters="editable members' in listed and "superuser" in listed
+    assert len(directory) == len(GROUPS) and "plain" in directory and 'aria-current="page"' in listed and 'id="selected-group"' in listed
+    assert f"data-group-count role=\"status\" aria-live=\"polite\">{len(GROUPS)}</span>" in listed and 'data-group-filters="editable members' in listed and "superuser" in listed
     assert browser.get("/groups?open=add").text.count('data-add-panel=""') == 1 and 'data-add-panel="" hidden' in listed
 
     wrong = browser.post("/groups", data={"name": "Read ers"})
@@ -614,8 +622,9 @@ def test_a_model_is_added_edited_and_removed_from_its_one_page(desk, tmp_path):
         "model": str(file), "ctx-size": 8192, "parallel": 2, "temp": 0.7, "top-k": 20, "tensor-split": [1, 1], "embedding": True}}  # fmt: skip
     assert 'name="gpu_card" value="A" type="checkbox" class="form-check-input" data-gpu-card checked' in saved.text
     assert 'name="gpu_card" value="B" type="checkbox" class="form-check-input" data-gpu-card checked' in saved.text
-    assert 'value="[1, 1]"' in saved.text and 'value="true"' in saved.text
-    assert '<code>--tensor-split</code>' in saved.text and '<input name="flag" type="hidden" value="tensor-split">' in saved.text
+    assert 'value="[1, 1]"' in saved.text  # --embedding has its own control rather than a flag row
+    assert 'name="embedding" value="yes" type="checkbox" class="form-check-input" aria-describedby="embedding-help" checked' in saved.text
+    assert '<code>--tensor-split</code>' in saved.text and '<input name="flag" class="form-control" type="hidden" value="tensor-split">' in saved.text
 
     # What LoadCoach refuses is said in its words, and what was typed stays in the form.
     refused = browser.post("/models/org/small:v1", data={**form, "gpu_card": "C", "ctx": "16384"})
@@ -869,7 +878,7 @@ def test_the_first_page_shows_what_compute_is_doing_and_one_request_has_one_page
     pat, cam = (httpx.Client(base_url=compute, headers={"authorization": "Bearer " + users.new_key(name)}, timeout=30) for name in ("pat", "cam"))
     sign_in(browser, "jordan")
     quiet = browser.get("/status").text
-    assert "No requests right now." in quiet and "<b>GPU0</b>" in quiet and "empty" in quiet and "No GPUs are reserved exclusively on the primary compute node." in quiet
+    assert "No requests right now." in quiet and "<b>GPU0</b>" in quiet and "empty" in quiet and "No GPUs are reserved exclusively." in quiet
 
     # Pat's request thinks for a long time. Cam's waits behind it.
     answers = []
@@ -899,7 +908,7 @@ def test_the_first_page_shows_what_compute_is_doing_and_one_request_has_one_page
 
     # Someone who is not pat and has no say sees neither the request nor a way to stop it.
     sign_in(browser, "cam")
-    assert browser.get(f"/requests/{number}").status_code == 403 and "1 request of other people" in browser.get("/status").text
+    assert browser.get(f"/requests/{number}").status_code == 403 and "1 request by other people" in browser.get("/status").text
     assert "Stopped" not in browser.post(f"/requests/{number}/stop").text
     sign_in(browser, "jordan")
 
@@ -908,13 +917,14 @@ def test_the_first_page_shows_what_compute_is_doing_and_one_request_has_one_page
     looping.join(), waiting.join()
     assert [answer.status_code for answer in answers] == [200, 200]  # pat's was cut short, cam's went ahead and was answered
     over = browser.get(f"/requests/{number}").text
-    assert "stopped by jordan" in over and "Looked at" in over and "Stop this request" not in over and "hx-get" not in over.split('id="request"')[1].split(">")[0]
+    assert "The request ended: stopped." in over and "<dt>Ended by</dt><dd>jordan</dd>" in over and "Looked at" in over and "Stop this request" not in over and "hx-get" not in over.split('id="request"')[1].split(">")[0]
     sign_in(browser, "pat")
     assert f'<a href="/requests/{number}">request {number}</a>' in browser.get("/account/logs").text  # pat's own latest entries lead to the same page
 
 
 def test_the_log_page_shows_what_is_on_record_and_a_request_page_what_was_said(live_desk):
     browser, compute, users = live_desk
+    users.change("pat", group="tools")  # the request offers the model a tool
     pat = httpx.Client(base_url=compute, headers={"authorization": "Bearer " + users.new_key("pat")}, timeout=30)
     sent = {
         "model": "small", "temperature": 0.2, "tools": [{"type": "function", "function": {"name": "add"}}],
@@ -968,14 +978,14 @@ def test_a_failure_has_a_page_with_what_was_printed_and_a_model_can_be_asked_abo
     sign_in(browser, "jordan")
     listed = browser.get("/log?kind=request&what=refused&complete=1").text
     its = browser.get("/requests/" + re.search(r'href="/requests/(\d+)"', listed).group(1)).text
-    assert "<dt class=\"col-4 col-md-2\">Why</dt>" in its and "cudaMalloc failed: out of memory" in its
+    assert "The request ended with an error." in its and "cudaMalloc failed: out of memory" in its
 
     # The model's failure has a page: everything llama-server printed before it gave up, and where to look next.
     number = re.search(r'data-event-id="(\d+)"', browser.get("/log?kind=model&what=failed&complete=1").text).group(1)
     entry = browser.get(f"/log/{number}").text
     assert "model failed" in entry and "What llama-server printed last" in entry and "exiting due to model loading error" in entry and "fake: starting with" in entry
     assert "Ask a model about this" in entry and "<option>small</option>" in entry and "<option>broken</option>" in entry and 'hx-post="/ask"' in entry
-    assert "/output?at=" not in entry  # this desk has no spotter to read the lines, so no way to them is offered
+    assert "/output?at=" in entry  # spotter is always reached through turnstile's machine port, so the way to the lines is offered
     # An entry about a request leads to the request's one page. The entry has the control node's number; the request is known by compute's.
     asked_log = browser.get("/log?kind=request&what=asked&complete=1").text
     entry_id = re.search(r'data-event-id="(\d+)"', asked_log).group(1)
@@ -1189,11 +1199,11 @@ def test_the_controls_do_what_they_say_and_only_for_those_who_may(live_desk):
     assert "empty" in browser.get("/?part=status").text and "/models/small" not in browser.get("/?part=status").text
 
     assert "Turned away 0 waiting requests." in browser.post("/control", data={"do": "clear"}).text
-    assert pat.post("/loadcoach/lock", json={"seconds": 60}).status_code == 403  # pat may not lock; jordan's key can
+    assert pat.post("/loadcoach/lock?node=compute", json={"seconds": 60}).status_code == 403  # pat may not lock; jordan's key can
     jordan = httpx.Client(base_url=compute, headers={"authorization": "Bearer " + users.new_key("jordan")}, timeout=30)
-    assert jordan.post("/loadcoach/lock", json={"seconds": 60}).status_code == 200
+    assert jordan.post("/loadcoach/lock?node=compute", json={"seconds": 60}).status_code == 200
     assert "held by <b>jordan</b>" in browser.get("/?part=status").text
-    assert "The lock is broken." in browser.post("/control", data={"do": "unlock"}).text and "No GPUs are reserved exclusively on the primary compute node." in browser.get("/?part=status").text
+    assert "The lock is broken." in browser.post("/control", data={"do": "unlock"}).text and "No GPUs are reserved exclusively." in browser.get("/?part=status").text
 
     # Taking no new requests: said on the first page to everyone, ended there by those who may.
     assert "No new requests are taken. Nothing was under way." in browser.post("/control", data={"do": "drain", "why": "new drives."}).text
@@ -1330,7 +1340,7 @@ def test_benchmark_runs_offers_one_model_outstanding_queue(desk):
     assert page.status_code == 200
     assert 'id="outstanding-model"' in page.text
     assert "Queue outstanding benchmarks" in page.text
-    assert "model settings, benchmark protocol, inference engine or machine changes" in page.text
+    assert "Queues missing or outdated enabled tests." in page.text and "Current and active evidence is excluded." in page.text
 
 
 def test_outstanding_partial_result_shows_queued_and_each_unavailable_plan(desk):
@@ -1352,16 +1362,16 @@ def test_outstanding_partial_result_shows_queued_and_each_unavailable_plan(desk)
     assert '1 already current.' in page.text and '1 already queued or running.' in page.text
     assert 'Environment unavailable: context at rig.' in page.text
     assert 'Could not queue: tool_use at compute (This location does not support tool calls.).' in page.text
-    assert 'class="alert alert-warning said said-box" role="alert"' in page.text
+    assert 'class="alert alert-warning d-block said said-box" role="alert"' in page.text
 
 
 def test_compute_service_actions_and_system_logs(desk_with_machine):
     browser, _, _, _, asked = desk_with_machine
     sign_in(browser, "pat")
-    denied = browser.post("/machine/services/loadcoach/restart")
-    assert denied.status_code == 400 and "may not" in denied.text
+    denied = browser.post("/machine/services/loadcoach/restart", data={"node": "compute"})
+    assert denied.status_code == 403 and "Service actions require restart-services." in denied.text
     sign_in(browser, "jordan")
-    done = browser.post("/machine/services/loadcoach/restart")
+    done = browser.post("/machine/services/loadcoach/restart", data={"node": "compute"})
     assert done.url.path == "/telemetry" and "Asked loadcoach to restart. It is now active." in done.text
     assert "--user restart loadcoach.service" in asked.read_text().splitlines()
     # What a service printed has a page of its own, reached from here: the latest lines, or those around a moment.
@@ -1381,7 +1391,7 @@ def test_compute_service_actions_and_system_logs(desk_with_machine):
         time.sleep(0.05)
     changed_logs = browser.get("/output").text
     assert "<option >apache</option>" in changed_logs and ">ollama</option>" not in changed_logs and ">docker</option>" not in changed_logs and ">nginx</option>" not in changed_logs
-    blocked = browser.post("/machine/services/docker/restart")
+    blocked = browser.post("/machine/services/docker/restart", data={"node": "compute"})
     assert blocked.status_code == 400 and "docker is not selected under WeightRoom settings." in blocked.text
     around = browser.get("/output?source=kernel&at=2026-10-08T12:00:00&before=300&after=60")
     assert around.status_code == 200 and "<option selected>kernel</option>" in around.text and 'value="2026-10-08T12:00:00"' in around.text and 'value="300" aria-label="Seconds before"' in around.text
@@ -1397,7 +1407,7 @@ def test_with_loadcoach_down_and_the_machine_up_someone_can_still_sign_in_and_st
 
     # A sign-in from before still counts: the accounts are on this machine, and turnstile says whose key it is.
     off = browser.get("/")
-    assert off.status_code == 200 and "Node unavailable: compute" in off.text
+    assert off.status_code == 200 and "compute is not answering" in off.text
     assert browser.get("/telemetry").status_code == 200
 
     # A fresh sign-in is checked by turnstile, here, whatever compute is doing.
@@ -1406,7 +1416,7 @@ def test_with_loadcoach_down_and_the_machine_up_someone_can_still_sign_in_and_st
     sign_in(browser, "jordan")
     assert browser.get("/telemetry").status_code == 200
     assert users.by_key(browser.cookies["weightroom"]).name == "jordan"  # a real session key, good at LoadCoach too once it is back
-    started = browser.post("/machine/services/loadcoach/start")
+    started = browser.post("/machine/services/loadcoach/start", data={"node": "compute"})
     assert started.url.path == "/telemetry" and "Asked loadcoach to start." in started.text
     assert "--user start loadcoach.service" in asked.read_text()
 
@@ -1416,7 +1426,7 @@ def test_with_loadcoach_down_and_the_machine_up_someone_can_still_sign_in_and_st
     # With both down, anyone still signs in, and sees what compute last did.
     compute.off = machine.off = True
     browser.post("/sign-out")
-    assert "Node unavailable: compute" in sign_in(browser, "pat").text
+    assert "compute is not answering" in sign_in(browser, "pat").text
 
 
 def test_voice_settings_edit_single_profile_fields_and_named_speaker(desk, tmp_path):
@@ -1525,7 +1535,7 @@ def test_hermes_settings_are_separate_editable_and_keep_machine_credentials_read
     assert '<option value="not-allowed"' not in page
     assert 'name="value-hermes_system_prompt"' in page
     assert 'name="value-hermes"' not in page
-    assert 'Direct conversations' in page and 'Hermes agent' in page
+    assert 'Conversation profile' in page and 'Hermes agent' in page and 'Hermes and capacity' in page  # task cards, not catalogue sections
     saved = browser.post("/settings/voice-gateway", data={"value-hermes_model": "alternate",
         "value-hermes_system_prompt": 'You are Jeeves.\nSay "sir".', "value-hermes_context_tokens": "4096",
         "value-hermes_max_turns": "4", "value-hermes_max_output_tokens": "256", "value-hermes_reasoning_effort": "low",
@@ -1569,7 +1579,7 @@ def test_a_model_file_is_found_at_hugging_face_and_brought_down_from_the_site(de
 
     found = browser.get("/hub?q=tiny").text
     assert '<h1 class="page-title wrap">Hugging Face</h1>' in found
-    assert 'href="/hub?repository=acme/tiny-GGUF">acme/tiny-GGUF</a>' in found and "Nothing found" in browser.get("/hub?q=llama").text
+    assert 'href="/hub?repository=acme/tiny-GGUF&amp;kind=">acme/tiny-GGUF</a>' in found and "Nothing found" in browser.get("/hub?q=llama").text
     files = browser.get("/hub?q=acme/tiny-GGUF").text  # a repository typed out goes straight to its files
     assert 'name="file" value="tiny-q4.gguf"' in files and "and the other 1 of its 2 parts" in files
     # With no storage there is nowhere to choose, and the cache is refused when asked for anyway.
@@ -1725,11 +1735,11 @@ def test_chat_comparison_has_two_columns_and_shared_followups(live_desk):
     browser, compute, users = live_desk
     sign_in(browser, "pat")
     token = {"authorization": "Bearer " + users.new_key("jordan")}
-    original = httpx.get(compute + "/loadcoach/models", headers=token).json()["models"]
+    original = httpx.get(compute + "/loadcoach/models?node=compute", headers=token).json()["models"]
     # The live fixture supplies one model; register a second using that fixture's file.
     settings = next(m for m in original if m["name"] == "small")
     body = {k: settings[k] for k in ["flags", "gpus"] if k in settings}
-    made = httpx.post(compute + "/loadcoach/models/second", headers=token, json=body)
+    made = httpx.post(compute + "/loadcoach/models/second?node=compute", headers=token, json=body)
     assert made.status_code == 201, made.text
     page = browser.post("/chat", data={"content": "hello", "model": "small", "compare_model": "second"})
     ref = str(page.url).rsplit("/", 1)[-1]
@@ -1834,43 +1844,45 @@ def test_the_batches_page_shows_how_far_each_has_got_and_gives_its_answers(live_
     assert "No batches." in browser.get("/batches").text
 
 
-def test_backup_page_creates_a_paired_verified_recovery_set(desk, tmp_path, backup_keys):
+def test_backup_page_creates_a_verified_backup_on_each_selected_node(desk, tmp_path, backup_keys):
     backup_keys.configure(tmp_path / 'backups')
     backup_keys.configure(tmp_path / 'data/backups')
     browser, _, _ = desk
     sign_in(browser, "jordan")
     page = browser.get("/backups")
     assert page.status_code == 200
-    assert "Last verified recovery point" in page.text and "Key and archive protection" in page.text
-    assert "Backups" in page.text and "No backups have been made" in page.text
+    assert "Back up selected nodes" in page.text and "Recovery inventory" in page.text
+    assert "No backups on the selected nodes." in page.text and "No verified backup yet" in page.text
 
-    created = browser.post("/backups/create")
-    assert created.status_code == 200
-    assert "created and restored into isolated folders successfully" in created.text
-    assert created.text.count("verified") >= 3
-    assert "Archive / data" in created.text and "data before compression" in created.text
-    preview_link = re.search(r'href="(/backups/[^"]+)">Restore preview</a>', created.text)
-    assert preview_link
-    preview = browser.get(preview_link.group(1)).text
-    assert "Services that must be stopped" in preview
-    assert "weightroom.service" in preview and "loadcoach.service" in preview
-    assert "users <strong>" in preview and "conversations <strong>" in preview and "benchmark runs <strong>" in preview
-    assert "Verified database stores" in preview and "SQLite online backup API" in preview
+    # Each node backs up its own data; the control node and compute each get a verified archive with the same identifier.
+    created = browser.post("/backups/create", data={"node": ["front", "compute"]})
+    assert created.status_code == 200 and "Verified backups: front, compute." in created.text
+    assert created.text.count("verified") >= 2 and "before compression" in created.text
+    previews = list(dict.fromkeys(re.findall(r'href="(/backups/[^"]+)"[^>]*>Restore preview</a>', created.text)))
+    assert sorted(link.rsplit("=", 1)[1] for link in previews) == ["compute", "front"]
+    assert len({link.split("?")[0] for link in previews}) == 1
+    front, compute = (browser.get(next(link for link in previews if link.endswith("=" + name))).text for name in ("front", "compute"))
+    assert "Services that must be stopped" in front and "weightroom.service" in front and "accounts.db" in front
+    assert "Services that must be stopped" in compute and "loadcoach.service" in compute and "loadcoach.db" in compute
+    assert "Isolated restore checks" in compute
 
 
 def test_backup_post_cannot_bypass_permissions_or_encryption_setup(desk, tmp_path, backup_keys):
     browser, _, _ = desk
     sign_in(browser, 'pat')
-    assert browser.post('/backups/create').status_code == 403
+    assert browser.post('/backups/create', data={'node': 'front'}).status_code == 403
     sign_in(browser, 'jordan')
-    refused = browser.post('/backups/create')
-    assert refused.status_code == 400 and 'not configured' in refused.text
-    assert not (tmp_path / 'backups').exists()  # control node preflight never starts compute
+    assert 'Choose at least one node' in browser.post('/backups/create').text
+    assert browser.post('/backups/create', data={'node': 'elsewhere'}).status_code == 400
+    refused = browser.post('/backups/create', data={'node': ['front', 'compute']})
+    assert refused.status_code == 400 and 'front: Backup encryption is not configured' in refused.text
+    assert 'compute: Compute backup failed: Backup encryption is not configured' in refused.text
+    assert not list((tmp_path / 'backups').glob('*/archive*')) and not list((tmp_path / 'data/backups').glob('*/archive*'))
+    # Nodes are independent: the control node's key lets its backup succeed while compute's is still refused.
     backup_keys.configure(tmp_path / 'data/backups')
-    refused = browser.post('/backups/create')
-    assert refused.status_code == 400 and 'not configured' in refused.text
-    assert not list((tmp_path / 'data/backups').glob('*/archive*'))
-
+    partial = browser.post('/backups/create', data={'node': ['front', 'compute']})
+    assert partial.status_code == 400 and 'Verified backups: front.' in partial.text and 'compute: Compute backup failed' in partial.text
+    assert list((tmp_path / 'data/backups').glob('*/archive*')) and not list((tmp_path / 'backups').glob('*/archive*'))
 
 def test_database_page_lists_front_tables_and_exports_restorable_sql(desk, tmp_path):
     browser, _, _ = desk
@@ -1904,7 +1916,7 @@ def test_store_health_permissions_backup_age_and_compute_outage(desk, tmp_path, 
     page = browser.get("/databases")
     assert "Store health and backup age" in page.text and "No matching verified archive" in page.text
     assert "default_weightroom_chat" in page.text and "weightroom.chat" in page.text
-    assert browser.post("/backups/create").status_code == 200
+    assert browser.post("/backups/create", data={"node": ["front", "compute"]}).status_code == 200
     page = browser.get("/databases")
     assert '>fresh</span>' in page.text and "hours old" in page.text
     compute.off = True

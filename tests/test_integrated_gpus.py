@@ -135,7 +135,7 @@ def test_worker_apis_and_all_engine_choices_share_the_filtered_inventory(tmp_pat
                     gpu_details=[{'id': 'CUDA0', 'vendor': 'NVIDIA', 'cuda_index': 0},
                                  {'id': IGPU, 'vendor': 'AMD', 'integrated': True}],
                     disabled_gpus=[IGPU], engine_gpus={'llama_cpp': ['CUDA0', IGPU]})
-    with front_of(lambda front: build_app(config, front=front), Users(':memory:', GROUPS), tmp_path) as client:
+    with front_of(lambda front: build_app(config, front=front), Users(':memory:', GROUPS), tmp_path, node='compute') as client:
         headers = add_user(client, 'admin', 'admin')
         for path in ('/loadcoach/status', '/loadcoach/models', '/loadcoach/cards'):
             response = client.get(path, headers=headers)
@@ -147,7 +147,7 @@ def test_worker_apis_and_all_engine_choices_share_the_filtered_inventory(tmp_pat
             assert cards == ['CUDA0']
         report = client.get('/loadcoach/models', headers=headers).json()
         assert all(IGPU not in cards for cards in report['engine_cards'].values())
-        settings = client.get('/loadcoach/settings', headers=headers).json()
+        settings = client.get('/turnstile/machines/compute/settings', headers=headers).json()  # a node's settings, as the console reads them
         rows = next(program['settings'] for program in settings['programs'] if program['program'] == 'loadcoach')
         assert next(row['value'] for row in rows if row['name'] == 'gpus') == ['CUDA0']
 

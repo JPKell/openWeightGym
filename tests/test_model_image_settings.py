@@ -72,8 +72,11 @@ def test_fixed_fit_profiles_do_not_interpolate_or_turn_unknown_into_zero():
     assert fit_line(model,['A','B'])['points']==[]
     assert not compatible({'capabilities':{'load_probes':True}}, {'id':'extraction','quality':True})
     assert compatible({'capabilities':{'load_probes':True}}, {'id':'load'})
-    with pytest.raises(ValueError,match='unknown'):
+    # A named destination is a pin: an unavailable one waits and a missing copy is refused, never replaced.
+    with pytest.raises(ValueError,match='will wait for it'):
         resolve_location({'id':'one','locations':[{'machine':'other'}]},'preferred',['preferred'])
+    with pytest.raises(ValueError,match='no enabled copy on node preferred'):
+        resolve_location({'id':'one','locations':[{'machine':'other'}]},'preferred')
 
 
 def test_atomic_queue_reservation_excludes_manual_and_scheduled_duplicate(tmp_path):
@@ -86,7 +89,7 @@ def test_atomic_queue_reservation_excludes_manual_and_scheduled_duplicate(tmp_pa
 
 
 def test_outstanding_occurrence_freezes_one_pair_across_lost_reply_and_restart(tmp_path):
-    store=seeded(tmp_path,kind='outstanding',machine='preferred',model_ids=[],benchmarks=['load'])
+    store=seeded(tmp_path,kind='outstanding',machine='other',model_ids=[],benchmarks=['load'])
     due=store.rows()[0]['next_at'];bench=Benchmarks(tmp_path/'bench.db');calls=[]
     environment={'engine_hash':'engine','machine_hash':'machine'}
     model={'id':'first','owned_by':'loadcoach','model_id':'model-a','fingerprint':'fp',
@@ -102,7 +105,7 @@ def test_outstanding_occurrence_freezes_one_pair_across_lost_reply_and_restart(t
         async with httpx.AsyncClient(base_url='http://front',transport=httpx.MockTransport(wire)) as client:
             worker=ScheduleWorker(store,client,bench,None,Gate(),asyncio.Event());await worker.tick(due)
             assert store.occurrences()[0]['state']=='dispatching'
-            frozen=store.occurrences()[0]['spec']['target'];assert frozen['machine']=='other' and frozen['fallback_reason']
+            frozen=store.occurrences()[0]['spec']['target'];assert frozen['machine']=='other' and not frozen['fallback_reason']
             # Rebuild the worker as after a restart. No new pair is selected.
             worker=ScheduleWorker(store,client,bench,None,Gate(),asyncio.Event());await worker.tick(due+1)
             assert calls[0]==calls[1] and len(bench.listing())==1

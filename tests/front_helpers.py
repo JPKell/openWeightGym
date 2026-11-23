@@ -120,10 +120,34 @@ class Later:
         await self.app(scope, receive, send)
 
 
-def front_of(build_compute, users: Users, folder: Path, port: int = 8442, address: str = "testclient", **settings) -> TestClient:
+def naming(scope: dict, node: str | None) -> dict:
+    """`scope` with the x-suite-node header naming `node`, for a request outside /v1/ that names none itself.
+
+    Turnstile has no default node: tests of a node's own program, rather than of routing, name it
+    once. Model requests under /v1/ are still routed by model.
+    """
+    headers = scope.get("headers") or []
+    if (node and scope["type"] in ("http", "websocket") and not scope["path"].startswith("/v1/")
+            and b"node=" not in scope.get("query_string", b"") and not any(key == b"x-suite-node" for key, _ in headers)):
+        return {**scope, "headers": [*headers, (b"x-suite-node", node.encode())]}
+    return scope
+
+
+def with_node(app, node: str):
+    """`app`, with every request outside /v1/ naming `node` unless it names one itself."""
+    async def named(scope, receive, send):
+        """Pass the request on, naming the node."""
+        await app(naming(scope, node), receive, send)
+    named.state = app.state
+    return named
+
+
+def front_of(build_compute, users: Users, folder: Path, port: int = 8442, address: str = "testclient",
+             node: str | None = None, **settings) -> TestClient:
     """A client for turnstile in front of the app `build_compute(front)` makes. `front` is how that app reaches turnstile.
 
     `address` is where the test's requests seem to come from: "127.0.0.1" for turnstile's own machine.
+    `node` names the node each request outside /v1/ is for; see `naming`.
     """
     turnstile = Later()
     compute = build_compute(httpx.AsyncClient(transport=httpx.ASGITransport(app=turnstile)))
@@ -142,7 +166,7 @@ def front_of(build_compute, users: Users, folder: Path, port: int = 8442, addres
     async def on_port(scope, receive, send):
         """Every request comes in on `port`, whatever address a test asked at, as a harness pointed at turnstile's port does."""
         if scope["type"] in ("http", "websocket"):
-            scope = {**scope, "server": ((scope.get("server") or ("front", None))[0], port)}
+            scope = naming({**scope, "server": ((scope.get("server") or ("front", None))[0], port)}, node)
         await front(scope, receive, send)
 
     client = TestClient(on_port, base_url=f"http://front:{port}", client=(address, 50000))
@@ -205,7 +229,7 @@ def loadcoach_through(folder: Path, users: Users, web=None, **config) -> TestCli
 
     outside = {'hosted_keys': config.pop('keys')} if 'keys' in config else {}
     settings = Config(**{"nvidia_smi": "no-such-program", "machine_key_file": str(folder / "machine.key"), "front": "http://front:8442", **config})
-    return front_of(lambda front: build_loadcoach(settings, web, front), users, folder, **outside)
+    return front_of(lambda front: build_loadcoach(settings, web, front), users, folder, node="compute", **outside)
 
 
 class Signed(httpx.Auth):

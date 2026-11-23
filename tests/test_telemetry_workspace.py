@@ -178,29 +178,29 @@ def test_host_controls_and_models_are_in_the_inventory_column(control_server):
 def test_host_actions_return_to_telemetry_and_refuse_another_physical_host(control_server):
     server, _, _, asked = control_server
     destination = '/telemetry/' + HOST + '?hours=6&gpu=2'
-    done = server.post('/machine/services/loadcoach/restart', data={'return_to': destination}, follow_redirects=False)
+    done = server.post('/machine/services/loadcoach/restart', data={'return_to': destination, 'node': 'compute'}, follow_redirects=False)
     assert done.status_code == 303 and done.headers['location'].startswith(destination + '&said=')
     assert '--user restart loadcoach.service' in asked.read_text()
     before = asked.read_text().count('--user restart loadcoach.service')
     refused = server.post('/machine/services/loadcoach/restart',
-                          data={'return_to': '/telemetry/' + 'b' * 64}, follow_redirects=False)
+                          data={'return_to': '/telemetry/' + 'b' * 64, 'node': 'compute'}, follow_redirects=False)
     assert refused.status_code == 400 and 'could not verify this physical host' in refused.text
     assert asked.read_text().count('--user restart loadcoach.service') == before
     sign_in(server, 'pat')
-    denied = server.post('/machine/services/loadcoach/restart', data={'return_to': destination})
-    assert denied.status_code == 400 and 'may not' in denied.text and 'id="telemetry-workspace"' in denied.text
+    denied = server.post('/machine/services/loadcoach/restart', data={'return_to': destination, 'node': 'compute'})
+    assert denied.status_code == 403 and 'Service actions require restart-services.' in denied.text
     assert asked.read_text().count('--user restart loadcoach.service') == before
 
 
 def test_host_power_and_spotter_failure_stay_on_the_selected_host(control_server):
     server, compute, machine, asked = control_server
     destination = '/telemetry/' + HOST
-    wrong_host = server.post('/machine/power/off', data={'return_to': '/telemetry/' + 'b' * 64}, follow_redirects=False)
+    wrong_host = server.post('/machine/power/off', data={'return_to': '/telemetry/' + 'b' * 64, 'node': 'compute'}, follow_redirects=False)
     assert wrong_host.status_code == 400 and 'could not verify this physical host' in wrong_host.text
     assert 'poweroff' not in asked.read_text()
     compute.off = True
     assert '/machine/power/' not in server.get(destination).text
-    result = server.post('/machine/power/sleep', data={'return_to': destination, 'force': 'on'}, follow_redirects=False)
+    result = server.post('/machine/power/sleep', data={'return_to': destination, 'force': 'on', 'node': 'compute'}, follow_redirects=False)
     assert result.status_code == 303 and result.headers['location'].startswith(destination + '?said=')
     machine.off = True
     unavailable = server.get(destination)

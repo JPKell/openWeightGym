@@ -37,8 +37,16 @@ def answers(caller, who, file):
     return [json.loads(line) for line in caller.get(f"/v1/files/{file}/content", headers=who).text.splitlines()]
 
 
+def retry_at_once(monkeypatch):
+    """The control node retries a line compute refused while draining at once, not after the 30 s default."""
+    async def at_once(self):
+        """No wait before the retry."""
+    monkeypatch.setattr('turnstile.batches.FrontBatches.retry_delay', at_once)
+
+
 def test_status_shows_only_executing_batches_and_respects_request_visibility(fake_llama_server, monkeypatch):
     monkeypatch.setattr('loadcoach.batches.AGAIN_AFTER', .05)
+    retry_at_once(monkeypatch)
     with gateway(fake_llama_server) as caller:
         admin = add_user(caller, 'jordan', 'admin')
         pat = add_user(caller, 'pat', 'plain', by=admin)
@@ -133,6 +141,7 @@ def test_a_batch_goes_on_where_it_was_when_loadcoach_comes_back(fake_llama_serve
 
 def test_a_batch_waits_while_requests_are_not_taken_and_can_be_cancelled(fake_llama_server, monkeypatch):
     monkeypatch.setattr("loadcoach.batches.AGAIN_AFTER", 0.05)
+    retry_at_once(monkeypatch)
     quick, slow = {"model": "small", "messages": []}, {"model": "small", "sleep": 1.0, "messages": []}
     with gateway(fake_llama_server) as caller:
         jordan = add_user(caller, "jordan", "admin")

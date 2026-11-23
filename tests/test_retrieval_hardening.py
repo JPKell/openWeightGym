@@ -20,6 +20,8 @@ from loadcoach.probes import Probes
 from loadcoach.tasks import Tasks
 from starlette.requests import Request
 
+from weightroom.display import node_label
+
 
 @pytest.fixture(scope='module')
 def cases():
@@ -234,11 +236,12 @@ def test_position_splits_are_micro_averages_and_visible_in_the_detail_page(cases
     env = Environment(loader=FileSystemLoader(Path(__file__).resolve().parents[1]/'weightroom/pages'),
                       autoescape=select_autoescape())
     env.filters['clock'] = env.filters['timestamp'] = str
-    page = env.get_template('benchmark_detail.html').render(detail=detail)
+    env.filters['node_label'] = node_label
+    page = env.get_template('benchmark_breakdown.html').render(detail=detail)  # the run page's Results by category card
     assert 'Invented / absent' in page and '<th>Start</th>' in page and '<th>Middle</th>' in page and '<th>End</th>' in page
     assert '1 / 2 (50.0%)' in page and 'Combined fields may count in several positions' in page
     detail['subject']['protocol'] = {'dataset':'retrieval-v1'}
-    assert 'Invented / absent' not in env.get_template('benchmark_detail.html').render(detail=detail)
+    assert 'Invented / absent' not in env.get_template('benchmark_breakdown.html').render(detail=detail)
 
 
 def test_native_padding_keeps_every_fixed_record_and_reports_positions(cases):

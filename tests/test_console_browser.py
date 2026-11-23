@@ -28,22 +28,27 @@ def test_backup_encryption_setup_and_docs_are_usable(desk, tmp_path, backup_keys
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto('http://console.test/backups')
-        playwright.expect(page.get_by_role('button', name='Back up both machines')).to_be_disabled()
-        playwright.expect(page.get_by_role('link', name='Configure recovery encryption')).to_be_visible()
+        playwright.expect(page.get_by_role('button', name='Back up selected nodes')).to_be_disabled()
+        playwright.expect(page.get_by_role('link', name='Set up recovery encryption').first).to_be_visible()
         assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
-        page.get_by_role('link', name='Configure recovery encryption').click()
-        playwright.expect(page.locator('#backup-key-generation')).to_contain_text('age-keygen -o recovery.key')
-        playwright.expect(page.locator('#backup-verify')).to_contain_text('loadcoach.backup_restore')
-        playwright.expect(page.locator('#recipient-location')).to_contain_text('/home/ACCOUNT/openWeightGym/data/backups/recipients.txt')
-        playwright.expect(page.locator('#backup-recipient-install-system')).to_contain_text('/var/lib/openweightgym/data/backups/recipients.txt')
-        playwright.expect(page.locator('#backup-recipient-check')).to_contain_text('encryption_status')
+        page.get_by_role('link', name='Set up recovery encryption').first.click()
+        # The backup overview points to the maintained encryption guide, which holds the commands.
+        page.locator('main a[href="/docs/data/backup-encryption#setup"]').click()
+        guide = page.locator('main')
+        playwright.expect(guide).to_contain_text('age-keygen -o recovery.key')
+        playwright.expect(guide).to_contain_text('/home/ACCOUNT/openWeightGym/data/backups/recipients.txt')
+        playwright.expect(guide).to_contain_text('/var/lib/openweightgym/data/backups/recipients.txt')
+        playwright.expect(guide).to_contain_text('encryption_status')
+        assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+        page.goto('http://console.test/docs/data/restore')
+        playwright.expect(page.locator('main')).to_contain_text('loadcoach.backup_restore')
         assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
         backup_keys.configure(tmp_path / 'backups')
         backup_keys.configure(tmp_path / 'data/backups')
         page.goto('http://console.test/backups')
-        playwright.expect(page.get_by_role('button', name='Back up both machines')).to_be_enabled()
-        page.get_by_role('button', name='Back up both machines').click()
-        page.get_by_role('link', name='Restore preview', exact=True).click()
+        playwright.expect(page.get_by_role('button', name='Back up selected nodes')).to_be_enabled()
+        page.get_by_role('button', name='Back up selected nodes').click()
+        page.locator('a.btn[href$="?node=compute"]', has_text='Restore preview').click()
         playwright.expect(page.get_by_text('Encrypted with age.', exact=False).first).to_be_visible()
         assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
         assert not errors
@@ -225,23 +230,25 @@ def test_api_key_removal_confirmation_has_no_repeated_body_text(desk):
     sign_in(server, 'jordan')
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
-        page.goto('http://console.test/account')
+        page.goto('http://console.test/account/keys')
         row = page.locator('#keys tbody tr').filter(has_text='confirmation-check')
-        row.get_by_role('button', name='Remove', exact=True).click()
-        dialog = page.get_by_role('dialog', name='Confirm action', exact=True)
-        playwright.expect(dialog).to_be_visible()
-        assert dialog.locator('p').count() == 0
-        playwright.expect(dialog.get_by_label('Yes, remove', exact=True)).to_be_visible()
-        dialog.get_by_role('button', name='Cancel', exact=True).click()
+        remove = row.locator('button[data-confirm-two]')
+        playwright.expect(remove).to_have_text('Remove…')
+        before = page.locator('main').inner_text()
+        # The shared two-click confirmation arms the button itself; nothing is added to the page body.
+        remove.click()
+        playwright.expect(remove).to_have_text('Are you sure?')
+        assert page.locator('main').inner_text().replace('Are you sure?', 'Remove…') == before
+        page.keyboard.press('Escape')
+        playwright.expect(remove).to_have_text('Remove…')
         playwright.expect(row).to_have_count(1)
-        row.get_by_role('button', name='Remove', exact=True).click()
-        dialog.get_by_label('Yes, remove', exact=True).check()
-        dialog.get_by_role('button', name='Continue', exact=True).click()
-        playwright.expect(row).to_have_count(0)
+        remove.click()
+        remove.click()
+        playwright.expect(page.locator('#keys tbody tr').filter(has_text='confirmation-check')).to_have_count(0)
         browser.close()
 
 
-def test_account_sections_pagination_and_display_auto_save(desk, tmp_path):
+def test_account_sections_pagination_and_display_preferences(desk, tmp_path):
     server, _, _ = desk
     log = Log(str(tmp_path / 'loadcoach.db'))
     for name, tokens in [('small', 1000000), ('large', 2000000)]:
@@ -257,15 +264,13 @@ def test_account_sections_pagination_and_display_auto_save(desk, tmp_path):
         page.goto('http://console.test/account')
         assert page.locator('.category-links a.active').count() == 0
         assert 'btn-primary' in page.locator('.user-menu > summary').get_attribute('class')
-        assert page.locator('#site-sidebar .section-link').all_text_contents() == ['Account', 'Appearance', 'Audio', 'Logs', 'Logout']
+        assert page.locator('#site-sidebar .section-link').all_text_contents() == ['Account', 'API keys', 'Appearance', 'Audio', 'Workspace', 'Alerts & privacy', 'Logs', 'Logout']
         assert page.locator('#page-content details.card').count() == 0
-        password = page.locator('#account-password-heading').bounding_box()
-        keys = page.locator('#account-keys-heading').bounding_box()
-        assert abs(password['y'] - keys['y']) < 1 and password['x'] < keys['x']
         page.screenshot(path=str(images / 'account.png'))
         page.get_by_role('link', name='Appearance', exact=True).click()
         page.locator('#show_telemetry').uncheck()
-        playwright.expect(page.locator('.said-box')).to_have_text('Kept.')
+        page.get_by_role('button', name='Save display preferences', exact=True).click()
+        playwright.expect(page.locator('.said-box')).to_have_text('Preferences saved.')
         playwright.expect(page.locator('#show_telemetry')).not_to_be_checked()
         playwright.expect(page.locator('header .band')).to_have_count(0)
         playwright.expect(page.locator('#pulse')).to_have_count(0)
@@ -320,14 +325,15 @@ def test_confirm_cards_pagination_and_live_usage(desk, tmp_path):
         page.screenshot(path=str(images / 'status.png'))
         page.get_by_role('button', name='Pause intake', exact=True).click()
         playwright.expect(page.locator('button[value="drain"]')).to_have_text('Are you sure?')
-        page.get_by_role('button', name='Clear queue', exact=True).click()
+        # Clicking anywhere else cancels an armed confirmation.
+        page.locator('[data-card-key="current-requests-processing"] > summary').click()
         playwright.expect(page.locator('button[value="drain"]')).to_have_text('Pause intake')
+        page.get_by_role('button', name='Clear queue', exact=True).click()
         assert not controls
         confirm = page.locator('button[value="clear"]')
         playwright.expect(confirm).to_have_text('Are you sure?')
         assert confirm.evaluate('e=>e.hasAttribute("data-confirm-two") || e.form.hasAttribute("data-confirm-two")')
         # Status polling preserves confirmation state and collapsed request cards.
-        page.locator('[data-card-key="current-requests-processing"] > summary').click()
         page.evaluate('window.priorStatus = document.querySelector("#status")')
         page.wait_for_function('document.querySelector("#status") !== window.priorStatus', timeout=5000)
         playwright.expect(page.locator('[data-card-key="current-requests-processing"]')).not_to_have_attribute('open', '')
@@ -349,7 +355,7 @@ def test_confirm_cards_pagination_and_live_usage(desk, tmp_path):
         assert rail['y'] - (header['y'] + header['height']) < 40
         playwright.expect(page.locator('[data-derived="requests"]')).to_contain_text('a day')
         playwright.expect(page.locator('[data-composition] .usage-segment')).to_have_count(2)
-        playwright.expect(page.locator('[data-filter-count]')).to_have_text('None')
+        playwright.expect(page.locator('[data-filter-count]')).to_have_text('No filters')
         assert page.locator('#usage-input-rate').input_value() == '2.0'
         assert page.locator('#usage-output-rate').input_value() == '10.0'
         page.locator('#usage-input-rate').fill('3')

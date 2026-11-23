@@ -90,6 +90,8 @@ def authorize(nodes, kind='backup', machine='rig'):
                  timezone='UTC', weekdays=list(range(7)), retention=10, missed='skip')
     if kind != 'backup':
         value['machine'] = machine
+    else:
+        value['nodes'] = ['front', 'compute']  # each node backs up on its own; rig stays out of scope
     if kind == 'outstanding':
         value.update(model_ids=['rig-id'], benchmarks=['load'])
     identifier, token = secrets.token_hex(16), secrets.token_urlsafe(32)
@@ -132,7 +134,9 @@ def test_due_jobs_wake_only_their_node_then_submit_once(sleeping_nodes, tmp_path
             assert 'Asked '+target+' to wake' in store.occurrences()[0]['message']
             assert len(nodes.wakes) == 1
             assert nodes.wakes[0][0] == ('00:11:22:33:44:55' if target == 'compute' else '00:11:22:33:44:66')
-            assert not front_backups and not nodes.backups and not bench.listing()
+            # The control node backs itself up independently; the sleeping node's archive waits for it.
+            assert len(front_backups) == (1 if kind == 'backup' else 0)
+            assert not nodes.backups and not bench.listing()
             occurrence = store.occurrences()[0]
             await worker.tick(due+1)
             assert len(nodes.wakes) == 1  # concurrent/retried due work shares the wake cooldown
@@ -142,7 +146,7 @@ def test_due_jobs_wake_only_their_node_then_submit_once(sleeping_nodes, tmp_path
             assert result['id'] == occurrence['id'] and result['task_token'] == occurrence['task_token']
             assert result['state'] == ('completed' if kind == 'backup' else 'running')
             if kind == 'backup':
-                assert len(front_backups) == len(nodes.backups) == 1
+                assert len(set(front_backups)) == len(nodes.backups) == 1
                 assert len([call for call in nodes.calls if call[1:] == ('POST','/loadcoach/backups')]) == 1
             else:
                 assert bench.get(result['id'])['location'] == 'rig'
@@ -160,6 +164,10 @@ def test_due_jobs_wake_only_their_node_then_submit_once(sleeping_nodes, tmp_path
         asyncio.run(run())
     finally:
         store.db.close(); bench.db.close()
+
+
+NODE_REFUSALS = {'no-wake-permission': 'front-wake', 'disabled-node': 'disabled', 'no-wake-header': '',
+                 'wake-failure': 'wake packet'}
 
 
 @pytest.mark.parametrize('case', ['wrong-token','future','not-due','paused','disabled-owner','no-wake-permission','disabled-node','no-mac','no-wake-header','wake-failure'])
@@ -183,7 +191,14 @@ def test_wake_respects_due_grant_owner_node_and_request_policy(sleeping_nodes, c
     elif case == 'no-wake-header': headers['x-turnstile-no-wake'] = '1'
     elif case == 'wake-failure': nodes.wake_failure.append(True)
     response = nodes.client.post('/loadcoach/schedules/'+identifier+'/dispatch', headers=headers, json=payload)
-    assert response.status_code == expected, response.text
+    if case in NODE_REFUSALS:
+        # A backup occurrence reports each node's refusal instead of failing the whole dispatch.
+        assert response.status_code == 200, response.text
+        outcome, = response.json()['nodes']
+        assert outcome['node'] == 'compute' and outcome['state'] == 'missed'
+        assert NODE_REFUSALS[case] in outcome['message'], outcome['message']
+    else:
+        assert response.status_code == expected, response.text
     assert not nodes.wakes and not nodes.backups
 
 
@@ -233,5 +248,8 @@ def test_changes_during_readiness_probe_cancel_wake(sleeping_nodes, change):
         nodes.before_unavailable.append(lambda: grants.replace(identifier,secrets.token_urlsafe(32),value,nodes.users.by_name('owner')))
     response = nodes.client.post('/loadcoach/schedules/'+identifier+'/dispatch', headers={'x-suite-schedule':token},
                                  json={'due_at':due,'task_token':secrets.token_urlsafe(32)})
-    assert response.status_code == (409 if change == 'node-disabled' else 403), response.text
-    assert not nodes.wakes
+    assert response.status_code == 200, response.text
+    outcome, = response.json()['nodes']
+    assert outcome['state'] == 'missed', outcome
+    assert ('disabled' if change == 'node-disabled' else 'authorization') in outcome['message'], outcome['message']
+    assert not nodes.wakes and not nodes.backups

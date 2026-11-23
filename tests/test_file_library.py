@@ -258,7 +258,7 @@ def test_a_refused_change_leaves_every_file_as_it_was(library_desk):
     # A page that offered to clear the locked box, as a stale or forged one might: turnstile checks again.
     forged = send(browser, page, tick=["a.gguf in compute"], forged=[f"{b}:--1"])
     assert "b.gguf at compute: Used by mine. Change that model first. No files were changed." in forged.text
-    assert 'class="alert alert-danger said said-box"' in forged.text
+    assert 'class="alert alert-danger d-block said said-box"' in forged.text
     assert not (node / "llm" / "a.gguf").exists() and (node / "llm" / "b.gguf").exists()
     assert "Nothing was changed" in send(browser, page).text
 

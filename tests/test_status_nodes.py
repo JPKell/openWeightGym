@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from weightroom.app import memory_size, size, status_nodes, worded
+from weightroom.display import node_label
 
 
 def test_cpu_loadcoach_uses_fresh_spotter_ram_from_its_physical_host():
@@ -40,6 +41,7 @@ def test_status_shows_gpu_cpu_and_unavailable_loadcoaches_with_scoped_locks():
                         autoescape=select_autoescape())
     pages.filters["memory_mib"] = lambda count: memory_size(count * 2**20 if isinstance(count, (int, float)) else None)
     pages.filters["memory_size"] = memory_size
+    pages.filters["node_label"] = node_label
     pages.filters["mib"] = lambda count: size(count * 2**20)
     pages.filters["worded"] = lambda value, unit: worded(unit, value)
     nodes = [
@@ -85,6 +87,7 @@ def test_status_unknown_ram_fields_remain_unavailable():
                         autoescape=select_autoescape())
     pages.filters["memory_mib"] = lambda count: memory_size(count * 2**20 if isinstance(count, (int, float)) else None)
     pages.filters["memory_size"] = memory_size
+    pages.filters["node_label"] = node_label
     node = {"name":"cpu", "state":"ready", "status_live":True, "cards":[],
             "loaded":[{"model":"embedder","cards":[],"state":"ready","rss_mib":None}],
             "telemetry":None,"telemetry_age":None,"system_memory":{"free":None,"headroom":None,"service_limit":None}}

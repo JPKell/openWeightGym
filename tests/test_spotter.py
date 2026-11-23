@@ -82,7 +82,7 @@ def made_up(tmp_path, monkeypatch, **more):
                            "history": str(tmp_path / "spotter.db"), "token_file": str(tmp_path / "token"), "sample_every": 0.05,
                            "disks": (str(tmp_path), "/no/such/folder"), **more})  # fmt: skip
     link = httpx.AsyncClient(transport=httpx.ASGITransport(app=loadcoach), base_url="http://loadcoach")
-    with front_of(lambda front: build_app(settings, link), users, tmp_path, port=8444) as caller:
+    with front_of(lambda front: build_app(settings, link), users, tmp_path, port=8444, node="compute") as caller:
         yield caller, keys, asked, users, coach
 
 
@@ -333,7 +333,8 @@ def test_the_settings_name_services_by_their_unit_and_nothing_else(tmp_path):
     Changes(settings.database).put("loadcoach", "models_folder", "/srv/models", "owner")
     assert load_settings(file).places == {
         "llm": "/srv/models/llm", "adapters": "/srv/models/adapters",
-        "projectors": "/srv/models/projectors", "image": "/srv/models/image", "audio": "/srv/models/audio", "encoders":"/srv/models/encoders"}
+        "projectors": "/srv/models/projectors", "image": "/srv/models/image", "audio": "/srv/models/audio", "encoders":"/srv/models/encoders",
+        "classifier": "/srv/models/classifier"}
     Changes(settings.database).put("loadcoach", "models_storage_folder", "/mnt/library", "owner")
     assert load_settings(file).places["storage_llm"] == "/mnt/library/llm"
     assert load_settings(file).places["storage_image"] == "/mnt/library/image"

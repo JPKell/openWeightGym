@@ -61,7 +61,7 @@ def test_empty_search_and_zero_workers_keep_front_visible(preview):
     playwright.expect(page.locator('#empty-title')).to_have_text('No compute nodes yet')
     page.locator('button[data-page="telemetry"]').click()
     playwright.expect(page.locator('#fleet-rows tr')).to_have_count(1)
-    playwright.expect(page.locator('#detail-title')).to_have_text('front')
+    playwright.expect(page.locator('#detail-title')).to_have_text('Control node')
     playwright.expect(page.locator('#switch-detail')).to_be_disabled()
 
 
@@ -116,7 +116,7 @@ def test_comparison_limit_range_and_keyboard_selection(preview):
     page = preview
     page.locator('#fleet-size').select_option('12')
     page.locator('button[data-page="telemetry"]').click()
-    for name in ('atlas', 'orion', 'front'):
+    for name in ('atlas', 'orion', 'Control node'):
         page.get_by_label(f'Compare {name}', exact=True).check()
     # A fourth checkbox is reverted while the original comparison is retained.
     page.get_by_label('Compare nova', exact=True).click()

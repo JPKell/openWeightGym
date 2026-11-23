@@ -13,7 +13,7 @@ GB, TB = 2**30, 2**40
 def render(found: dict) -> str:
     """The location cards for one listing, as the page's #files-places card body holds them."""
     pages = Jinja2Templates(directory=[HERE / "pages"])
-    pages.env.filters.update(size=size, timestamp=display.timestamp)
+    pages.env.filters.update(size=size, timestamp=display.timestamp, node_label=display.node_label)
     return pages.env.get_template("files_parts.html").module.places_block(found)
 
 

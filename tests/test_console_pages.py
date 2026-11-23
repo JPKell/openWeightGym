@@ -1,6 +1,7 @@
 """Console navigation, authorized listings and interactive page contracts."""
 
 import json
+import re
 from datetime import datetime, timezone
 
 import httpx
@@ -24,11 +25,11 @@ from loadcoach.statement import PROOF
 def test_navigation_orders_and_detail_parents():
     can = ['manage-models', 'manage-settings', 'manage-users', 'manage-groups', 'front-manage-plugins', 'see-log', 'restart-services']
     nav = navigation('/benchmarks/runs', can, True)
-    assert [name for name, _ in nav['links']] == ['Runs', 'Results', 'Node measurements', 'Compare', 'Collections', 'Workflows', 'Manage']
+    assert [name for name, _ in nav['links']] == ['Runs', 'Node measurements', 'Results', 'Compare', 'Collections', 'Workflows', 'Manage']
     assert navigation('/benchmarks/node-measurements', can, True)['active'] == '/benchmarks/node-measurements'
     nav = navigation('/plugins/activity', can, True)
     assert nav['section'] == 'Logs' and nav['active'] == '/plugins/activity'
-    assert [name for name, _ in nav['links']] == ['Usage', 'Reliability', 'Model requests', 'Batches', 'Event log', 'Plugin logs', 'System logs']
+    assert [name for name, _ in nav['links']] == ['Usage', 'Reliability', 'Model requests', 'Batches', 'Responses', 'Event log', 'Plugin logs', 'System logs']
     assert nav['headings'] == {'/usage': 'Overview', '/requests': 'Model activity', '/log': 'Diagnostics'}
     for path in ('/no-such-page', '/settings', '/models', '/users', '/deploy'):
         missing = navigation(path, [], False)
@@ -37,7 +38,10 @@ def test_navigation_orders_and_detail_parents():
     assert navigation('/reliability', [], False)['section'] == 'Logs'
     nav = navigation('/tools', can, True)
     assert nav['section'] == 'Settings'
-    assert [name for name, _ in nav['links']] == ['General', 'Compute nodes', 'Users', 'Groups', 'Spending allowances', 'Tools', 'Plugins', 'Image', 'Audio', 'Voice']
+    assert [name for name, _ in nav['links']] == ['General', 'Requests and queue', 'Retention and privacy', 'Alerts and notifications', 'Uploads and limits',
+                                               'Downloads and credentials', 'Machine configuration', 'Settings history', 'Compute nodes',
+                                               'Security and sign-in', 'Users', 'Groups', 'Spending allowances', 'Tools', 'Plugins', 'Image',
+                                               'Video settings', 'Audio', 'Voice']
     # Every account may see its own allowance, so the page is in Settings for everyone.
     assert navigation('/allowances', [], False)['section'] == 'Settings' and navigation('/allowances', [], False)['links'] == [('Spending allowances', '/allowances')]
     assert navigation('/requests/42', can, True)['active'] == '/requests'
@@ -46,23 +50,25 @@ def test_navigation_orders_and_detail_parents():
     assert navigation('/status', [], False)['links'] == [('Status', '/status'), ('Telemetry', '/telemetry')]
     docs = navigation('/docs/modules/voice', can, True)
     assert docs['section'] == 'Docs' and docs['active'] == '/docs/modules/voice'
-    assert [name for name, _ in docs['links']] == ['Documentation', 'System reference', 'API reference', 'Modules', 'Web app', 'Benchmarks',
+    assert [name for name, _ in docs['links']] == ['Documentation', 'System reference', 'API reference', 'Modules', 'Getting started', 'Web app',
+                                                   'Models', 'Monitoring', 'Administration', 'Benchmarks',
                                                    'Deployment and operations', 'Data and backups', 'Code references']
     assert docs['links'][0] == ('Documentation', '/docs')
     # The section being read opens beneath its link; the others stay closed.
     assert list(docs['children']) == ['/docs/modules'] and ('Voice', '/docs/modules/voice') in docs['children']['/docs/modules']
     front = navigation('/docs', can, True)
     assert front['active'] == '/docs' and front['children'] == {}
-    assert navigation('/docs/api', can, True)['children']['/docs/api'][0] == ('OpenAI compatibility', '/docs/api/openai')
+    assert navigation('/docs/api', can, True)['children']['/docs/api'][1] == ('OpenAI compatibility', '/docs/api/openai')
     assert navigation('/status', can, True)['children'] == {}
     assert all(url != '/deploy' for group in navigation('/status', [*can, 'superuser'], True)['groups']
                for _, url in group['links'])
-    # Everyone else reads the Web app section only, and never sees the topics of a section they may not read.
-    assert next(group for group in navigation('/status', [], False)['groups'] if group['name'] == 'Docs')['links'] == [('Documentation', '/docs'), ('Web app', '/docs/web-app')]
+    # Everyone else reads the getting-started and Web app guides only, and never sees the topics of a section they may not read.
+    assert next(group for group in navigation('/status', [], False)['groups'] if group['name'] == 'Docs')['links'] == [('Documentation', '/docs'), ('Getting started', '/docs/getting-started'), ('Web app', '/docs/web-app')]
     assert navigation('/docs/api', [], False)['children'] == {}
     account = navigation('/account/appearance', can, True)
     assert account['section'] == 'My account' and account['active'] == '/account/appearance'
-    assert account['links'] == [('Account', '/account'), ('Appearance', '/account/appearance'), ('Audio', '/account/audio'), ('Logs', '/account/logs')]
+    assert account['links'] == [('Account', '/account'), ('API keys', '/account/keys'), ('Appearance', '/account/appearance'), ('Audio', '/account/audio'),
+                                ('Workspace', '/account/workspace'), ('Alerts & privacy', '/account/privacy'), ('Logs', '/account/logs')]
 
 
 def test_system_logs_keep_exact_filter_snapshots_during_outages(desk_with_machine, tmp_path):
@@ -119,11 +125,6 @@ def test_admin_docs_map_and_component_outlines(desk):
     sign_in(browser, 'jordan')
     overview = browser.get('/docs/system')
     assert overview.status_code == 200
-    assert '<title id="map-title">openWeightGym component map</title>' in overview.text
-    for url in ('/docs/modules/loadcoach', '/docs/modules/toollocker', '/docs/modules/weightroom', '/docs/modules/turnstile',
-                '/docs/modules/voice', '/docs/modules/spotter', '/docs/system/hosted-providers', '/docs/modules/plugins',
-                '/docs/system/logs', '/docs/system/models', '/docs/data'):
-        assert f'href="{url}"' in overview.text  # every component on the map leads to its page
     for section in SECTIONS:
         assert f'href="{section["url"]}"' in overview.text
         page = browser.get(section['url'])
@@ -140,9 +141,9 @@ def test_admin_docs_map_and_component_outlines(desk):
     assert browser.get('/docs/system', follow_redirects=False).status_code == 200
     assert browser.get('/docs/mirrorwall', follow_redirects=False).headers['location'] == '/docs/modules/mirrorwall'
     images = browser.get('/docs/modules/mirrorwall').text
-    assert '<title id="flow-title">Image generation workflow</title>' in images and 'id="models"' in images
-    assert all(name in images for name in ('Flux 2 klein 9B', 'Flux 2 Dev', 'SDXL checkpoint', 'Qwen3 8B', 'Mistral Small 3.2 24B'))
-    assert 'id="flow-title"' not in voice  # only the topic with its own guide shows one
+    # The module page points to the maintained image guides instead of repeating them.
+    assert 'id="models"' in images and 'href="/docs/model-guides/image-models"' in images
+    assert browser.get('/docs/model-guides/image-models').status_code == 200
 
 
 def test_current_batch_jobs_includes_one_running_benchmark_without_duplicate_probe():
@@ -167,7 +168,7 @@ def test_current_batch_jobs_includes_one_running_benchmark_without_duplicate_pro
     store.db.close()
 
 
-def test_current_requests_shows_running_batch_once_and_omits_waiting_batches(desk, monkeypatch):
+def test_current_requests_shows_running_batch_once_and_lists_waiting_requests(desk, monkeypatch):
     browser, switch, _ = desk
     original = switch.handle_async_request
     executing, queued = 'batch_executing', 'batch_queued'
@@ -189,10 +190,13 @@ def test_current_requests_shows_running_batch_once_and_omits_waiting_batches(des
     sign_in(browser, 'jordan')
     for path in ['/status', '/status?part=status', '/status?part=requests']:
         page = browser.get(path).text
-        assert 'Current requests (2)' in page
-        assert page.count('>' + executing + '</a>') == 1 and queued not in page
-        assert '/requests/1"' not in page and '/requests/2"' not in page
-        assert '/requests/3"' in page
+        # The executing batch stands for its own requests; a waiting batch line is listed as waiting work.
+        processing, waiting = page.split('aria-label="Waiting to start"')
+        assert processing.count('>' + executing + '</a>') == 1 and '/requests/1"' not in page
+        assert '/requests/3"' in processing and '/requests/2"' in waiting and queued not in page
+        if path != '/status?part=requests':
+            assert re.search(r'Processing</span>\s*<strong class="kpi-value">2</strong>', page)
+            assert re.search(r'In queue</span>\s*<strong class="kpi-value">1</strong>', page)
 
 
 def test_batches_stop_all_cancels_beyond_current_page_with_owner_scope_and_keeps_answers(desk, tmp_path):
@@ -210,7 +214,7 @@ def test_batches_stop_all_cancels_beyond_current_page_with_owner_scope_and_keeps
     try:
         sign_in(browser, 'pat')
         page = browser.get('/batches?limit=10').text
-        assert 'value="cancel-all" data-confirm-two>Stop all</button>' in page and 'Page 1 of 2' in page
+        assert 'value="cancel-all" data-confirm-two>Stop all running</button>' in page and 'Page 1 of 2' in page
         result = browser.post('/batches?limit=10', data={'do': 'cancel-all'})
         assert result.status_code == 200 and 'Stopped 12 batches.' in result.text
         assert all(batches.get(number)['status'] == 'cancelled' for number in own)
@@ -337,10 +341,11 @@ def test_request_pages_and_group_time_log_filters(desk, tmp_path, monkeypatch):
     sign_in(browser, 'jordan')
     home = browser.get('/status').text
     assert 'Hello,' not in home and 'Break the lock' not in home and 'type="checkbox"' not in home.split('<main', 1)[1].split('</main>', 1)[0]
-    assert home.index('status-controls') < home.index('class="row g-3 mb-4"') < home.index('status-lock-column') < home.index('id="current-requests"') < home.index('Past requests')
+    # Dispatch lanes lead; queue controls and the lock follow, and past requests live on Model requests.
+    assert home.index('id="status"') < home.index('id="current-requests"') < home.index('id="status-controls"') < home.index('status-lock-column')
     controls_tag = home[home.index('<div id="status-controls"'):].split('>', 1)[0]
     assert 'hx-preserve' in controls_tag
-    assert 'Time requested' in home and 'Current requests (0)' in home
+    assert re.search(r'Processing</span>\s*<strong class="kpi-value">0</strong>', home) and 'Past requests' not in home
     assert 'stopped' in browser.get('/requests?limit=1&page=2&complete=1').text
     assert 'Stop this request' not in browser.get(f'/requests/{first}').text
     usage = browser.get('/usage?start=2026-10-01&end=2026-10-01&group=plain&complete=1').text

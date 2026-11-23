@@ -84,8 +84,8 @@ def test_file_categories_filter_full_pages_and_polling(categorized_files, tier, 
     listing = server.get('/files', params={'tier': tier, 'type': kind, 'complete': '1'})
     assert listing.status_code == 200
     assert f'hx-get="/files?part=list&amp;tier={tier}&amp;type={kind}"' in listing.text
-    assert f'href="/files?tier=storage&amp;type={kind}"' in listing.text
-    assert f'href="/files?tier=cache&amp;type={kind}"' in listing.text
+    assert f'href="/files?tier={tier}&amp;type={kind}"' in listing.text  # the type pills keep the location
+    assert 'href="/files?tier=storage"' in listing.text and 'href="/files?tier=cache"' in listing.text  # the location rows
     poll = server.get('/files', params={'tier': tier, 'type': kind, 'part': 'list'})
     assert poll.status_code == 200
     for body in (listing.text, poll.text):
@@ -95,7 +95,10 @@ def test_file_categories_filter_full_pages_and_polling(categorized_files, tier, 
         # filtering retains knowledge of the matching cached copy: its Cache box is ticked
         assert f'aria-label="{files[tier, kind].name} in Cache" checked' in listing.text
     else:
-        assert poll.text.count('hx-swap-oob="true"') == 5  # with when the files were last checked
+        # Each polled piece of the page, with when the files were last checked and the maintenance panel.
+        assert set(re.findall(r'id="([^"]+)"[^>]*hx-swap-oob="true"', poll.text)) == {
+            'files-checked', 'files-cleanup', 'files-distributions', 'files-places', 'files-storage',
+            'files-maintenance', 'files-maintenance-details'}
 
 
 def test_file_category_keeps_location_totals_and_storage_actions(categorized_files, desk):
@@ -117,7 +120,7 @@ def test_file_category_keeps_location_totals_and_storage_actions(categorized_fil
     assert all(path.exists() for (tier, kind), path in files.items() if tier == 'storage' and kind != 'audio')
 
 
-def test_file_category_survives_location_changes_refresh_and_reload(categorized_files):
+def test_file_category_survives_polling_refresh_and_reload(categorized_files):
     server, files = categorized_files
     with playwright.sync_playwright() as engine:
         browser, page = browser_context(engine, server)
@@ -125,13 +128,13 @@ def test_file_category_survives_location_changes_refresh_and_reload(categorized_
         page.on('pageerror', lambda error: errors.append(str(error)))
         try:
             page.goto('http://console.test/files')
+            # One library table lists every location's copy; the type pills narrow it.
             page.locator('nav[aria-label="File type"]').get_by_role('link', name='Audio', exact=True).click()
-            playwright.expect(page.locator('#files-audio-table')).to_contain_text(files['cache', 'audio'].name)
-            playwright.expect(page.locator('#files-models')).to_have_count(0)
-            page.locator('nav[aria-label="File location"]').get_by_role('link', name='Storage', exact=True).click()
             selected = page.locator('nav[aria-label="File type"] [aria-current="page"]')
             playwright.expect(selected).to_have_text('Audio')
-            playwright.expect(page.locator('#files-storage-table')).to_contain_text(files['storage', 'audio'].name)
+            table = page.locator('#files-storage-table')
+            playwright.expect(table).to_contain_text(files['storage', 'audio'].name)
+            assert 'category-model.gguf' not in table.inner_text()
             page.evaluate('window.priorFiles = document.querySelector("#files-storage")')
             page.wait_for_function('document.querySelector("#files-storage") !== window.priorFiles', timeout=10000)
             assert 'category-model.gguf' not in page.locator('#files-storage-table').inner_text()
@@ -146,7 +149,7 @@ def test_file_category_survives_location_changes_refresh_and_reload(categorized_
             browser.close()
 
 
-def test_compute_node_pill_lists_its_files_and_preserves_selection(desk, tmp_path):
+def test_compute_node_files_join_the_library_and_survive_polling(desk, tmp_path):
     server, _, _ = desk
     sign_in(server, 'jordan')
     cache, storage = tmp_path / 'front-cache', tmp_path / 'front-storage'
@@ -160,15 +163,13 @@ def test_compute_node_pill_lists_its_files_and_preserves_selection(desk, tmp_pat
 
     listing = server.get('/files?machine=compute&complete=1')
     assert listing.status_code == 200
-    assert 'href="/files?machine=compute" aria-current="page">Compute</a>' in listing.text
-    table = listing.text.split('id="files-node-table"', 1)[1].split('</table>', 1)[0]
-    assert worker_file in table and 'Node model' in table and 'front-only.gguf' not in table
-    assert 'href="/models/on-compute?node=compute"' in table
-    assert 'href="/file?' not in table
+    # The node's files join the one library table, beside the control node's, with a column for the node.
+    table = listing.text.split('id="files-storage-table"', 1)[1].split('</table>', 1)[0]
+    assert 'node-only.gguf' in table and 'Node model' in table and 'front-only.gguf' in table and '>compute<' in table
+    assert 'href="/files?machine=compute&amp;type=model"' in listing.text  # the type pills keep the node
     assert 'hx-get="/files?part=list&amp;machine=compute"' in listing.text
     part = server.get('/files?part=list&machine=compute').text
-    assert 'id="files-node" hx-swap-oob="true"' in part and worker_file in part
-    assert 'id="files-models"' not in part
+    assert 'id="files-storage" hx-swap-oob="true"' in part and 'node-only.gguf' in part
     shell = server.get('/files?machine=compute').text
     assert 'machine=compute' in shell and 'part=page' in shell
 
@@ -177,16 +178,13 @@ def test_compute_node_pill_lists_its_files_and_preserves_selection(desk, tmp_pat
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         try:
-            page.goto('http://console.test/files')
-            page.get_by_role('link', name='Compute', exact=True).click()
-            playwright.expect(page.locator('nav[aria-label="File location"] [aria-current="page"]')).to_have_text('Compute')
-            playwright.expect(page.locator('#files-node-table')).to_contain_text(worker_file)
-            assert 'front-only.gguf' not in page.locator('#files-node-table').inner_text()
-            page.evaluate('window.priorFiles = document.querySelector("#files-node")')
-            page.wait_for_function('document.querySelector("#files-node") !== window.priorFiles', timeout=10000)
-            playwright.expect(page.locator('#files-node-table')).to_contain_text(worker_file)
+            page.goto('http://console.test/files?machine=compute')
+            playwright.expect(page.locator('#files-storage-table')).to_contain_text('node-only.gguf')
+            page.evaluate('window.priorFiles = document.querySelector("#files-storage")')
+            page.wait_for_function('document.querySelector("#files-storage") !== window.priorFiles', timeout=10000)
+            playwright.expect(page.locator('#files-storage-table')).to_contain_text('node-only.gguf')
             page.reload()
-            playwright.expect(page.locator('nav[aria-label="File location"] [aria-current="page"]')).to_have_text('Compute')
+            playwright.expect(page.locator('#files-storage-table')).to_contain_text('node-only.gguf')
             assert not errors
         finally:
             browser.close()
@@ -195,14 +193,21 @@ def test_compute_node_pill_lists_its_files_and_preserves_selection(desk, tmp_pat
 def test_compute_node_files_distinguish_empty_offline_unknown_and_forbidden(desk):
     server, compute, _ = desk
     sign_in(server, 'jordan')
+
+    def node_row(text):
+        """The compute node's row in the Locations table, as plain text."""
+        places = text.split('id="files-places"', 1)[1]
+        row = re.search(r'<tr[^>]*>(?:(?!</tr>).)*?>compute<.*?</tr>', places, re.S).group(0)
+        return ' '.join(re.sub(r'<[^>]+>', ' ', row).split())
+
     empty = server.get('/files?machine=compute&complete=1')
-    assert empty.status_code == 200 and 'No model files found on this node.' in empty.text
+    assert empty.status_code == 200 and 'No folders configured.' in node_row(empty.text)
+    assert 'No model files found.' in empty.text
     assert server.get('/files?machine=missing&complete=1').status_code == 404
     compute.off = True
     offline = server.get('/files?machine=compute&complete=1')
-    assert offline.status_code == 200 and 'This node is offline.' in offline.text
-    assert 'No model files found on this node.' not in offline.text
-    assert 'href="/files?machine=compute" aria-current="page">Compute</a>' in offline.text
+    assert offline.status_code == 200 and 'This node is offline.' in node_row(offline.text)
+    assert 'No folders configured.' not in node_row(offline.text)
     sign_in(server, 'pat')
     assert server.get('/files?machine=compute').status_code == 403
     assert server.get('/files?part=list&machine=compute').status_code == 403
@@ -347,7 +352,9 @@ def test_storage_cache_box_copies_in_bulk_and_shows_progress(desk, tmp_path, mon
             playwright.expect(page.locator('#files-distributions')).to_contain_text('Bulk change running')
             waiting = page.get_by_role('checkbox', name=f'{source.name} in Cache: Waiting for the bulk change running now.', exact=True)
             playwright.expect(waiting).to_be_disabled()
-            playwright.expect(page.get_by_role('button', name='Apply changes', exact=True)).to_be_disabled()
+            # No second change can start while this one runs: both ways to start one are disabled.
+            playwright.expect(page.locator('[data-apply-boxes]')).to_be_disabled()
+            playwright.expect(page.locator('[data-transfer-files]')).to_be_disabled()
             assert 'The form could not be submitted' not in page.content()
             assert source.is_file() and not (cache / 'llm' / source.name).exists()
             release.set()

@@ -71,7 +71,7 @@ def test_provider_cursor_pages_keep_requests_on_the_provider():
 def test_hub_sort_reaches_both_storage_authorities(desk, tmp_path, monkeypatch):  # noqa: F811
     server, _, _ = desk
     calls = []
-    async def source(http, words, token='', cursor='', sort='downloads', direction='-1'):
+    async def source(http, words, token='', cursor='', sort='downloads', direction='-1', kind=''):
         calls.append((words, cursor, sort, direction))
         return {'found': [], 'next_cursor': '', 'paging': {'limit': 20, 'sort': sort, 'direction': direction}}
     monkeypatch.setattr(hub, 'search_page', source)
@@ -160,7 +160,7 @@ def test_paginated_discovery_proxies_keep_filters_and_access_checks(desk, tmp_pa
 def test_hub_pages_and_repository_fragment(desk, monkeypatch, tmp_path, width, theme, palette):  # noqa: F811
     server, _, _ = desk
     calls = []
-    async def search(http, words, token='', cursor='', sort='downloads', direction='-1'):
+    async def search(http, words, token='', cursor='', sort='downloads', direction='-1', kind=''):
         calls.append((cursor, sort, direction))
         rows = [{'repository': 'acme/tiny-GGUF' if i == 0 else f'acme/model-{i}',
                  'downloads': 123456, 'likes': 1200, 'made': '2026-11-10'} for i in range(20)]

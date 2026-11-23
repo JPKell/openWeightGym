@@ -178,6 +178,7 @@ def test_live_explorer_selection_filters_pagination_and_downloads(archive, width
             page.get_by_role('button', name='Download JSON').click()
         exported = json.loads(Path(saved.value.path()).read_text())
         assert moment(exported.pop('first')).timestamp() == records[2]['first']
+        assert exported.pop('node') == 'compute'  # the node that recorded it, as the combined archive lists it
         assert exported == {key:value for key,value in records[2].items() if key != 'first'}
         page.get_by_role('link', name='All fingerprints').click()
         playwright.expect(page.locator('#start')).to_have_value(records[2]['fingerprint'][:16])

@@ -72,7 +72,7 @@ def test_benchmark_controls_requirements_and_invalid_preferences_preserve_settin
             "benchmark": ["context", "speed"], "benchmark-weight": ["1", "3"], "missing": "exclude", "stale": "warn",
             "max_age_days": "30", "requires-tokens": "4096", "requires-tools": "on", "requires-stays": "on"}
     saved = browser.post("/roles", data=form)
-    assert saved.status_code == 200 and 'class="alert alert-success said said-box" role="status">Saved.' in saved.text
+    assert saved.status_code == 200 and 'class="alert alert-success d-block said said-box" role="status">Saved.' in saved.text
     settings = roles.get("chat")
     assert settings == {"models": {"small": 2}, "benchmarks": {"context": 1, "speed": 3}, "missing": "exclude", "stale": "warn", "max_age_days": 30,
                         "requires": {"pictures": False, "tools": True, "stays": True, "tokens": 4096}}

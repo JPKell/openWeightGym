@@ -109,7 +109,7 @@ def gateway(fake_llama_server, models=None, groups=GROUPS, web=None, **config):
     # Turnstile in the control node, with the accounts, as on the two machines. `web` is how it reaches Hugging Face: a stand-in, where a test needs one.
     # The accounts last as long as LoadCoach's own database does: a test that starts it again with the same `database` finds them again.
     accounts = Users(str(Path(config["database"]).with_name("accounts.db")) if "database" in config else ":memory:", groups)
-    return front_of(lambda front: build_app(settings, web, front), accounts, folder, **outside)
+    return front_of(lambda front: build_app(settings, web, front), accounts, folder, node="compute", **outside)
 
 
 def add_user(caller, name, group, by=None):
@@ -144,7 +144,7 @@ def test_naming_a_model_starts_it_with_its_settings_and_reuses_it(fake_llama_ser
     assert "--host 127.0.0.1 --port" in started_with
     assert "--device GPU0,GPU1 --model big.gguf --ctx-size 2048 --split-mode layer" in started_with
     assert first["path"] == "/v1/chat/completions?x=1"
-    assert first["body"] == '{"model":"big","n":1}'
+    assert json.loads(first["body"]) == {"model": "big", "n": 1}  # the control node may re-encode it with the node's own name
     assert second["pid"] == first["pid"]  # already loaded, so not started again
 
 
@@ -198,6 +198,10 @@ def test_the_models_endpoints_match_openai(fake_llama_server, tmp_path):
         assert entry.pop('context') == {'guaranteed': 2048, 'max': 2048}  # the per-request window range
         entry.pop("fingerprint", None), entry.pop("build", None)
         assert entry.pop("content_sha256", None) in (None, hashlib.sha256(b"").hexdigest())  # the weights file's SHA-256, once it was read through
+        # The control node's combined catalogue says which nodes hold each model, and as what.
+        assert entry.pop("machines") == ["compute"]
+        assert [place["machine"] for place in entry.pop("locations")] == ["compute"]
+        assert entry.pop("logical_id") in ("", "sha256:" + hashlib.sha256(b"").hexdigest())
     assert listed == {
         "object": "list",
         "data": [
@@ -2097,9 +2101,9 @@ def test_a_password_checked_here_gets_a_session_key_that_ends(fake_llama_server)
         assert caller.get("/loadcoach/me", headers=keys["pat"]).json()["session_ends"] is None  # an API key does not end
 
         # What a person chooses for themselves is kept with them, and is only ever about how things are shown.
-        assert me["choices"] == {"show_telemetry": True}
-        assert caller.post("/loadcoach/me", json={"show_telemetry": False}, headers=session).json() == {"show_telemetry": False}
-        assert caller.get("/loadcoach/me", headers=keys["pat"]).json()["choices"] == {"show_telemetry": False}  # theirs, whichever key they come with
+        assert me["choices"]["show_telemetry"] is True
+        assert caller.post("/loadcoach/me", json={"show_telemetry": False}, headers=session).json()["show_telemetry"] is False
+        assert caller.get("/loadcoach/me", headers=keys["pat"]).json()["choices"]["show_telemetry"] is False  # theirs, whichever key they come with
         assert caller.post("/loadcoach/me", json={"show_telemetry": "no"}, headers=session).status_code == 400
         assert caller.post("/loadcoach/me", json={"group": "admin"}, headers=session).status_code == 400
         assert caller.post("/v1/chat/completions", json={"model": "small"}, headers=session).status_code == 200

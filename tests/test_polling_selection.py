@@ -94,14 +94,12 @@ def test_selection_started_during_a_poll_response_is_not_replaced(desk_with_mach
 
 @pytest.mark.parametrize('address,selected,refreshing', [
     ('/models', '#models td', '#models'),
-    ('/log', '#log td', '#log'),
+    ('/log', '#log [data-event-id]', '#log'),
     ('/batches', '#batches td', '#batches'),
     ('/files', '#files-places', '#files-places'),
-    ('/files', '#files-models td', '#files-models'),
-    ('/files', '#files-adapters td', '#files-adapters'),
-    ('/files', '#files-projectors td', '#files-projectors'),
+    ('/files', '#files-storage', '#files-storage'),  # the one library table, for every file type
     ('/files', '#downloads td', '#downloads'),
-    ('/benchmarks/runs', '#benchmark-active td', '#benchmark-active'),
+    ('/benchmarks/runs', '#benchmark-active', '#benchmark-active'),
     ('/benchmarks/runs', '#benchmark-queue td', '#benchmark-queue'),
     ('/benchmarks/runs', '#benchmark-history td', '#benchmark-history'),
 ])
@@ -124,9 +122,6 @@ def test_other_tables_defer_polling_and_resume(desk_with_machine, tmp_path, addr
         errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto('http://console.test' + address)
         playwright.expect(page.locator('#strip .strip')).to_be_visible()
-        # History starts closed; selecting its visible row also exercises remembered state.
-        if selected.startswith('#benchmark-history'):
-            page.locator('#benchmark-history > summary').click()
         text = select_text(page, selected)
         assert text
         page.evaluate('''selector => {
@@ -150,7 +145,7 @@ def test_undeclared_oob_response_preserves_inflight_selection(desk, oob):
         page = None
         intercepted = []
         def capture(route, path):
-            if path.startswith('/benchmarks/runs?part=live'):
+            if path.startswith('/benchmarks/runs?') and 'part=live' in path:
                 if not intercepted:
                     intercepted.append(select_text(page, '#benchmark-history td'))
                 if oob:
@@ -160,12 +155,11 @@ def test_undeclared_oob_response_preserves_inflight_selection(desk, oob):
             return False
         browser, page = browser_context(engine, server, capture=capture)
         page.goto('http://console.test/benchmarks/runs')
-        page.locator('#benchmark-history > summary').click()
         page.evaluate('''() => {
-            document.querySelector('[hx-get^="/benchmarks/runs?part=live"]').removeAttribute('data-refresh-companions');
+            document.querySelector('[data-benchmark-poller]').removeAttribute('data-refresh-companions');
             window.priorCell=document.querySelector('#benchmark-history td');
             document.addEventListener('htmx:afterRequest',event => {
-                if (event.detail.requestConfig?.path.startsWith('/benchmarks/runs?part=live')) window.pollCompleted=true;
+                if (event.detail.requestConfig?.path.includes('part=live')) window.pollCompleted=true;
             });
         }''')
         page.wait_for_function('window.pollCompleted === true', timeout=5000)

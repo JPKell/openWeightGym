@@ -589,7 +589,7 @@ Show `message` to the user. Branch on the status and `code`, not on the message 
 | 401 | Missing, wrong, revoked or expired key | Ask for a new key |
 | 403 | The account lacks the model, ability or sensitivity level | Explain; do not retry |
 | 404 | No such model, or a record that is missing or not this account's | Refresh `GET /v1/models` or the list |
-| 409 | A required model identity changed, or the request conflicts with current state | Read `message` before retrying |
+| 409 | A required model identity changed, every node holding the model is disabled for new work, or the request conflicts with current state | Read `message` before retrying |
 | 413 | The body is too large | Send less |
 | 429, 503 | Busy, out of allowance, or the model's node is unavailable | Wait for `Retry-After` when present; a spent allowance does not recover by retrying |
 | 502, 504 | The model engine failed or timed out | Retry later, once |

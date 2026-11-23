@@ -223,7 +223,7 @@ def test_voice_pages_permissions_configuration_download_and_previews(tmp_path):
         # Compute outage still leaves the gateway and cached recordings visible.
         switch.off = True
         offline = client.get('/system/voice')
-        assert offline.status_code == 200 and 'Node unavailable: compute' in offline.text and 'Recorded greetings' in offline.text
+        assert offline.status_code == 200 and 'compute is not answering' in offline.text and 'Recorded greetings' in offline.text
 
 
 def test_voice_admin_browser_preview_edit_and_mobile_layout(tmp_path):

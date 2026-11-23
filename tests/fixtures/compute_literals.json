@@ -6,17 +6,19 @@
  "loadcoach/database_operations.py": 1,
  "loadcoach/log.py": 1,
  "loadcoach/observability.py": 1,
+ "loadcoach/setting_catalog.py": 4,
  "loadcoach/setting_names.py": 11,
  "mirrorwall/static/models.js": 2,
+ "mirrorwall/static/video-designs.js": 1,
  "spotter/app.py": 1,
  "turnstile/accounts.py": 1,
  "turnstile/app.py": 7,
  "turnstile/nodes.py": 3,
  "voice/service.py": 1,
- "weightroom/app.py": 1,
  "weightroom/bootstrap.py": 2,
  "weightroom/pages/components_content.html": 2,
  "weightroom/pages/entry.html": 1,
  "weightroom/pairing.py": 5,
- "weightroom/static/database-designs.js": 1
+ "weightroom/static/database-designs.js": 1,
+ "weightroom/voice_status_views.py": 1
 }

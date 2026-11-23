@@ -181,7 +181,7 @@ def test_new_config_gets_choices_and_repair_keeps_existing_file(tmp_path, select
 source "$TEST_REPO/scripts/lib/ui.sh"
 ui_init
 ROOT=$INSTALL PY=$TEST_PYTHON TOPOLOGY=front DRY_RUN=0
-FRONT_URL='' COMPUTE_URL='' LLAMA_SERVER='' MACHINE_NAME=''
+FRONT_URL='' COMPUTE_URL='' LLAMA_SERVER='' MACHINE_NAME='' WAKE_MAC='' WAKE_ADDRESS=255.255.255.255
 declare -A WAS_CONFIGURED=()
 has_service() { return 1; }
 die() { ui_die "$@"; }

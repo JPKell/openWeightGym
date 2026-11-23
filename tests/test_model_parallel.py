@@ -117,8 +117,8 @@ def test_disabling_parallel_also_suppresses_inherited_model_defaults(desk, tmp_p
     defaults = {"parallel": 2, "kv-unified": True, "kv-unified-per-slot": 4000}
     native = TestClient(switch.front, base_url="http://front:8442")
     headers = {"authorization": "Bearer " + browser.cookies["weightroom"]}
-    assert native.post("/loadcoach/cards", json={"disabled_gpus": []}, headers=headers).status_code == 200
-    assert native.post("/loadcoach/settings/loadcoach", json={"model_defaults": defaults}, headers=headers).status_code == 200
+    assert native.post("/loadcoach/cards?node=compute", json={"disabled_gpus": []}, headers=headers).status_code == 200
+    assert native.post("/loadcoach/settings/loadcoach?node=compute", json={"model_defaults": defaults}, headers=headers).status_code == 200
     file = gguf(tmp_path / "inherited.gguf")
     browser.post("/models", data={"name": "inherited", "file": file, "ctx": "8000", "cards": "1"})
     assert 'data-parallel-switch checked' in browser.get("/models/inherited").text
@@ -126,9 +126,12 @@ def test_disabling_parallel_also_suppresses_inherited_model_defaults(desk, tmp_p
     assert saved.status_code == 200 and 'aria-label="requests at once" data-parallel-field disabled' in saved.text
     effective = Models(str(tmp_path / "loadcoach.db"), defaults).get("inherited")
     assert not set(PARALLEL_FLAGS) & effective["flags"].keys()
-    assert not {"--" + flag for flag in PARALLEL_FLAGS} & set(command_line("llama-server", 9999, effective["flags"], ("A",)))
+    line = command_line("llama-server", 9999, effective["flags"], ("A",))
+    # Without a saved count the server is pinned to one slot rather than llama-server's automatic slots.
+    assert line[line.index("--parallel") + 1] == "1" and line.count("--parallel") == 1
+    assert not {"--" + flag for flag in PARALLEL_FLAGS if flag != "parallel"} & set(line)
     negative_defaults = {"parallel": 2, "no-kv-unified": True, "kv-unified-per-slot": 4000}
-    assert native.post("/loadcoach/settings/loadcoach", json={"model_defaults": negative_defaults}, headers=headers).status_code == 200
+    assert native.post("/loadcoach/settings/loadcoach?node=compute", json={"model_defaults": negative_defaults}, headers=headers).status_code == 200
     enabled = browser.post("/models/inherited", data={"do": "save", "file": file, "ctx": "8000", "cards": "1", "parallel_controls": "yes",
                            "parallel_enabled": "yes", "parallel_count": "2", "parallel_shared": "yes", "parallel_context": "4000"})
     assert enabled.status_code == 200

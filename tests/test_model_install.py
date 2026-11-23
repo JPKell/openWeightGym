@@ -171,7 +171,7 @@ def test_catalogue_pills_and_node_settings_render_for_every_model_type(desk, tmp
         assert page.status_code == 200
         table = page.text.split('<table id="models-table"')[1].split('</table>', 1)[0]
         assert included in table and excluded not in table
-        assert page.text.index('Add a model') < page.text.index('<table id="models-table"')
+        assert page.text.index('>Add model</a>') < page.text.index('<table id="models-table"')
         detail = browser.get('/models/'+included)
         assert detail.status_code == 200, detail.text
         assert ('id="copy-model"' if kind == 'llm' else 'Add model to node') in detail.text
@@ -201,8 +201,12 @@ def test_multimedia_benchmarks_allow_loading_and_refuse_other_work(tmp_path, eng
 
 def test_image_loading_waits_for_native_weights_without_generation():
     from mirrorwall.runtime import create_app
+    import httpx
     class Native:
         starts = 0
+        # The native server's own capability report, read once its components are ready.
+        client = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={'path': request.url.path})),
+                                   base_url='http://native')
         async def start(self):
             self.starts += 1
         async def stop(self):
@@ -214,6 +218,7 @@ def test_image_loading_waits_for_native_weights_without_generation():
         assert client.post('/load').status_code == 401 and native.starts == 0
         result = client.post('/load',headers=headers)
         assert result.json()['loaded'] and not result.json()['context_available'] and native.starts == 1
+        assert result.json()['runtime_capabilities'] == {'path': '/sdcpp/v1/capabilities'}
 
 
 @pytest.mark.parametrize('engine', ['sdcpp','audiocpp'])

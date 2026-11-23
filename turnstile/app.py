@@ -354,11 +354,24 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         """The machine-key file the control node shares with node `name`."""
         return settings.machines.get(name, {}).get("machine_key_file", "")
 
-    def no_node(path: str) -> JSONResponse:
+    def disabled_holders(body: bytes) -> list[str]:
+        """The disabled nodes whose last inventory had the requested model, so a refusal can say why."""
+        try:
+            name = json.loads(body or b"{}").get("model")
+        except (ValueError, AttributeError):
+            return []
+        if not isinstance(name, str):
+            return []
+        return [report["name"] for report in machines.report() if report.get("lifecycle") == "disabled"
+                and any(one.get("name") == name for one in report.get("models", []))]
+
+    def no_node(path: str, body: bytes = b"") -> JSONResponse:
         """The answer for a request no route or node name leads anywhere."""
         if not settings.machines:
             return error(404, "No route for this request: no compute node is configured.")
         if path.startswith("/v1/"):
+            if held := disabled_holders(body):
+                return error(409, f"Every node with this model is disabled for new work: {', '.join(held)}.")
             return error(404, "No node offers the model this request names.")
         return error(404, "No route for this request: name its node with ?node=NAME or the x-suite-node header.")
 
@@ -707,7 +720,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         front_tools = not machine and port == 8443 and bool(settings.toollocker_url)
         name = "" if front_tools else node(machine)
         if not front_tools and name not in settings.machines:
-            return error(404, f"No node called {machine}.") if machine else no_node(where)
+            return error(404, f"No node called {machine}.") if machine else no_node(where, body)
         if not front_tools and (why := lifecycle_refusal(name, method, where)):
             return error(409, why)
         base = settings.toollocker_url.rstrip("/") if front_tools else node_base(name, port)
@@ -890,10 +903,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         names = machines.active_names
         own = monitoring_user()
         fresh = {name: told for name in names if (told := retained_facts(user, name, own)) is not None}
+        answered = set()  # nodes that just answered a live read, whatever the last monitor poll saw
         if not fresh or not settings.auth_key_file:
             # First calls after a restart must establish inventory before admission.
             # The same bounded, signed read is cached for subsequent fleet requests.
             answers = await asyncio.gather(*(ask_live(user, 'GET', '/loadcoach/facts', machine=name, prime=True) for name in names))
+            answered = {name for name, answer in zip(names, answers)
+                        if answer is not None and answer.is_success and 'x-suite-retained' not in answer.headers}
             fresh.update({name: answer.json() for name, answer in zip(names, answers) if answer is not None and answer.is_success})
         if not fresh:
             return error(503, "Compute model inventory is not ready. Retry shortly.", {"retry-after": f'{runtime_setting("busy_retry_seconds"):g}'})
@@ -912,7 +928,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 if fact is not None and model_locations.enabled(location["machine"], fact.get("model_id")):
                     variants.setdefault(name, []).append((location["machine"], fact))
                     location_models.setdefault(name, {})[location["machine"]] = location["id"]
-        live = {name for name in fresh if machines.available(name) is not False}
+        live = {name for name in fresh if name in answered or machines.available(name) is not False}
         ordered = {name: sorted(placement_order(choices, reports), key=lambda item: item[0] not in live)
                    for name, choices in variants.items()}
         models = {name: {**choices[0][1], "machine": choices[0][0],
@@ -1616,6 +1632,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                                  'memory kills': [{**row, 'key': name + ':' + row['key']}
                                                   for name, reading in readings for row in (reading.get('memory kills') or [])],
                                  'kernel_available': len(readings) == len(names) and all(reading.get('kernel_available') for _, reading in readings),
+                                 'nodes': names,
                                  'unavailable_nodes': [name for name, answer in zip(names, answers)
                                                        if answer is None or answer.status_code != 200]})
         if path == '/loadcoach/fingerprints' and request.method == 'GET' and not named:
@@ -1661,7 +1678,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                         return JSONResponse(answer.json(), status_code=answer.status_code)
                 return error(503, 'No voice service is answering.')
             named = next(iter(voice_order()), "")  # voice's other pages: the preferred node's
-        if port == settings.ports[0] and user is not None and request.method == "GET" and path in ("/v1/models", "/loadcoach/status") and not named:
+        if port == settings.ports[0] and request.method == "GET" and path in ("/v1/models", "/loadcoach/status") and not named:
+            if user is None:  # no node to ask, so the combined view refuses a keyless caller here, on record
+                log.add("refused", "401", "", request.client.host if request.client else "?", path=path, why="Missing or wrong API key.")
+                return error(401, "Missing or wrong API key.")
             return await combined_view(request, user, path)
         parts = path.split("/")
         if (port == settings.ports[0] and len(parts) == 4 and parts[1] == "loadcoach"
@@ -1694,8 +1714,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             catalogue = await combined_view(request, user, "/v1/models")
             if catalogue.status_code != 200:
                 return catalogue
-            model = next((one for one in json.loads(catalogue.body)["data"] if one["id"] == path.removeprefix("/v1/models/")), None)
-            return JSONResponse(model) if model else error(404, "There is no permitted model with that name.")
+            listed = json.loads(catalogue.body)["data"]
+            model = next((one for one in listed if one["id"] == path.removeprefix("/v1/models/")), None)
+            if model:
+                return JSONResponse(model)
+            # As OpenAI says it, naming only the models this caller may use.
+            available = ", ".join(sorted(one["id"] for one in listed)) or "none"
+            return JSONResponse({"error": {"message": f"There is no permitted model with that name. Available: {available}",
+                                           "type": "invalid_request_error", "code": "model_not_found"}}, status_code=404)
         if port == settings.ports[0] and user is not None and request.method == "POST" and path.startswith("/v1/") and not path.startswith(("/v1/files", "/v1/batches")):
             if named:
                 try:
@@ -1732,9 +1758,13 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 return error(503, 'The legacy record owner cannot be checked while a node is unavailable.', {'retry-after': f'{runtime_setting("busy_retry_seconds"):g}'})
             else:
                 return error(404, 'No node has this legacy record.')
+        if not named and user is None and port == settings.ports[0] and path.startswith("/v1/"):
+            # A model request is routed by who may use what; with no caller there is nothing to route by.
+            log.add("refused", "401", "", request.client.host if request.client else "?", path=path, why="Missing or wrong API key.")
+            return error(401, "Missing or wrong API key.")
         if not named and not (port == 8443 and settings.toollocker_url):
             fallthrough.note(request.method, path, port)
-            return no_node(path)
+            return no_node(path, body)
         upstream = await through(request, user, request.method, where, body,
                                  [(name, value) for name, value in request.headers.items() if name != NODE_HEADER], port, machine=named)
         if isinstance(upstream, Response):
@@ -1975,8 +2005,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 if name:
                     found.setdefault(name, set()).add(node["name"])
         def label(name):
+            """A readable name for an upscaler file, from its stem."""
             return re.sub(r"[_-]+", " ", Path(name).stem).strip() or name
         def scale(name):
+            """The upscaling factor written in a file name (such as 4x or x2), or None."""
             match = re.search(r"(?:^|[^0-9])([1-8])x|x([1-8])(?:[^0-9]|$)", name, re.I)
             return int(match.group(1) or match.group(2)) if match else None
         return JSONResponse({"upscalers": [{"id": name, "label": label(name), "scale": scale(name), "nodes": sorted(nodes)}

@@ -191,7 +191,7 @@ ROOT=$INSTALL UNIT_DIR=$UNITS PY=$TEST_PYTHON DRY_RUN=0 KEEP_EXISTING_UNITS=1
     assert unit.read_text() == original
 
 
-@pytest.mark.parametrize("script,function,choice", [("install.sh", "installed_menu", 2), ("scripts/owg", "menu", 6)])
+@pytest.mark.parametrize("script,function,choice", [("install.sh", "installed_menu", 2), ("scripts/owg", "menu", 7)])
 def test_both_menus_expose_install_components(tmp_path, script, function, choice):
     answer = shell(tmp_path, '''set -euo pipefail
 source "$TEST_REPO/scripts/lib/ui.sh"

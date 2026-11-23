@@ -198,7 +198,8 @@ def live_examples(entry):
         return False, True
     if entry.kind in ('int', 'float'):
         base = base if base is not None else max(1, entry.min or 0)
-        return base, base - 1 if entry.max is not None and base >= entry.max else base + 1
+        top = entry.max if entry.max is not None else entry.ceiling  # a ceiling bounds non-superuser values too
+        return base, base - 1 if top is not None and base >= top else base + 1
     if entry.kind in ('text', 'choice'):
         return (entry.choices[0], entry.choices[-1]) if entry.choices else ('original', 'changed')
     if entry.kind == 'list':
