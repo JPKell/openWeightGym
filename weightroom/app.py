@@ -88,7 +88,7 @@ from loadcoach.backup_crypto import encryption_status, recipients as backup_reci
 from loadcoach.database_admin import catalogs as database_catalogs, configured_sources, dump_tools, make_sql_dump, safe_filename
 from db.health import stores_health, async_stores_health
 from loadcoach.database_operations import DatabaseOperations
-from weightroom.database_console import DatabaseConsole, owner_of
+from weightroom.database_console import DatabaseConsole, NodeRefused, owner_of
 from weightroom.conversations import build_app as build_conversations
 from weightroom import pairing
 from weightroom.plugin_pages import build_routes as plugin_routes
@@ -3138,6 +3138,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if request.method == 'GET' and operation.endswith('/recovery'):
             try:
                 return await database_console.stream(person, machine, operation)
+            except NodeRefused as refused:
+                return Response(str(refused), status_code=refused.status)
             except (httpx.HTTPError, ValueError):
                 return Response('The owning node cannot provide this recovery copy.', status_code=503)
         try:
@@ -3184,6 +3186,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             operation += '?' + urlencode({'table': table})
         try:
             return await database_console.stream(person, machine, operation, 'application/sql')
+        except NodeRefused as refused:
+            return Response(str(refused), status_code=refused.status)
         except (ValueError, httpx.HTTPError):
             return Response('The owning node cannot export this database.', status_code=503)
 

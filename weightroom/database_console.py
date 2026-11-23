@@ -22,6 +22,13 @@ from db.recovery import checksum
 MAX_EXPORT_BYTES = 2 * 1024 ** 3
 
 
+class NodeRefused(OperationRefused):
+    """The owning node answered and refused, with its own reason and status (QA-050)."""
+    def __init__(self, message, status):
+        super().__init__(message)
+        self.status = status
+
+
 def owner_of(person):
     """Use stable account identity for private database-operation ownership."""
     return person.me.get('identity') or person.name
@@ -103,7 +110,16 @@ class DatabaseConsole:
             headers={'authorization': f'Bearer {person.key}', 'x-turnstile-no-wake': '1'}, timeout=httpx.Timeout(910, connect=2))
         answer = await self.client.send(request, stream=True)
         if not answer.is_success:
-            await answer.aclose()
+            try:
+                if answer.status_code in (404, 409):  # the node answered: pass on what it said
+                    try:
+                        said = json.loads(await answer.aread())['error']['message']
+                    except (ValueError, KeyError, TypeError, httpx.HTTPError):
+                        said = ''
+                    if said:
+                        raise NodeRefused(said, answer.status_code)
+            finally:
+                await answer.aclose()
             raise OperationRefused('The owning node refused the download or is unreachable.')
         async def chunks():
             """Stream the remote response and always close it afterward."""

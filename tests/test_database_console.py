@@ -135,6 +135,8 @@ def test_node_scoped_dump_lazy_details_and_reviewed_purge(fleet):
     assert detail.status_code == 200 and detail.json()['tables'][0]['records'] == 3
     dumped = browser.get(cpu['dump_url'] + '?table=readings')
     assert dumped.status_code == 200 and 'CREATE TABLE readings' in dumped.text
+    missing = browser.get(cpu['dump_url'] + '?table=qa-no-such-table')  # the node's own answer, not an outage (QA-050)
+    assert missing.status_code == 404 and 'There is no such table in that database.' in missing.text, missing.text[-3000:]
     review = browser.post('/databases/api/preview', json={'scope': [cpu['key']], 'action': 'purge', 'cutoff': '2025-11-01'})
     assert review.status_code == 200, review.text
     assert review.json()['stores'][0]['count'] == 2
@@ -149,7 +151,8 @@ def test_node_scoped_dump_lazy_details_and_reviewed_purge(fleet):
     remote_id = job['outcomes'][0]['job']
     assert browser.get(f'/databases/cpu/operation/jobs/{remote_id}/recovery').status_code == 200
     assert browser.post('/databases/api/execute', json={'review': review.json()['review'], 'confirmed': True}).status_code == 409
-    assert browser.get('/databases/unknown/spotter.db/dump').status_code == 503
+    unknown = browser.get('/databases/unknown/spotter.db/dump')  # no such node: the control node says so
+    assert unknown.status_code == 404 and 'That compute node is not configured.' in unknown.text
 
 
 def test_permissions_job_ownership_origin_and_orphan_exclusion(fleet):
