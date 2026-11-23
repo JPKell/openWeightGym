@@ -195,3 +195,21 @@ def test_an_answer_that_says_200_and_gives_nothing_is_not_left_unexplained(fake_
     assert kept_of[2] == {"content": "hi", "reasoning": "thinking it over", "finish_reason": "stop"}  # OpenRouter's own word for a model's thinking is read too
     assert (talk[0]["content"], talk[0]["error"]) == ("", "Provider returned error (code 429)") and "answered with nothing" in talk[1]["error"]
     assert (talk[2]["content"], talk[2]["reasoning"]) == ("hi", "thinking it over") and "error" not in talk[2]
+
+
+def test_a_removed_account_takes_its_key_and_a_new_one_of_that_name_starts_without(fake_llama_server, service, tmp_path):
+    """QA-040: a key file is named only by its account, so it goes when the account does."""
+    from chat_clients import gateway as chat_gateway
+
+    keys = tmp_path / "keys"
+    with chat_gateway(fake_llama_server, groups=OUTWARD, keys=str(keys)) as caller:
+        admin = add_user(caller, "jordan", "admin")
+        add = lambda url: caller.post("/loadcoach/services/rented?new", headers=admin,  # noqa: E731
+                                      json={"url": url, "models": {"cloud-model": {"theirs": "vendor/small"}}})
+        assert add(service).status_code == 201
+        caller.post("/loadcoach/services/rented/key", headers=admin, json={"key": "first-provider-key"}).raise_for_status()
+        assert (keys / "rented.key").is_file()
+        assert caller.delete("/loadcoach/services/rented", headers=admin).status_code == 200
+        assert not (keys / "rented.key").exists()
+        assert add("http://127.0.0.1:9/v1").status_code == 201
+        assert next(one for one in caller.get("/loadcoach/services", headers=admin).json()["services"] if one["name"] == "rented")["key"] is False

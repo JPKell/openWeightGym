@@ -88,9 +88,21 @@ class Services:
             self.db.execute("INSERT INTO services (name, settings, position) VALUES (?, ?, COALESCE((SELECT MAX(position)+1 FROM services),1)) ON CONFLICT (name) DO UPDATE SET settings = excluded.settings", (name, json.dumps(settings)))
 
     def remove(self, name: str) -> bool:
-        """Delete a hosted service configuration and report whether it existed."""
+        """Delete a hosted service configuration and its installed key, and report whether it existed.
+
+        The key file is named only by the account, so a key left behind would silently belong to a
+        later account given the same name, perhaps for another endpoint.
+        """
         with self.db:
-            return self.db.execute("DELETE FROM services WHERE name = ?", (name,)).rowcount > 0
+            removed = self.db.execute("DELETE FROM services WHERE name = ?", (name,)).rowcount > 0
+        if removed:
+            self.forget_key(name)
+        return removed
+
+    def forget_key(self, name: str) -> None:
+        """Delete the account's installed key file, if there is one."""
+        if NAME.fullmatch(name):
+            self.key_file(name).unlink(missing_ok=True)
 
     def models(self) -> dict[str, dict]:
         """Every model the services offer, by our name for it: its `service`, the service's name for it as `theirs`, and its price if it has one."""

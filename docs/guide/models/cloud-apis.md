@@ -20,7 +20,7 @@ Use an account with [provider management](/docs/system/abilities#ability-manage-
 
 ## Options
 
-**04 · Spending & removal** contains **Daily spending limit** and **Remove account**. Separate accounts can share an endpoint while keeping their own key, model names and spending policy. Removing an openWeightGym account configuration does not delete the provider account.
+**04 · Spending & removal** contains **Daily spending limit** and **Remove account**. Separate accounts can share an endpoint while keeping their own key, model names and spending policy. Removing an account also deletes its installed key, so a later account given the same name starts without one. Removing an openWeightGym account configuration does not delete the provider account.
 
 ## Limits and troubleshooting
 
