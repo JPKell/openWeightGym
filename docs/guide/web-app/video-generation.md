@@ -23,7 +23,7 @@ support disables generation; saving a model alone does not qualify it.
 3. Select **Generate**. Runs use the existing batch executor and exclusive GPU admission.
    **Stop** cancels the active run; it waits for the owned runtime to stop before releasing its GPU.
 4. Select a completed clip in **Your clips**. Use the player, frame arrows, **Download** or
-   **Reuse settings**. Unsent per-model drafts stay in this tab while switching models.
+   **Reuse settings**. Unsent per-model drafts, including the chosen resolution, stay in this tab while switching models and as runs finish.
    **Load earlier clips** pages through retained history; model, mode, date and sort controls
    apply to the loaded clips.
 
@@ -41,7 +41,7 @@ Optional control-node ffmpeg strips disabled sound, remuxes enabled sound to Opu
 posters. Without it, native PCM audio needs a compatible player; sound cannot be disabled when
 the native model always produces audio. **Loop** and **Muted** affect playback only.
 
-**Temporary · no retained history** requires the existing no-log permission. Inputs and results
+**Temporary · no retained history** requires the existing no-log permission and appears only while the compute policy allows no-log work. Inputs and results
 remain in bounded temporary memory; temporary input assets require a temporary job. Stop cancels running work; results expire from memory after one hour. No durable batch or
 asset rows are created.
 

@@ -38,8 +38,9 @@
       if(e.name in settings) {if(e.type==='checkbox')e.checked=Boolean(settings[e.name]);else e.value=settings[e.name];}
       else if(e.type==='checkbox')e.checked=false;
     }
-    if(settings.width && settings.height) {
-      const size=`${settings.width}x${settings.height}`;
+    // A draft keeps the size its user chose; the profile's width/height apply only to a fresh draft or reused settings.
+    const size=saved?.settings?.size || (settings.width && settings.height ? `${settings.width}x${settings.height}` : '');
+    if(size) {
       if(![...$('size').options].some(e=>e.value===size))$('size').add(new Option(size,size));$('size').value=size;
     }
     const modes=options.filter(([key])=>key==='text' || key==='start' && f.init_image || key==='ends' && f.init_image && f.end_image || key==='references' && f.ref_images || key==='control' && f.control_frames);

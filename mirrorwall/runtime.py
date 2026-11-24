@@ -769,7 +769,8 @@ def create_app(job,native=None):
                 if len(body)>MAX_REQUEST_BYTES:
                     return JSONResponse({"error":{"message":"Image request exceeds 60 MiB."}},413)
             asked=json.loads(body)
-            check(asked,job["settings"])
+            # A video is checked against the loaded runtime's capabilities in video_workflow.
+            check(asked,job["settings"],deferred=True) if video else check(asked,job["settings"])
         except (ValueError,TypeError,Image.DecompressionBombError) as problem:
             return JSONResponse({"error":{"message":str(problem)}},400)
         busy=True

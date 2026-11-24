@@ -105,3 +105,16 @@ def test_latent_upscale_uses_native_model_name_and_counts_output_bounds():
     with pytest.raises(ValueError,match='upscale output'):
         video.checked_request({'model':'ltx','prompt':'Rain','width':512,'height':256,'hires':True},selected,
                               capabilities=caps,account_limits={'video_max_width':832,'video_max_height':480})
+
+
+def test_the_runtime_admits_conditioning_before_it_has_loaded_its_capabilities():
+    """Saved profiles hold no capabilities; the child checks a start image once its runtime reports them."""
+    selected=profile()
+    selected['sdcpp'].pop('runtime_capabilities')
+    asked={'model':'wan','prompt':'Rain','init_image':image()}
+    with pytest.raises(ValueError,match='Qualify the runtime capabilities'):
+        video.checked_request(asked,selected)
+    assert video.checked_request(asked,selected,deferred=True)['init_image']
+    caps={'supported_modes':['vid_gen'],'output_formats_by_mode':{'vid_gen':['webm']},'features_by_mode':{'vid_gen':{'init_image':False}}}
+    with pytest.raises(ValueError,match='init_image'):
+        video.checked_request(asked,selected,capabilities=caps,deferred=True)  # the loaded runtime still decides

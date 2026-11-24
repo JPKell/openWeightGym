@@ -992,6 +992,23 @@ class Runner:
             await self.start(server)
             await self.measure(server)
 
+    async def runtime_versions(self) -> None:
+        """Resolve each configured engine that fingerprints its whole runtime, as llama.cpp is at startup.
+
+        Qualification evidence is matched to that identity. Left unresolved, a restarted node would
+        publish its video profiles as unqualified, and share no image placement, until a job was admitted.
+        """
+        asked = set()
+        for name in self.models.names():
+            settings = self.models.get(name)
+            engine = engine_for(settings) if settings else None
+            if engine and hasattr(engine, "build_version") and engine.id not in asked:
+                asked.add(engine.id)
+                try:
+                    await self.version(settings)
+                except (OSError, ValueError):  # an unusable installation is refused, with its reason, when a job asks for it
+                    pass
+
     async def version(self, settings: dict | None = None) -> str:
         """Cache the selected engine build by installation, leaving legacy build access intact."""
         engine = engine_for(settings)

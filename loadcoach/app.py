@@ -2599,6 +2599,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         reading = asyncio.create_task(read_files())
         hashing.set()
         await runner.version()  # asked once now, so that it is at hand for every answer
+        await runner.runtime_versions()  # video and shared image profiles are matched to these builds
         try:
             await tasks.probes.identify()
         except (OSError, ValueError):

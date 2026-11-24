@@ -757,3 +757,26 @@ def test_session_folders_left_by_a_killed_loadcoach_are_removed_at_its_first_lau
     live.mkdir()  # a session this process launched
     engine.scratch_folder(config)
     assert live.exists()
+
+
+def test_a_restarted_node_knows_its_image_runtime_build_before_any_job(image_settings, monkeypatch):
+    """Video profiles publish runtime capabilities only for the current build; it must not wait for an admission."""
+    import asyncio
+    from loadcoach.config import Config
+    from loadcoach.models import Models
+    from loadcoach.runner import Runner
+    from mirrorwall.engine import SDCpp
+    library = Models(':memory:'); library.put('flux', image_settings); library.put('other', image_settings)
+    runner = Runner(Config(gpus=('CUDA0',), engines={'sdcpp': {'enabled': True}}), None, models=library)
+    asked = []
+    async def build(self, config):
+        asked.append(1)
+        return 'sdcpp:current'
+    monkeypatch.setattr(SDCpp, 'build_version', build)
+    assert runner.known_version(image_settings) == ''
+    asyncio.run(runner.runtime_versions())
+    assert runner.known_version(image_settings) == 'sdcpp:current' and asked == [1]  # once per engine
+    async def broken(self, config):
+        raise ValueError('engines.sdcpp accepts enabled, executable, cli and manifest.')
+    monkeypatch.setattr(SDCpp, 'build_version', broken)
+    asyncio.run(runner.runtime_versions())  # startup continues; the job that asks is refused with the reason

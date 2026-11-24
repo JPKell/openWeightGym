@@ -77,8 +77,12 @@ def recipe(settings):
     return 'ltx25-dev' if variant=='ltx-2.5' else 'ltx23-dev' if family=='ltx2' else 'hunyuan-video-15-t2v' if family=='hunyuan-video-1.5' else 'minimax-h3-fl2va'
 
 
-def checked_request(asked, settings=None, *, capabilities=None, account_limits=None):
-    """Normalize the local Videos API and refuse every unsupported extension explicitly."""
+def checked_request(asked, settings=None, *, capabilities=None, account_limits=None, deferred=False):
+    """Normalize the local Videos API and refuse every unsupported extension explicitly.
+
+    `deferred`: the runtime's own capabilities are checked once it is loaded, so a request is not
+    refused here merely because the saved profile holds none; they live in qualification evidence.
+    """
     if not isinstance(asked,dict):
         raise ValueError('Video request must be an object.')
     allowed={'model','prompt','negative_prompt','size','width','height','seconds','fps','frames','seed','steps',
@@ -189,7 +193,7 @@ def checked_request(asked, settings=None, *, capabilities=None, account_limits=N
                 raise ValueError(key+' is not supported by this qualified runtime profile.')
         if has_profile and any(key in result for key in ('high_noise_steps','high_noise_guidance','moe_boundary')) and not options.get('components',{}).get('high_noise_diffusion_model'):
             raise ValueError('High-noise controls are not supported without a high-noise diffusion component.')
-    elif has_profile and any(key in asked for key in ('init_image','input_reference','end_image','reference_images','control_video','high_noise_steps','high_noise_guidance','moe_boundary','hires')):
+    elif has_profile and not deferred and any(key in asked for key in ('init_image','input_reference','end_image','reference_images','control_video','high_noise_steps','high_noise_guidance','moe_boundary','hires')):
         raise ValueError('Qualify the runtime capabilities before using video conditioning or advanced modes.')
     if has_profile and result.get('soundtrack') and not options.get('components',{}).get('audio_vae'):
         raise ValueError('This profile has no qualified soundtrack components.')

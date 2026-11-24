@@ -68,6 +68,7 @@ def test_live_canvas_keeps_model_drafts_and_selection_during_polling(desk,clip,w
         page.get_by_text('Advanced',exact=True).click()
         page.locator('#video-prompt').fill('Keep the unsent draft')
         page.locator('[data-lora=motion]').fill('.3')
+        page.locator('#video-size').select_option('480x832')
         page.locator('#video-model').select_option('wan-b');page.locator('#video-prompt').fill('Second model draft')
         page.locator('#video-model').select_option('wan-a')
         playwright.expect(page.locator('#video-prompt')).to_have_value('Keep the unsent draft')
@@ -75,12 +76,14 @@ def test_live_canvas_keeps_model_drafts_and_selection_during_polling(desk,clip,w
         playwright.expect(page.locator('#video-gallery > button')).to_have_attribute('aria-selected','true')
         page.wait_for_function('document.getElementById("video-player").readyState>=2')
         assert page.locator('#video-player').evaluate('v=>v.videoWidth')==256
+        models[0]['video_workflow']['envelope']={'at':2}  # a finished run publishes a newer measurement
         page.clock.install();page.clock.fast_forward(3100)
+        playwright.expect(page.locator('#video-size')).to_have_value('480x832')
         playwright.expect(page.locator('#video-gallery > button')).to_have_attribute('aria-selected','true')
         playwright.expect(page.locator('#video-prompt')).to_have_value('Keep the unsent draft')
         page.locator('#video-generate').click()
         assert submitted[-1]['prompt']=='Keep the unsent draft'
-        assert submitted[-1]['model']=='wan-a' and submitted[-1]['size']=='832x480'
+        assert submitted[-1]['model']=='wan-a' and submitted[-1]['size']=='480x832'
         assert submitted[-1]['loras']=={'motion':.3}
         page.locator('#video-delete').click();assert not deleted
         page.locator('#video-delete').click()
@@ -153,3 +156,10 @@ def test_an_empty_video_catalogue_says_to_add_a_video_model(desk):
         page.goto('http://console.test/models/video')
         playwright.expect(page.locator('#studio-models-empty, [id$=models-empty]').first).to_have_text('No video models in this selection. Add a video model to begin.')
         browser.close()
+
+
+def test_temporary_clips_are_offered_only_when_the_compute_policy_allows_them(desk):
+    """jordan may generate without logs, but the node's policy does not allow it, so the studio does not offer it."""
+    browser,_,_=desk
+    sign_in(browser,'jordan')
+    assert browser.get('/video-api/state').json()['can_unlogged'] is False

@@ -97,14 +97,18 @@ def routes(for_people, page, ask, model_api):
                 return JSONResponse({'error':{'message':"Use this site's own video page."}},403)
         parts=action.split('/')
         if action=='state' and request.method=='GET':
-            models,jobs=await asyncio.gather(ask('GET','/v1/models',person.key),ask('GET','/v1/videos',person.key,params={'limit':100}))
+            unlogged='unlogged' in person.can
+            models,jobs,me=await asyncio.gather(ask('GET','/v1/models',person.key),ask('GET','/v1/videos',person.key,params={'limit':100}),
+                                                ask('GET','/loadcoach/me',person.key) if unlogged else asyncio.sleep(0))
             if not models.is_success or not jobs.is_success:
                 return JSONResponse({'error':{'message':'Video inventory or history is unavailable.'}},503)
             if jobs.headers.get('x-suite-image-temporary')=='1':
                 observation.silence()
             return JSONResponse({'models':[one for one in models.json().get('data',[]) if one.get('capabilities',{}).get('video_generation')],
                                  'jobs':jobs.json().get('data',[]),'history_has_more':jobs.json().get('has_more',False),
-                                 'can_unlogged':'unlogged' in person.can},headers={'cache-control':'no-store'})
+                                 # As Images and Audio offer it: the account may, and the live compute policy allows no-log work.
+                                 'can_unlogged':bool(unlogged and me is not None and me.is_success and me.json().get('chat',{}).get('unlogged',False))},
+                                headers={'cache-control':'no-store'})
         target=None
         if action=='jobs' and request.method in ('GET','POST'):
             target='/v1/videos'
