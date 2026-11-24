@@ -47,7 +47,16 @@ def scratch_folder(config):
     from loadcoach.config import data_folder
     folder = data_folder(Path(path), {'data': told}).resolve() / 'engine-scratch'
     folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if folder not in _swept:
+        # Sessions live in LoadCoach's own cgroup and end with it, so before this process's first
+        # launch any session folder is one a killed LoadCoach left behind: links or whole copies.
+        _swept.add(folder)
+        for stale in folder.glob('suite-image-engine-*'):
+            shutil.rmtree(stale, ignore_errors=True)
     return str(folder)
+
+
+_swept = set()
 
 
 def node_options(config):

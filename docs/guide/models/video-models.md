@@ -62,7 +62,8 @@ the current build and file revisions. The first clip is evidence for that size, 
 Each session stages its components in `engine-scratch` inside the compute node's data folder.
 They are hard-linked when that folder shares a filesystem with the weights, and otherwise copied,
 which needs free disk space for the whole bundle. The system temporary folder is not used,
-because it may be a small memory-backed filesystem.
+because it may be a small memory-backed filesystem. Folders left by a LoadCoach that was killed
+are removed before its next session starts.
 Missing weights, incompatible components or insufficient memory mean a profile is not runnable;
 the editor and generation page show the reason. Configuration saves are not GPU qualification.
 

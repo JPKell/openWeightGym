@@ -736,3 +736,24 @@ def test_engine_scratch_is_on_the_nodes_data_disk_so_components_hard_link(tmp_pa
     os.link(weights, staged)  # same filesystem as the models: no copy
     assert staged.stat().st_ino == weights.stat().st_ino
     assert scratch_folder(SimpleNamespace(path='', data='.')) is None  # no settings file to count from: the system's
+
+
+def test_session_folders_left_by_a_killed_loadcoach_are_removed_at_its_first_launch(tmp_path):
+    """On disk they would outlive reboots; sessions end with LoadCoach, so earlier ones are stale."""
+    from types import SimpleNamespace
+    from mirrorwall import engine
+    settings = tmp_path / 'settings' / 'loadcoach.toml'
+    settings.parent.mkdir()
+    config = SimpleNamespace(path=str(settings), data='../data')
+    scratch = tmp_path / 'data' / 'engine-scratch'
+    stale = scratch / 'suite-image-engine-old'
+    stale.mkdir(parents=True)
+    (stale / 'diffusion.gguf').write_bytes(b'GGUF')
+    kept = scratch / 'notes.txt'
+    kept.write_text('not a session')
+    assert Path(engine.scratch_folder(config)) == scratch.resolve()
+    assert not stale.exists() and kept.exists()
+    live = scratch / 'suite-image-engine-live'
+    live.mkdir()  # a session this process launched
+    engine.scratch_folder(config)
+    assert live.exists()
