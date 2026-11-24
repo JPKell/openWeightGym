@@ -1053,7 +1053,10 @@ class Runner:
                 response=await self.client.get(server.url+'/health',headers=server.headers,timeout=3)
                 profile=response.json().get('image_profile') if response.is_success else None
             except (httpx.HTTPError,ValueError):
-                if self.models.stored(server.model):
+                # An observation that cannot be made, such as the final one of a child already
+                # stopped with LoadCoach, is no evidence against this build's qualified profile.
+                prior=(self.models.measure(server.model,server.settings) or {}).get('image_profile',{})
+                if self.models.stored(server.model) and not (prior.get('qualified') and prior.get('build')==server.build):
                     self.models.measured(server.model,server.settings,None,image_profile={'qualified':False,'build':server.build,'problem':'Workflow observation unavailable'})
                     server.mib=None
                 return

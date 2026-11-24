@@ -780,3 +780,26 @@ def test_a_restarted_node_knows_its_image_runtime_build_before_any_job(image_set
         raise ValueError('engines.sdcpp accepts enabled, executable, cli and manifest.')
     monkeypatch.setattr(SDCpp, 'build_version', broken)
     asyncio.run(runner.runtime_versions())  # startup continues; the job that asks is refused with the reason
+
+
+def test_an_unobservable_final_measurement_keeps_the_qualified_profile(image_settings):
+    """Live QA-106: stopping LoadCoach stops the child first, and its failed last look replaced the qualification."""
+    import asyncio, httpx
+    from types import SimpleNamespace
+    from loadcoach.config import Config
+    from loadcoach.models import Models
+    from loadcoach.runner import Runner, Server
+    library = Models(':memory:'); library.put('flux', image_settings)
+    runner = Runner(Config(gpus=('CUDA0',)), None, models=library)
+    class Gone:
+        async def get(self, *a, **k): raise httpx.ConnectError('stopped')
+    runner.client = Gone()
+    server = Server('flux', ('CUDA0',), image_settings, ready=True, mib=[9000], process=SimpleNamespace(pid=1, returncode=None))
+    server.build, server.url, server.headers = 'sdcpp:current', 'http://127.0.0.1:1', {}
+    library.measured('flux', image_settings, [9000], image_profile={'qualified': True, 'build': 'sdcpp:current', 'runtime_capabilities': {'supported_modes': ['vid_gen']}})
+    asyncio.run(runner.measure(server))
+    kept = library.measure('flux', image_settings)['image_profile']
+    assert kept['qualified'] and kept['runtime_capabilities'] and server.mib == [9000]
+    server.build = 'sdcpp:rebuilt'  # another build has no evidence yet, so the failure is still recorded
+    asyncio.run(runner.measure(server))
+    assert library.measurements('flux', image_settings)[0]['image_profile'] == {'qualified': False, 'build': 'sdcpp:rebuilt', 'problem': 'Workflow observation unavailable'}
