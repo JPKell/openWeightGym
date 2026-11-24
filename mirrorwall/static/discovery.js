@@ -74,11 +74,15 @@
           files.replaceChildren(); files.hidden = false; details.setAttribute('aria-expanded', 'true');
           if (!choices.length) { files.append(el('p', 'No supported file with a SHA-256 checksum is available for this format.', 'small text-secondary mb-0')); return; }
           const place = el('select', undefined, 'form-select form-select-sm mt-1');
-          value.places.filter(row => ['storage_image', 'storage_encoders'].includes(row.name)).forEach(row =>
-            place.add(new Option(({storage_image: 'Image storage', storage_encoders: 'Encoder storage'})[row.name], row.name)));
+          // The image and encoder folders of model storage; a retired second root's storage_ folders where those are all there is.
+          const labels = {image: 'Image models', encoders: 'Text encoders'};
+          Object.keys(labels).forEach(kind => {
+            const row = value.places.find(one => one.name === kind) || value.places.find(one => one.name === 'storage_' + kind);
+            if (row) place.add(new Option(labels[kind], row.name));
+          });
           place.setAttribute('aria-label', 'Download destination');
           const label = el('label', 'Download destination', 'form-label small w-100'); label.append(place);
-          files.append(label, el('p', place.options.length ? 'Downloads go into storage, never the cache. Files are verified before use.' : 'Downloads go into model storage, never the cache. Set a model storage folder in Settings → Model file locations to download files.', 'small text-secondary'));
+          files.append(label, el('p', place.options.length ? 'Downloads go into model storage. Files are verified before use.' : 'Downloads go into model storage. Set a model storage folder in Settings → Model file locations to download files.', 'small text-secondary'));
           choices.forEach(file => {
             const button = el('button', file.file + ' · ' + (file.size / 2**30).toFixed(2) + ' GiB', 'btn btn-outline-secondary btn-sm w-100 mb-2 text-break');
             button.type = 'button'; button.disabled = !place.options.length;

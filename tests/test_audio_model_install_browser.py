@@ -143,7 +143,8 @@ def test_add_reopen_edit_and_reject_duplicate_audio_model(audio_install_console,
             time.sleep(.05)
         saved=library.stored(name)
         assert saved is not None,client.get('/models?kind=audio').text
-        target=cache/name/'model.gguf'
+        # A file already on the node (in either of its folders) is used where it is; one from the control node is copied in once.
+        target=main if tier=='storage' else cache/name/'model.gguf'
         assert saved['flags']['model']==str(target)
         assert saved['audiocpp']['path']==str(target)
         assert saved['audiocpp']['files']==['tokens.json']

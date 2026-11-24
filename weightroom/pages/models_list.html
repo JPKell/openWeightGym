@@ -9,7 +9,7 @@
 {% if measure_oob|default(false) %}{{ overview(catalogue, oob=true) }}{% endif %}
 {% if catalogue.offline %}{{ alert('warning', 'Unavailable nodes: ' ~ catalogue.offline|join(', ') ~ '. Live availability excludes these nodes; any retained installations remain listed.', class_='py-2') }}{% endif %}
 {# One line for each node a model is being added to. #}
-{% set install_states = {'queued':'Preparing and verifying model bundle', 'verifying':'Verifying SHA-256', 'waiting':'Waiting for shared file copy', 'promoting':'Preparing files in cache', 'copying':'Copying files to node', 'creating':'Registering model', 'complete':'Installed', 'failed':'Failed'} %}
+{% set install_states = {'queued':'Preparing and verifying model bundle', 'verifying':'Verifying SHA-256', 'waiting':'Waiting for shared file copy', 'copying':'Copying files to node', 'creating':'Registering model', 'complete':'Installed', 'failed':'Failed'} %}
 {% for installation in installations|default([]) %}
 {% call alert(('danger' if installation.state == 'failed' else 'success' if installation.state == 'complete' else 'info'), role='status') %}
 <strong>{{ installation.name }}</strong> on {{ installation.destination|default(installation.machine) }}: {{ install_states.get(installation.state, installation.state) }}

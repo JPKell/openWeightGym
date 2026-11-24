@@ -75,7 +75,7 @@ Owner decisions D1–D7, recorded 2026-10-15/16, apply to the approved disposabl
 - **Routing:** explicit model names remain supported; role choices explain quality/reliability,
   capabilities, residency and time estimates. Reassign a lost request only before output starts;
   fail cleanly afterward without replaying a partial answer.
-- **Files:** install verified complete copies atomically; promotion retains storage originals.
+- **Files:** one model storage folder per node, no cache; install verified complete copies atomically and copy only to nodes that lack a file.
   Delete only permitted unused files. Keep legacy explicit places and settings/service/command
   aliases where supported; relay→turnstile has no alias. Historical labels remain unchanged.
 - **Audit/privacy:** preserve append-only chain serialization, forwarding deduplication and scoped

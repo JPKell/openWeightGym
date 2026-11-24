@@ -17,16 +17,16 @@
     detail:{models:models.filter(model=>!node || model.node===node),node}}));
   const message = error => { $('message').hidden = !error; $('message').textContent = error || ''; };
   const element = (tag, text, className) => { const one = document.createElement(tag); if (text !== undefined) one.textContent = text; if (className) one.className = className; return one; };
-  function fileOption(path, machine = activeNode(), tier = 'current') {
+  function fileOption(path, machine = activeNode()) {
     const parts=path.split('/').filter(Boolean), folder=parts.at(-2) || '/', filename=parts.at(-1) || path;
     const option=new Option(machine+' · '+folder+' · '+filename,path);
-    option.title=path; option.dataset.machine=machine; option.dataset.tier=tier;
+    option.title=path; option.dataset.machine=machine;
     return option;
   }
   /** Select `path` on `machine`; another node's copy only stands in when this one is not listed, unless `add` lists it. */
   function pick(select, path, machine, add = false) {
     const options = [...select.options].filter(option => option.value === path);
-    let option = options.find(one => one.dataset.machine === machine && one.dataset.tier !== 'storage') || options.find(one => one.dataset.machine === machine);
+    let option = options.find(one => one.dataset.machine === machine);
     if (!option && add) { option = fileOption(path, machine); select.add(option); }
     option ||= options[0];
     if (option) option.selected = true;
@@ -124,7 +124,7 @@
       for (const one of slot.choices || (slot.candidates || []).map(path => ({path}))) {
         const where = one.machine ? ' on ' + suiteNodeLabel(one.machine) : '';
         const use = element('button', 'Use ' + one.path.split('/').pop() + where, 'btn btn-outline-success btn-sm'); use.type = 'button';
-        use.title = (one.machine ? one.machine + ' · ' : '') + one.path + (one.tier === 'storage' ? ' (storage)' : '');
+        use.title = (one.machine ? one.machine + ' · ' : '') + one.path;
         use.onclick = () => { choose(input, one.path, one.machine); syncExclusive(); recheck(0); }; actions.append(use);
       }
       if (slot.get) {
@@ -183,7 +183,7 @@
     if(!video) choose('upscaler', profile.upscaler); $('staged').checked = profile.staged !== false;
     SLOTS.forEach(name => Array.from($(name).options).forEach(option => {
       option.disabled = Boolean(model && option.value && option.value !== $(name).value &&
-        (option.dataset.machine !== activeNode() || option.dataset.tier === 'storage'));
+        option.dataset.machine !== activeNode());
     }));
     SuiteModelFields.load('mw-defaults', profile.defaults || familyDefaults());
     SuiteModelFields.load('mw-limits', profile.limits || (video?Profiles.spec($('family').value).limits:{max_width:1024,max_height:1024,max_pixels:1048576,max_steps:50,max_images:8,max_references:2}));
@@ -231,7 +231,7 @@
     const encoder = file => image(file) || file.facts?.what === 'model' || file.facts?.image_identity?.kind === 'text_encoder';
     SLOTS.forEach(name => {
       $(name).replaceChildren(new Option(name === 'diffusion' ? 'Choose diffusion weights' : 'No file', ''));
-      listed.filter(name === 'text_encoder' ? encoder : image).forEach(file => $(name).add(fileOption(file.path,file.machine,file.tier)));
+      listed.filter(name === 'text_encoder' ? encoder : image).forEach(file => $(name).add(fileOption(file.path,file.machine)));
     });
     loraFiles = listed.filter(file => file.facts?.image_identity?.kind === 'lora' || file.facts?.kind === 'lora');
     $('lora-rows').querySelectorAll('select[data-lora-field="file"]').forEach(select => loraChoices(select, select.value));
@@ -246,11 +246,11 @@
   /** List the library's LoRA files like the model file choices; an existing model keeps to copies on its own node. */
   function loraChoices(select, value = '') {
     select.replaceChildren(new Option('Choose a LoRA file', ''));
-    loraFiles.forEach(file => select.add(fileOption(file.path, file.machine, file.tier)));
+    loraFiles.forEach(file => select.add(fileOption(file.path, file.machine)));
     if (value) pick(select, value, activeNode(), true); else select.value = '';
     Array.from(select.options).forEach(option => {
       option.disabled = Boolean(selected && option.value && option.value !== select.value &&
-        (option.dataset.machine !== activeNode() || option.dataset.tier === 'storage'));
+        option.dataset.machine !== activeNode());
     });
   }
   function addLora(name = '', entry = {}) {

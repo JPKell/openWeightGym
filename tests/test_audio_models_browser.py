@@ -35,10 +35,10 @@ def studio(desk):
                 dict(family='ace_step',name='ACE-Step',kinds=['music'],options={'request':[
                     dict(name='bpm',type='int',min=20,max=300)]})]
     files = [dict(name=node,answering=True,files=[file for row in rows for file in [
-        dict(path=row['flags']['model'],tier='cache',facts={'what':'audio','family':row['audiocpp']['family']}),
-        dict(path=row['flags']['model'].rsplit('/',1)[0]+'/tokens.bin',tier='cache',facts={})]])
+        dict(path=row['flags']['model'],facts={'what':'audio','family':row['audiocpp']['family']}),
+        dict(path=row['flags']['model'].rsplit('/',1)[0]+'/tokens.bin',facts={})]])
         for node,rows in inventories.items()]
-    files.append(dict(name='vault',answering=True,files=[dict(path='/storage/voice.gguf',tier='storage',facts={'what':'audio','family':'kokoro'})]))
+    files.append(dict(name='vault',answering=True,files=[dict(path='/storage/voice.gguf',facts={'what':'audio','family':'kokoro'})]))
     state = dict(inventories=inventories, files=files, failed=set(), posts=[], requests=[], install=False, file_error=False,
                  cards={node:['A','B'] for node in inventories}, nodes=nodes, families=families,
                  jobs={}, advance_installs=True, progress_error=False)
@@ -153,7 +153,7 @@ def test_whisper_profile_reuses_audio_editor_and_saves_only_native_options(studi
     state['inventories']['atlas'].append({'name': 'whisper', 'engine': 'whispercpp', 'flags': {'model': path, 'ctx-size': 0},
         'gpus': 0, 'alone': True, 'whispercpp': {'host_ram_mib': 8192, 'threads': 6, 'max_audio_mib': 32, 'max_seconds': 600}})
     state['families'].append({'family': 'whispercpp', 'name': 'whisper.cpp', 'kinds': ['transcription'], 'options': {}})
-    state['files'][0]['files'].append({'path': path, 'tier': 'cache', 'facts': {'what': 'audio', 'family': 'whispercpp', 'kinds': ['transcription']}})
+    state['files'][0]['files'].append({'path': path, 'facts': {'what': 'audio', 'family': 'whispercpp', 'kinds': ['transcription']}})
     page.set_viewport_size({'width': width, 'height': 1100})
     page.goto('http://console.test/models/audio?model=whisper&node=atlas')
     playwright.expect(page.locator('#am-family')).to_have_value('whispercpp')
@@ -227,7 +227,7 @@ def test_main_node_pill_becomes_available_when_a_background_install_finishes(stu
     page.goto('http://console.test/models/audio?new=1')
     page.locator('#am-install-targets input[value="atlas"]').locator('..').click()
     page.locator('#am-install-targets input[value="scout"]').locator('..').click()
-    page.locator('#am-file').select_option(label='voice.gguf · vault · storage')
+    page.locator('#am-file').select_option(label='voice.gguf · vault')
     page.locator('#am-name').fill('speaker')
     page.locator('#am-submit').click()
     playwright.expect(page.locator('#am-name')).to_have_value('')
@@ -257,7 +257,7 @@ def test_task_choices_and_add_from_remote_storage_on_selected_node(studio):
     page.locator('#am-add').click()
     page.locator('#am-install-targets input[value="atlas"]').locator('..').click()
     page.locator('#am-install-targets input[value="scout"]').locator('..').click()
-    page.locator('#am-file').select_option(label='voice.gguf · vault · storage')
+    page.locator('#am-file').select_option(label='voice.gguf · vault')
     page.locator('#am-name').fill('new-voice')
     page.locator('[data-section="hardware"]').click()
     playwright.expect(page.locator('#am-install-targets input[value="scout"]')).to_be_checked()
@@ -329,7 +329,7 @@ def test_audio_task_filters_files_and_retains_the_selected_task_and_draft(studio
     task.select_option('speech')
     playwright.expect(files.locator('option[data-path]')).to_have_count(3)
     playwright.expect(files.locator('option[data-path*="song"]')).to_have_count(0)
-    files.select_option(label='voice.gguf · vault · storage')
+    files.select_option(label='voice.gguf · vault')
     page.locator('#am-name').fill('task-first-model')
     task.select_option('music')
     playwright.expect(files).to_have_value('')
@@ -359,8 +359,8 @@ def test_audio_task_filters_files_and_retains_the_selected_task_and_draft(studio
 def test_task_filter_uses_embedded_capabilities_and_keeps_unknown_files_under_all_tasks(studio):
     page,state=studio
     state['files'][-1]['files'].extend([
-        dict(path='/storage/effects/model.gguf',tier='storage',facts={'what':'audio','family':'embedded-synth','kinds':['sound','music']}),
-        dict(path='/storage/unknown/model.gguf',tier='storage',facts={'what':'audio'}),
+        dict(path='/storage/effects/model.gguf',facts={'what':'audio','family':'embedded-synth','kinds':['sound','music']}),
+        dict(path='/storage/unknown/model.gguf',facts={'what':'audio'}),
     ])
     page.goto('http://console.test/models/audio?new=1')
     task,files=page.locator('#am-kind'),page.locator('#am-file')
@@ -403,7 +403,7 @@ def test_file_capabilities_limit_the_tasks_of_a_broader_runtime_family(studio):
     page.locator('#am-kind').select_option('speech')
     playwright.expect(page.locator('#am-file option[data-machine="vault"]')).to_have_count(0)
     page.locator('#am-kind').select_option('')
-    page.locator('#am-file').select_option(label='voice.gguf · vault · storage')
+    page.locator('#am-file').select_option(label='voice.gguf · vault')
     page.locator('#am-submit').click()
     playwright.expect(page.locator('#am-saved')).to_have_text('Saved.')
     assert state['posts'][0][1]['settings']['audiocpp']['kind']=='clone'
@@ -413,13 +413,13 @@ def test_new_model_destination_uses_cpu_when_target_has_no_audio_gpus(studio):
     page,state=studio
     state['cards']['scout']=[]
     page.goto('http://console.test/models/audio?new=1')
-    page.locator('#am-file').select_option(label='voice.gguf · vault · storage')
+    page.locator('#am-file').select_option(label='voice.gguf · vault')
     page.locator('#am-name').fill('cpu-destination')
     playwright.expect(page.get_by_role('group',name='Install on compute nodes')).to_be_visible()
     playwright.expect(page.locator('#panel-files')).to_be_visible()
     page.locator('#am-install-targets input[value="scout"]').locator('..').click()
     page.locator('#am-install-targets input[value="atlas"]').locator('..').click()
-    playwright.expect(page.locator('#am-file option:checked')).to_have_text('voice.gguf · vault · storage')
+    playwright.expect(page.locator('#am-file option:checked')).to_have_text('voice.gguf · vault')
     playwright.expect(page.locator('#am-name')).to_have_value('cpu-destination')
     page.locator('[data-section="hardware"]').click()
     playwright.expect(page.locator('[data-hardware-mode][value="cpu"]')).to_be_checked()
@@ -437,7 +437,7 @@ def test_multiple_node_pills_retain_drafts_and_track_every_install(studio):
     targets=page.locator('#am-install-targets')
     playwright.expect(targets.locator('input[value="scout"]')).to_be_disabled()
     targets.locator('input[value="nova"]').locator('..').click()
-    page.locator('#am-file').select_option(label='voice.gguf · vault · storage')
+    page.locator('#am-file').select_option(label='voice.gguf · vault')
     page.locator('#am-name').fill('fleet-voice')
     page.locator('#am-profiles [data-model="speaker"] [data-identity]').click()
     page.locator('[data-section="output"]').click()
@@ -474,12 +474,12 @@ def test_background_installs_preserve_the_next_draft_and_report_partial_failure(
     state['install']=True; state['advance_installs']=False
     page.goto('http://console.test/models/audio?new=1')
     page.locator('#am-install-targets input[value="nova"]').locator('..').click()
-    page.locator('#am-file').select_option(label='voice.gguf · vault · storage')
+    page.locator('#am-file').select_option(label='voice.gguf · vault')
     page.locator('#am-name').fill('pending-voice')
     page.locator('#am-submit').click()
     playwright.expect(page.locator('#am-install-text')).to_contain_text('pending-voice on atlas: Queued')
     playwright.expect(page.locator('#am-name')).to_have_value('')
-    page.locator('#am-file').select_option(label='voice.gguf · vault · storage')
+    page.locator('#am-file').select_option(label='voice.gguf · vault')
     page.locator('#am-name').fill('pending-voice')
     playwright.expect(page.locator('#am-submit')).to_be_disabled()
     page.locator('#am-name').fill('next-voice')
@@ -490,7 +490,7 @@ def test_background_installs_preserve_the_next_draft_and_report_partial_failure(
     playwright.expect(page.locator('#am-profiles [data-model="pending-voice"]')).to_be_visible()
     playwright.expect(page.locator('#am-name')).to_have_value('next-voice')
     playwright.expect(page.locator('#am-kind')).to_have_value('speech')
-    playwright.expect(page.locator('#am-file option:checked')).to_have_text('voice.gguf · vault · storage')
+    playwright.expect(page.locator('#am-file option:checked')).to_have_text('voice.gguf · vault')
     playwright.expect(page.locator('#am-submit')).to_be_enabled()
     assert len(state['posts'])==1 and urlsplit(page.url).path=='/models/audio'
 
@@ -499,7 +499,7 @@ def test_install_progress_can_reconnect_without_resubmitting_or_losing_a_draft(s
     page,state=studio
     state['install']=True; state['progress_error']=True
     page.goto('http://console.test/models/audio?new=1')
-    page.locator('#am-file').select_option(label='voice.gguf · vault · storage')
+    page.locator('#am-file').select_option(label='voice.gguf · vault')
     page.locator('#am-name').fill('reconnect-voice')
     page.locator('#am-submit').click()
     playwright.expect(page.locator('#am-install-retry')).to_be_visible()
@@ -538,7 +538,7 @@ def test_pinned_gpus_must_exist_on_every_selected_destination(studio):
     page,state=studio
     state['cards']['nova']=['B']
     page.goto('http://console.test/models/audio?new=1')
-    page.locator('#am-file').select_option(label='voice.gguf · vault · storage')
+    page.locator('#am-file').select_option(label='voice.gguf · vault')
     page.locator('#am-name').fill('fleet-voice')
     page.locator('[data-section="hardware"]').click()
     page.get_by_text('Pin to GPUs',exact=True).click()
@@ -580,18 +580,18 @@ def test_install_destination_stays_visible_in_every_configuration_section(studio
 ])
 def test_audio_choices_show_machine_and_folder_and_exclude_other_models(studio,suffix,facts):
     page,state = studio
-    for node,tier in [('atlas','cache'),('vault','storage')]:
+    for node,tier in [('atlas','atlas'),('vault','storage')]:
         source=next(one for one in state['files'] if one['name'] == node)
         source['files'].extend([
-            dict(path=f'/custom/{tier}/voice.{suffix}',place=('' if tier == 'cache' else 'storage_')+('weights' if facts else 'audio'),tier=tier,facts=facts),
-            dict(path=f'/custom/{tier}/moving.{suffix}',place='audio',tier=tier,facts=facts,moving=True),
-            dict(path=f'/custom/{tier}/config.json',tier=tier,facts={'what':'audio'}),
-            dict(path=f'/custom/{tier}/llm.gguf',tier=tier,facts={'what':'model','architecture':'qwen3'}),
-            dict(path=f'/custom/{tier}/image.safetensors',tier=tier,facts={'what':'image','family':'sdxl'}),
-            dict(path=f'/custom/{tier}/unknown.gguf',tier=tier),
+            dict(path=f'/custom/{tier}/voice.{suffix}',place='weights' if facts else 'audio',facts=facts),
+            dict(path=f'/custom/{tier}/moving.{suffix}',place='audio',facts=facts,moving=True),
+            dict(path=f'/custom/{tier}/config.json',facts={'what':'audio'}),
+            dict(path=f'/custom/{tier}/llm.gguf',facts={'what':'model','architecture':'qwen3'}),
+            dict(path=f'/custom/{tier}/image.safetensors',facts={'what':'image','family':'sdxl'}),
+            dict(path=f'/custom/{tier}/unknown.gguf'),
         ])
     page.goto('http://console.test/models/audio?new=1')
-    for index,(tier,node) in enumerate([('cache','atlas'),('storage','vault')]):
+    for index,(tier,node) in enumerate([('atlas','atlas'),('storage','vault')]):
         path=f'/custom/{tier}/voice.{suffix}'
         option=page.locator(f'#am-file option[data-path="{path}"]')
         playwright.expect(option).to_have_count(1)
@@ -659,7 +659,7 @@ def test_initial_empty_and_unreachable_fleets_remain_clear_and_recoverable(studi
         page.locator('#am-retry').click()
     playwright.expect(page.locator('#am-profiles')).to_contain_text('No audio models yet')
     playwright.expect(page.locator('#am-submit')).to_be_enabled()
-    page.locator('#am-file').select_option(label='voice.gguf · vault · storage')
+    page.locator('#am-file').select_option(label='voice.gguf · vault')
     page.locator('#am-name').fill('invalid name with spaces')
     page.locator('#am-submit').click()
     assert not state['posts']

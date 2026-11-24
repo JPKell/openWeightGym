@@ -32,7 +32,7 @@ Open **My account → Workspace → Civitai previews**, select **Enable adult pr
 
 ## Limits and troubleshooting
 
-Downloads require the platform download switch; Civitai also requires image generation. Provider credentials belong to the destination node and can be managed under **Settings → Downloads**. Current concurrency limits apply to new transfer admission; active transfers finish when a limit is lowered. Downloads do not directly populate the active model cache.
+Downloads require the platform download switch; Civitai also requires image generation. Provider credentials belong to the destination node and can be managed under **Settings → Downloads**. Current concurrency limits apply to new transfer admission; active transfers finish when a limit is lowered. Downloads go into the destination's configured model storage; a node without one offers no destination.
 
 ## Related
 

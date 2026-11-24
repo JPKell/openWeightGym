@@ -320,8 +320,7 @@ configured adapters and maximum upscale. Reservations include measured peaks plu
 and the node's existing card margin; host RAM remains capped for the full owned process session.
 Changes to components, bounds, runtime binaries or orchestration invalidate qualification.
 
-Image model files use `<models_folder>/image` and, when configured,
-`<models_storage_folder>/image`. Source/revision sidecars belong beside downloaded components.
+Image model files use `<models_folder>/image`. Source/revision sidecars belong beside downloaded components.
 For private Civitai downloads, put the administrator token in an owner-readable file on the
 artifact-owning LoadCoach and configure `civitai_token_file` in that node's LoadCoach settings;
 relative paths resolve from the settings directory. The token is sent only as provider
@@ -475,11 +474,18 @@ See [host setup](#multi-machine-telemetry) and the [telemetry contract](loadcoac
 
 ### Model-file storage
 
-Control node model storage is optional. Under **Settings → General → Model file locations**, choose
-**Control node** and set an absolute cache path, storage path, or both. Empty disables a tier
-without deleting its files. Control node creates the standard model subfolders and uses them immediately;
-no inference worker is required. The equivalent settings are `turnstile.models_folder` and
-`turnstile.models_storage_folder` in `settings/weightroom.toml`.
+Each node keeps its model files in one model storage folder; models load from it directly and
+there is no separate cache. Control node model storage is optional. Under **Settings → General →
+Model file locations**, choose **Control node** and set an absolute **Model storage path**. Empty
+disables it without deleting its files. Control node creates the standard model subfolders and uses
+them immediately; no inference worker is required. The equivalent setting is
+`turnstile.models_folder` in `settings/weightroom.toml`.
+
+`models_storage_folder` (LoadCoach and Turnstile) is retired. A node that still sets it to a
+different folder keeps that folder's subfolders as ordinary places named `storage_llm`,
+`storage_image` and so on, so existing model paths keep working; set to the same folder it is
+ignored, and set alone it acts as the model storage folder. Move its files into model storage from
+each file's page, then clear it. Settings shows the field only while it has a value.
 
 `turnstile.artifact_machine` can explicitly select `front` or an existing file-owning worker.
 Without an explicit selection, configured control node storage is preferred, then `front_cpu`, then
@@ -490,10 +496,9 @@ Choose a compute node in the same location editor to save its paths while offlin
 the change and delivers it without waking that node when it reconnects, rechecking the saving
 account's permission. The node applies the paths after its compute service restarts. Changing
 folders does not move model weights or rewrite configured model paths; retain old copies until
-models have been updated and verified. Paths must be absolute. The cache and storage may be the
-same folder, which then holds every file once and counts as both; two different folders must not
-hold one another. Storage keeps every model file: place copies in the cache and on nodes in bulk
-from the Storage view on Files.
+models have been updated and verified. Paths must be absolute. Adding a model copies its files
+only to nodes that lack them, into the same kind of folder; copy files to nodes in bulk from
+Files.
 
 Multi-node Status requires matching Turnstile/WeightRoom on the control node and existing LoadCoach status/
 Spotter readings; no new service, store, key or port is required. For upgrades or added nodes,
@@ -575,7 +580,7 @@ backup waiver applies; the later owner clean reinstall remains a separate check.
 
 ## Encoder library and relocation recovery
 
-Cache and storage roots include `encoders` and `storage_encoders`. Dedicated embedding weights
+Model storage includes `encoders` (and `storage_encoders` where the retired second folder is still set). Dedicated embedding weights
 and detached image text encoders retain complete package directories, tokenizers and configs;
 whole diffusion checkpoints and VAEs stay under Image. GGUF tensor metadata and configured
 consumers preserve image-component roles after relocation. Shared disk files still have separate
@@ -1259,7 +1264,7 @@ Machine-file listeners, paths, database bindings, executable policy and proxy tr
 
 | Service | Site settings requiring restart | Live settings include |
 |---|---|---|
-| LoadCoach, per node | `llama_server`, `models_folder`, `models_storage_folder`, `disable_ram_offload`, `engines` | Admission, queue/residency and download caps, retention and headroom policy |
+| LoadCoach, per node | `llama_server`, `models_folder`, `disable_ram_offload`, `engines` | Admission, queue/residency and download caps, retention and headroom policy |
 | Turnstile, control node | `max_in_flight`, `artifact_machine` | Request timing, routing/batches, security, event/Responses retention and allowance policy |
 | Voice, per node | `model_parallel`, recognition threads/decoding/active paths, synthesis speaker/threads/workers | Recognition endpoint limits for new sessions |
 | Voice gateway, control node | `public_host`, `public_port` | Hermes toolsets, search and new-call settings |

@@ -132,19 +132,19 @@ def test_the_files_page_refresh_button_looks_again_on_front_and_every_node(desk,
     browser, compute, _ = desk
     compute.off = True
     sign_in(browser, "jordan")
-    cache, storage = tmp_path / "front-cache", tmp_path / "front-storage"
-    browser.post("/settings/model-files", data={"file_machine": "front", "models_folder": str(cache), "models_storage_folder": str(storage)})
+    storage = tmp_path / "front-storage"
+    browser.post("/settings/model-files", data={"file_machine": "front", "models_folder": str(storage)})
     (storage / "llm" / "first.gguf").write_bytes(b"first")
-    page = browser.get("/files?tier=storage&complete=1").text
-    assert "first.gguf" in page and 'value="refresh-files"' in page and 'name="back" value="/files?tier=storage"' in page
+    page = browser.get("/files?complete=1").text
+    assert "first.gguf" in page and 'value="refresh-files"' in page and 'name="back" value="/files?"' in page
     assert "Files last checked: Control node <time" in page
     (storage / "llm" / "dropped-in.gguf").write_bytes(b"dropped in")
-    assert "dropped-in.gguf" not in browser.get("/files?tier=storage&complete=1").text  # the kept list, until refreshed
-    refreshed = browser.post("/files", data={"do": "refresh-files", "back": "/files?tier=storage"}, follow_redirects=False)
+    assert "dropped-in.gguf" not in browser.get("/files?complete=1").text  # the kept list, until refreshed
+    refreshed = browser.post("/files", data={"do": "refresh-files", "back": "/files?"}, follow_redirects=False)
     said = refreshed.headers["location"]
-    assert refreshed.status_code in (302, 303) and said.startswith("/files?tier=storage&said=Looked%20through")
+    assert refreshed.status_code in (302, 303) and said.startswith("/files?&said=Looked%20through")
     assert "not%20looked%20at%3A%20compute" in said  # an offline node is named, not waited for
-    assert "dropped-in.gguf" in browser.get("/files?tier=storage&complete=1").text
+    assert "dropped-in.gguf" in browser.get("/files?complete=1").text
     # Only the Files page itself can be the way back.
     away = browser.post("/files", data={"do": "refresh-files", "back": "https://elsewhere.example/files?"}, follow_redirects=False)
     assert away.headers["location"].startswith("/files?&said=")

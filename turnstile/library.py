@@ -1,13 +1,15 @@
 """The library: every model file in storage, and where else a copy of each one is.
 
-Storage is the complete library. The cache and each compute node hold copies of some of its
-files. The Files page's Storage view shows one row per file, with a box for storage, the cache and
-each node. A bulk change places a copy where a box was ticked and removes the copy where one was
-cleared. A copy is only removed when the file is in storage, and the storage copy itself is never
-removed here: that is done one file at a time, on the file's own page.
+Storage is the model storage of the machine that keeps files for the control node. Each other
+compute node has model storage of its own, holding copies of some of its files, and every model
+loads its file from its own node's storage. The Files page's Storage view shows one row per file,
+with a box for storage and each node. A bulk change places a copy where a box was ticked and
+removes the copy where one was cleared. A copy is only removed when the file is in storage, and
+the storage copy itself is never removed here: that is done one file at a time, on the file's own
+page.
 
-A file found in the cache or on a node but not in storage is listed too, so it can be kept in
-storage. Its copies cannot be removed until it is.
+A file found on a node but not in storage is listed too, so it can be kept in storage. Its copies
+cannot be removed until it is.
 
 Two copies are the same file when they have the same name, size and description, as the rest of
 the Files page counts them. Every copy that is made is checked: a copy made on one drive by its
@@ -25,9 +27,10 @@ import hashlib
 import json
 from pathlib import Path
 
+from loadcoach.config import kind_of
 from loadcoach.files import SPARE
 
-STORAGE, CACHE = "storage", "cache"
+STORAGE = "storage"
 
 
 def identity(file: dict) -> tuple:
@@ -42,21 +45,13 @@ def row_id(key: tuple) -> str:
     return hashlib.sha256(json.dumps(key).encode()).hexdigest()[:16]
 
 
-def kind_of(place: str) -> str:
-    """The kind of folder a place is (llm, adapters, image…), the same for its cache and its storage."""
-    return place.removeprefix("storage_")
-
-
 def columns(found: dict) -> list[dict]:
-    """The places a file can be: storage, the cache when it is a folder of its own, then each compute node."""
+    """The places a file can be: storage, then each other compute node."""
     store = found.get("artifact_machine", "front")
     nodes = {node["name"]: node for node in found.get("nodes", [])}
-    places = nodes.get(store, {}).get("places", [])
     made = []
-    if any(place.get("tier") == STORAGE for place in places):
+    if nodes.get(store, {}).get("places"):
         made.append({"name": STORAGE, "label": "Storage", "machine": store, "answering": True, "why": ""})
-    if any(place.get("tier", CACHE) == CACHE and not place.get("shared") for place in places):
-        made.append({"name": CACHE, "label": "Cache", "machine": store, "answering": True, "why": ""})
     for node in found.get("nodes", []):
         if node["name"] in (store, "front"):
             continue
@@ -68,15 +63,15 @@ def columns(found: dict) -> list[dict]:
     return made
 
 
-def place_for(node: dict, kind: str, tier: str) -> dict | None:
-    """The folder on `node` a file of this kind goes into, in the cache or in storage."""
-    name = "storage_" + kind if tier == STORAGE else kind
-    return next((place for place in node.get("places", []) if place["name"] == name
-                 and place.get("tier", CACHE) == tier), None)
+def place_for(node: dict, kind: str) -> dict | None:
+    """The folder on `node` a file of this kind goes into: the one named for it, or the one under a
+    retired second root (storage_NAME) where that is all the node has."""
+    places = node.get("places", [])
+    return next((place for name in (kind, "storage_" + kind) for place in places if place["name"] == name), None)
 
 
 def rows(found: dict) -> list[dict]:
-    """One row per file: those in storage, by path, then those found only in the cache or on nodes."""
+    """One row per file: those in storage, by path, then those found only on nodes."""
     store = found.get("artifact_machine", "front")
     nodes = {node["name"]: node for node in found.get("nodes", [])}
     made: dict[tuple, dict] = {}
@@ -89,17 +84,14 @@ def rows(found: dict) -> list[dict]:
         row["copies"].setdefault(where, []).append({**file, "machine": machine})
 
     for file in nodes.get(store, {}).get("files", []):
-        if file.get("tier") == STORAGE or file.get("shared"):
-            add(STORAGE, store, file)
-        if file.get("tier", CACHE) == CACHE:
-            add(CACHE, store, file)
+        add(STORAGE, store, file)
     for name, node in nodes.items():
         if name not in (store, "front"):
             for file in node.get("files", []):
                 add(name, name, file)
     for row in made.values():
         row["stored"] = STORAGE in row["copies"]
-        primary = (row["copies"].get(STORAGE) or row["copies"].get(CACHE) or next(iter(row["copies"].values())))[0]
+        primary = (row["copies"].get(STORAGE) or next(iter(row["copies"].values())))[0]
         row["path"], row["machine"], row["place"] = primary["path"], primary["machine"], primary.get("place", "")
         row["what"] = row["facts"].get("what", "model")
     return sorted(made.values(), key=lambda row: (not row["stored"], row["path"]))
@@ -123,10 +115,6 @@ def cell(row: dict, column: dict, found: dict) -> dict:
         why = "In storage. Delete it from storage on the file's own page."
     elif present and not row["stored"]:
         why = "Not in storage, so this may be the only copy. Keep it in storage before removing it here."
-    elif present and column["name"] == CACHE and all(copy.get("shared") for copy in copies):
-        why = "The cache and storage are one folder here, so this is the storage copy."
-    elif present and column['name'] != STORAGE and any(copy.get('shared') or copy.get('tier') == STORAGE for copy in copies):
-        why = 'This location includes a storage copy, which must stay.'
     elif present and used:
         why = f"Used by {', '.join(used)}. Change {'that model' if len(used) == 1 else 'those models'} first."
     elif not present:
@@ -138,13 +126,13 @@ def target(row: dict, column: dict, found: dict) -> dict | None:
     """The folder a new copy of the file would go into at this column."""
     nodes = {node["name"]: node for node in found.get("nodes", [])}
     node = nodes.get(column["machine"], {})
-    return place_for(node, kind_of(row["place"]), STORAGE if column["name"] == STORAGE else CACHE)
+    return place_for(node, kind_of(row["place"]))
 
 
 def source(row: dict, column: dict, avoid: set[tuple[str, str]]) -> dict | None:
-    """The copy to make a new one from: one on the same machine first, then the cache, storage and other nodes.
+    """The copy to make a new one from: one on the same machine first, then storage and other nodes.
     `avoid` holds the (machine, path) of copies about to be removed."""
-    order = [CACHE, STORAGE] + [where for where in row["copies"] if where not in (CACHE, STORAGE)]
+    order = [STORAGE] + [where for where in row["copies"] if where != STORAGE]
     copies = [copy for where in order for copy in row["copies"].get(where, [])
               if not copy.get("moving") and (copy["machine"], copy["path"]) not in avoid]
     local = [copy for copy in copies if copy["machine"] == column["machine"]]
@@ -184,19 +172,13 @@ def transfer_changes(found: dict, asked: dict) -> list[dict]:
 
 
 def cleanup_changes(found: dict) -> list[dict]:
-    """Clean only unused, removable working copies with a retained storage original."""
+    """Clean only unused, removable node copies with a retained storage original."""
     changes = []
-    available = columns(found)
-    unavailable = any(not node.get('answering') for node in found.get('nodes', []))
     for row in rows(found):
-        used_anywhere = any(copy.get('used_by') for copies in row['copies'].values() for copy in copies)
-        for column in available:
+        for column in columns(found):
+            if column['name'] == STORAGE:
+                continue
             box = cell(row, column, found)
-            if column['name'] == STORAGE or column['name'] == CACHE and (used_anywhere or unavailable):
-                continue
-            # A node may also share its own storage and cache directory.
-            if any(copy.get('shared') or copy.get('tier') == STORAGE for copy in row['copies'].get(column['name'], [])):
-                continue
             if box['present'] and not box['why']:
                 changes.append({'row': row['id'], 'at': column['name'], 'keep': False})
     return changes
@@ -232,7 +214,7 @@ def plan(found: dict, changes: list[dict], *, copy_first: bool = False) -> list[
     removed = {(step["machine"], path) for step in removals for path in step["paths"]}
     room: dict[tuple, dict] = {}
     for step in ([] if copy_first else removals):  # transfers cannot count space that is freed only after a successful copy
-        if step["at"] not in (STORAGE, CACHE):
+        if step["at"] != STORAGE:
             for copy in listed[step["row"]]["copies"][step["at"]]:
                 place = next((one for one in nodes[copy["machine"]]["places"] if one["name"] == copy.get("place")), {})
                 drive = room.setdefault((copy["machine"], place.get("filesystem", place.get("folder"))),
@@ -248,8 +230,8 @@ def plan(found: dict, changes: list[dict], *, copy_first: bool = False) -> list[
         origin_place = next(one for one in nodes[origin["machine"]]["places"] if one["name"] == origin["place"])
         steps.append({"action": "copy", "row": row["id"], "at": column["name"], "label": column["label"],
                       "file": row["name"], "machine": column["machine"], "size": row["size"],
-                      "source": origin["machine"], "source_file": {key: origin[key] for key in ("path", "place", "size", "tier") if key in origin},
-                      "place": {key: place[key] for key in ("name", "folder", "tier") if key in place},
+                      "source": origin["machine"], "source_file": {key: origin[key] for key in ("path", "place", "size") if key in origin},
+                      "place": {key: place[key] for key in ("name", "folder") if key in place},
                       "relative": within, "path": str(Path(place["folder"]) / within)})
         # A copy on one drive of the same machine is a second name for the file and takes no room.
         if origin["machine"] != column["machine"] or origin_place.get("filesystem") != place.get("filesystem"):

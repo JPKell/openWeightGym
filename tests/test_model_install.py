@@ -1,4 +1,4 @@
-"""Cache preflight, verified installation and per-node/global model configuration."""
+"""Storage preflight, verified installation and per-node/global model configuration."""
 import asyncio
 from copy import deepcopy
 import json
@@ -26,26 +26,33 @@ from test_weightroom import desk, gguf, sign_in
 
 def node(name, files=(), free=10 * SPARE):
     return {'name': name, 'answering': True, 'files': list(files), 'places': [
-        {'name': 'llm', 'folder': '/' + name + '/cache', 'tier': 'cache', 'free': free, 'filesystem': '1'},
-        {'name': 'storage_llm', 'folder': '/' + name + '/storage', 'tier': 'storage', 'free': free, 'filesystem': '2'}]}
+        {'name': 'llm', 'folder': '/' + name + '/models/llm', 'free': free, 'filesystem': '1'}]}
 
 
 def test_bundle_space_preflight_counts_every_file_and_preserves_storage():
-    files = [{'path': '/front/storage/' + name, 'size': SPARE, 'place': 'storage_llm', 'tier': 'storage'}
-             for name in ('weights.gguf', 'projector.gguf')]
+    files = [{'path': '/front/models/llm/' + name, 'size': SPARE, 'place': 'llm'} for name in ('weights.gguf', 'projector.gguf')]
     settings = {'flags': {'model': files[0]['path'], 'mmproj': files[1]['path'], 'ctx-size': 8192}, 'gpus': 'any'}
-    with pytest.raises(ValueError, match='No files or models were changed'):
+    with pytest.raises(ValueError, match='Not enough model storage space on cpu .*No files or models were changed'):
         plan(settings, [node('front', files), node('cpu', free=2 * SPARE)], 'cpu', 'front')
     prepared = plan(settings, [node('front', files), node('cpu')], 'cpu', 'front')
-    assert len(prepared['steps']) == 4
-    assert prepared['settings']['flags']['model'] == '/cpu/cache/weights.gguf'
-    assert prepared['settings']['flags']['mmproj'] == '/cpu/cache/projector.gguf'
-    assert settings['flags']['model'] == '/front/storage/weights.gguf'
+    assert [(step['source'], step['node'], step['path']) for step in prepared['steps']] == [
+        ('front', 'cpu', '/cpu/models/llm/weights.gguf'), ('front', 'cpu', '/cpu/models/llm/projector.gguf')]  # one copy each, no staging
+    assert prepared['settings']['flags']['model'] == '/cpu/models/llm/weights.gguf'
+    assert prepared['settings']['flags']['mmproj'] == '/cpu/models/llm/projector.gguf'
+    assert settings['flags']['model'] == '/front/models/llm/weights.gguf'
+
+
+def test_a_file_already_in_the_destination_storage_is_used_where_it_is():
+    here = {'path': '/cpu/models/llm/weights.gguf', 'size': SPARE, 'place': 'llm'}
+    elsewhere = {**here, 'path': '/front/models/llm/weights.gguf'}
+    settings = {'flags': {'model': here['path'], 'ctx-size': 2048}, 'gpus': 0}
+    prepared = plan(settings, [node('front', [elsewhere]), node('cpu', [here], free=0)], 'cpu', 'front')
+    assert prepared['steps'] == [] and prepared['settings']['flags']['model'] == here['path']  # no copy, so no room is needed
 
 
 def test_bundle_cannot_merge_different_sources_into_one_destination_file():
-    first = {'path':'/first/cache/same.gguf','size':100,'place':'llm','tier':'cache'}
-    second = {**first,'path':'/second/cache/same.gguf'}
+    first = {'path':'/first/models/llm/same.gguf','size':100,'place':'llm'}
+    second = {**first,'path':'/second/models/llm/same.gguf'}
     settings = {'flags':{'model':first['path'],'mmproj':second['path'],'ctx-size':2048},'gpus':0}
     with pytest.raises(ValueError,match='would collide'):
         plan(settings,[node('first',[first]),node('second',[second]),node('cpu')],'cpu')
@@ -60,17 +67,17 @@ def test_audio_discovery_includes_package_data_but_preserves_installation_receip
 
 
 def test_hash_conflict_prevents_every_copy_even_with_equal_sizes():
-    source = {'path': '/front/storage/a.gguf', 'size': 100, 'place': 'storage_llm', 'tier': 'storage'}
-    cached = {**source, 'path': '/cpu/cache/a.gguf', 'place': 'llm', 'tier': 'cache'}
+    source = {'path': '/front/models/llm/a.gguf', 'size': 100, 'place': 'llm'}
+    there = {**source, 'path': '/cpu/models/llm/a.gguf'}
     settings = {'flags': {'model': source['path'], 'ctx-size': 2048}, 'gpus': 0}
-    prepared = plan(settings, [node('front', [source]), node('cpu', [cached])], 'cpu', 'front')
+    prepared = plan(settings, [node('front', [source]), node('cpu', [there])], 'cpu', 'front')
     calls = []
     async def digest(machine, path):
         return 'different' if machine == 'cpu' else 'source'
     async def copy(*args):
         calls.append(args)
     with pytest.raises(ValueError, match='SHA-256'):
-        asyncio.run(execute(prepared, digest, copy, copy, {}))
+        asyncio.run(execute(prepared, digest, copy, {}))
     assert calls == []
 
 
@@ -84,38 +91,30 @@ def test_generation_merge_keeps_destination_loading_flags_and_context():
     assert merged['flags']['temp'] == .2 and merged['flags']['reasoning'] == 'off' and 'top-k' not in merged['flags']
 
 
-@pytest.mark.parametrize('enough', [False, True])
-def test_install_promotes_storage_only_after_space_check_and_creates_model_last(tmp_path, monkeypatch, enough):
-    cache, storage = tmp_path / 'cache', tmp_path / 'storage'
-    cache.mkdir(); storage.mkdir()
+def test_install_on_the_node_that_stores_the_file_loads_it_in_place_and_creates_the_model(tmp_path, monkeypatch):
+    storage = tmp_path / 'models' / 'llm'
+    storage.mkdir(parents=True)
     file = Path(gguf(storage / 'tiny.gguf', general__architecture='tiny'))
     original = file.read_bytes()
     users = Users(str(tmp_path / 'accounts.db'), {'manager': Group(can=frozenset({'manage-models'}))})
     users.add('manager', 'manager')
     headers = {'authorization': 'Bearer ' + users.new_key('manager')}
-    if not enough:
-        monkeypatch.setattr('loadcoach.app.room', lambda folder: {'total': 10 * SPARE, 'free': SPARE, 'filesystem':'same'})
-    with loadcoach_through(tmp_path, users, places={'llm': str(cache), 'storage_llm': str(storage)},
+    monkeypatch.setattr('loadcoach.app.room', lambda folder: {'total': 10 * SPARE, 'free': 0, 'filesystem': 'same'})  # nothing is copied, so no room is needed
+    with loadcoach_through(tmp_path, users, places={'llm': str(storage)},
                            llama_server='/bin/true', gpus=('CUDA0',), data=str(tmp_path)) as front:
         response = front.post('/turnstile/models/install', headers=headers, json={'name':'tiny', 'machine':'compute',
                               'source_machine':'compute', 'settings':{'flags':{'model':str(file), 'ctx-size':2048}, 'gpus':0}})
-        if not enough:
-            assert response.status_code == 409 and 'cache space' in response.text
-            assert not list(cache.iterdir())
-            assert not front.get('/loadcoach/models', headers=headers).json()['models']
-        else:
-            assert response.status_code == 202, response.text
-            deadline = time.monotonic() + 5
-            while time.monotonic() < deadline:
-                job = front.get('/turnstile/artifacts/distributions', headers=headers).json()['distributions'][-1]
-                if job['state'] in ('complete', 'failed'):
-                    break
-                time.sleep(.05)
-            assert job['state'] == 'complete', job
-            model = front.get('/loadcoach/models', headers=headers).json()['models'][0]
-            assert model['flags']['model'] == str(cache / file.name)
-            assert (cache / file.name).read_bytes() == original
-        assert file.read_bytes() == original
+        assert response.status_code == 202, response.text
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            job = front.get('/turnstile/artifacts/distributions', headers=headers).json()['distributions'][-1]
+            if job['state'] in ('complete', 'failed'):
+                break
+            time.sleep(.05)
+        assert job['state'] == 'complete', job
+        model = front.get('/loadcoach/models', headers=headers).json()['models'][0]
+        assert model['flags']['model'] == str(file)
+    assert [one.name for one in storage.iterdir()] == ['tiny.gguf'] and file.read_bytes() == original
 
 
 def test_global_save_synchronizes_signed_nodes_but_loading_changes_remain_local(tmp_path):
@@ -270,8 +269,8 @@ def test_cross_node_install_streams_into_the_verified_atomic_receiver(tmp_path, 
     def worker(name, folder, key):
         async def answer(request):
             if request.url.path == '/loadcoach/files':
-                return JSONResponse({'places':[{'name':'llm','folder':str(folder),'free':10*SPARE,'tier':'cache','filesystem':'one'}],
-                    'files':[{'path':str(file),'size':file.stat().st_size,'place':'llm','tier':'cache'} for file in folder.glob('*.gguf')]})
+                return JSONResponse({'places':[{'name':'llm','folder':str(folder),'free':10*SPARE,'filesystem':'one'}],
+                    'files':[{'path':str(file),'size':file.stat().st_size,'place':'llm'} for file in folder.glob('*.gguf')]})
             if request.url.path == '/loadcoach/models':
                 rows = [{'name':'source','model_id':'source-id','flags':{'model':str(source/'weights.gguf'),'ctx-size':8192,'temp':.9},'gpus':['CUDA0']}] if name == 'compute' else []
                 return JSONResponse({'models':rows,'cards':['CUDA0'],'defaults':{}})
@@ -323,33 +322,30 @@ def test_cross_node_install_streams_into_the_verified_atomic_receiver(tmp_path, 
         assert (source/'weights.gguf').read_bytes()==content
 
 
-def test_installs_to_several_nodes_promote_a_shared_stored_file_once():
-    stored = {'path': '/front/storage/weights.gguf', 'size': SPARE, 'place': 'storage_llm', 'tier': 'storage'}
+def test_installations_that_need_one_file_on_one_node_copy_it_once():
+    stored = {'path': '/front/models/llm/weights.gguf', 'size': SPARE, 'place': 'llm'}
     settings = {'flags': {'model': stored['path'], 'ctx-size': 2048}, 'gpus': 0}
     nodes = [node('front', [stored]), node('cpu'), node('gpu')]
-    plans = [plan(settings, nodes, each, 'front') for each in ('cpu', 'gpu')]
+    plans = [plan(settings, nodes, each, 'front') for each in ('cpu', 'cpu', 'gpu')]  # two models on cpu, one on gpu
     placed = {('front', stored['path']): 'fixture-sha'}
-    promotions, transfers = [], []
+    transfers = []
     async def digest(machine, path):
         await asyncio.sleep(0)
         if (machine, path) not in placed:
             raise ValueError(f'Could not verify {path} on {machine}.')
         return placed[(machine, path)]
-    async def promote(step):
-        promotions.append(step['path'])
-        await asyncio.sleep(0)  # the other installation runs meanwhile, and must wait rather than promote again
-        placed[(step['node'], step['path'])] = placed[(step['source'], step['file']['path'])]
     async def transfer(step, wanted, job):
         transfers.append(step['node'])
+        await asyncio.sleep(0)  # the other installation runs meanwhile, and must wait rather than copy again
         placed[(step['node'], step['path'])] = wanted
     locks = {}
     def claim(machine, path):
         return locks.setdefault((machine, path), asyncio.Lock())
-    async def both():
-        return await asyncio.gather(*(execute(one, digest, promote, transfer, {}, claim) for one in plans))
-    results = asyncio.run(both())
-    assert promotions == ['/front/cache/weights.gguf'] and sorted(transfers) == ['cpu', 'gpu']
-    assert [one['flags']['model'] for one in results] == ['/cpu/cache/weights.gguf', '/gpu/cache/weights.gguf']
+    async def all_three():
+        return await asyncio.gather(*(execute(one, digest, transfer, {}, claim) for one in plans))
+    results = asyncio.run(all_three())
+    assert sorted(transfers) == ['cpu', 'gpu']
+    assert [one['flags']['model'] for one in results] == ['/cpu/models/llm/weights.gguf'] * 2 + ['/gpu/models/llm/weights.gguf']
 
 
 @pytest.mark.parametrize('taken', [False, True])
@@ -369,8 +365,8 @@ def test_one_request_installs_a_model_on_several_nodes_or_on_none(tmp_path, take
     def worker(name, folder, key):
         async def answer(request):
             if request.url.path == '/loadcoach/files':
-                return JSONResponse({'places':[{'name':'llm','folder':str(folder),'free':10*SPARE,'tier':'cache','filesystem':'one'}],
-                    'files':[{'path':str(file),'size':file.stat().st_size,'place':'llm','tier':'cache'} for file in folder.glob('*.gguf')]})
+                return JSONResponse({'places':[{'name':'llm','folder':str(folder),'free':10*SPARE,'filesystem':'one'}],
+                    'files':[{'path':str(file),'size':file.stat().st_size,'place':'llm'} for file in folder.glob('*.gguf')]})
             if request.url.path == '/loadcoach/models':
                 # With `taken`, the second node has a model of that name already, so neither node may start.
                 rows = [{'name':'copied','model_id':'old','flags':{'model':'/elsewhere.gguf','ctx-size':2048},'gpus':0}] if taken and name == 'rig' else []

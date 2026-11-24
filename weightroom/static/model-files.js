@@ -26,21 +26,21 @@ function initializeModelFiles() {
     if (projector?.value) files.push({path: projector.value, machine: projector.selectedOptions[0]?.dataset.machine});
     return files;
   }
-  /** Why the chosen files do not fit the caches they go to, or ''. A copy that is there already needs no room. */
+  /** Why the chosen files do not fit the model storage they go to, or ''. A file already on a node needs no room there. */
   function room(chosen) {
     const needed = new Map();
     for (const pick of chosenFiles()) {
       const source = nodes.find(node => node.name === pick.machine);
       const file = source?.files.find(one => one.path === pick.path);
       if (!file) continue;
-      const cacheName = file.place.replace(/^storage_/, '');
+      const kind = file.place.replace(/^storage_/, '');
       const root = source.places.find(one => one.name === file.place)?.folder || '';
       const relative = file.path.slice(root.length + 1);
-      // A stored file is promoted into its own machine's cache first, then copied from there.
-      const machines = new Set([...(file.tier === 'storage' ? [source] : []), ...chosen.map(each => nodes.find(node => node.name === each))]);
-      for (const node of machines) {
-        const place = node.places.find(one => one.name === cacheName && one.tier !== 'storage');
-        if (!place) return node.name + ' has no matching active cache.';
+      // A file already on the node is used where it is; any other is copied into that node's model storage.
+      for (const node of new Set(chosen.map(each => nodes.find(one => one.name === each)))) {
+        if (!node || node.files.some(one => one.path === file.path)) continue;
+        const place = node.places.find(one => one.name === kind) || node.places.find(one => one.name === 'storage_' + kind);
+        if (!place) return node.name + ' has no ' + kind + ' model storage folder.';
         if (node.files.some(one => one.path === place.folder + '/' + relative)) continue;
         const key = node.name + '\n' + (place.filesystem || place.folder);
         const entry = needed.get(key) || {node: node.name, free: place.free, bytes: 0};
@@ -50,7 +50,7 @@ function initializeModelFiles() {
     }
     for (const entry of needed.values()) {
       if (entry.free < entry.bytes + spare) {
-        return 'Not enough cache space on ' + entry.node + '. The files need ' + (entry.bytes / 2 ** 30).toFixed(2) + ' GiB plus 1 GiB spare. No action can start.';
+        return 'Not enough model storage space on ' + entry.node + '. The files need ' + (entry.bytes / 2 ** 30).toFixed(2) + ' GiB plus 1 GiB spare. No action can start.';
       }
     }
     return '';
@@ -65,7 +65,7 @@ function initializeModelFiles() {
     const away = chosen.find(each => !nodes.some(node => node.name === each && node.answering));
     let why = '';
     if (!chosen.length) why = 'Choose at least one compute node.';
-    else if (!picker.value) why = 'Choose a model file from cache/storage.';
+    else if (!picker.value) why = 'Choose a model file from model storage.';
     else if (away) why = away + ' is not answering.';
     else if (lacking) why = engine.selectedOptions[0].textContent + ' is not enabled on ' + lacking + '.';
     else why = room(chosen);

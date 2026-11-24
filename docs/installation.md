@@ -135,7 +135,7 @@ installed, run:
 OWG_IMAGE_DOCKER=1 .venv/bin/pytest tests/test_image_install_docker.py -n 0 -q
 ```
 
-It tests single-node and simultaneous multi-node creation, storage promotion, every selected
+It tests single-node and simultaneous multi-node creation, copies from storage, every selected
 component's SHA-256 and relocated settings, concurrent installs sharing files, failed preflight
 with no partial model creation, and a killed gateway followed by a browser retry of its saved
 request. See [installation recovery](operations.md#model-installation-progress-and-restart-recovery-2026-11-12).
@@ -154,7 +154,7 @@ Installed services continue to use `owg update; owg restart`.
 The console is published on `127.0.0.1:19440`; API and MCP diagnostic pages use loopback
 ports 19442 and 19443. It never reads an installed suite's
 settings, accounts, model folders or databases. Downloads consume real storage; choose
-small models and account for the control node's storage/cache copies and each destination copy.
+small models and account for the control node's storage copy and each destination copy.
 
 ```bash
 docker compose -f tests/docker/qualification/compose.yaml build seed

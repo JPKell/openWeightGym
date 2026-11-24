@@ -17,47 +17,44 @@ def render(found: dict) -> str:
     return pages.env.get_template("files_parts.html").module.places_block(found)
 
 
-def place(name: str, files: int, total: int, free: int, drive: str, tier: str = "cache") -> dict:
+def place(name: str, files: int, total: int, free: int, drive: str) -> dict:
     """A folder as the files listing reports it, with its relative name already worked out."""
-    return {"name": name, "relative": name.removeprefix("storage_"), "folder": f"/models/{name}", "tier": tier,
-            "files": files, "total": total, "free": free, "filesystem": drive}
+    return {"name": name, "relative": name, "folder": f"/models/{name}", "files": files, "total": total, "free": free,
+            "filesystem": drive}
 
 
 def test_each_location_is_a_row_with_free_room_and_folder_details():
     found = {"artifact_machine": "front", "store_available": True, "nodes": [
         {"name": "front", "state": "ready", "answering": True, "problems": [], "place_groups": [
-            {"tier": "cache", "root": "/srv/cache", "places": [place("llm", 300 * GB, 2 * TB, TB, "a"),
-                                                                place("adapters", 2 * GB, 2 * TB, TB, "a")]},
-            {"tier": "storage", "root": "/srv/storage", "places": [place("storage_llm", 900 * GB, 500 * GB, 50 * GB, "b", "storage"),
-                                                                    place("storage_projectors", GB, 500 * GB, 50 * GB, "c", "storage")]}]},
+            {"root": "/srv/storage", "places": [place("llm", 900 * GB, 500 * GB, 50 * GB, "b"),
+                                                place("projectors", GB, 500 * GB, 50 * GB, "c")]}]},
         {"name": "gpu-box", "state": "ready", "answering": True, "problems": [], "place_groups": [
-            {"tier": "cache", "root": "/var/models", "places": [place("llm", 40 * GB, 900 * GB, 600 * GB, "d")]},
-            {"tier": "storage", "root": "/var/storage", "places": [place("storage_llm", GB, 900 * GB, 600 * GB, "d", "storage")]}]},
+            {"root": "/var/models", "places": [place("llm", 300 * GB, 2 * TB, TB, "a"), place("adapters", 2 * GB, 2 * TB, TB, "a")]}]},
         {"name": "laptop", "state": "not answering", "answering": False, "problems": [], "place_groups": []},
     ]}
     html = render(found)
-    assert "/<wbr>srv/<wbr>cache" in html  # long paths break after a slash, never inside a folder's name
+    assert "/<wbr>srv/<wbr>storage" in html  # long paths break after a slash, never inside a folder's name
     html = html.replace("<wbr>", "")
     cards = re.findall(r'<tr aria-label="([^"]+)">(.*?)(?=<tr aria-label=|\Z)', html, re.S)
-    # Control node cache and storage, the node's cache (its storage is not shown), and a note for the node that is not answering.
-    assert [title for title, _ in cards] == ["Control node cache", "Storage", "gpu-box"]
-    front, storage, node = (body for _, body in cards)
-
-    # Folders on one drive count it once: 2 TB, of which 1 TB is free; models take 302 GB of it.
-    assert "/srv/cache" in front and "<b>302.0 GB</b>" in front and "/ 2.0 TB" in front and "<b>1.0 TB</b> free" in front
-    assert '<td title="llm">llm</td><td class="text-end">300.0 GB</td>' in front and '<td title="adapters">adapters</td>' in front
-    assert "drives" not in front
+    # The store's model storage, then each node's own, and a note for the node that is not answering. No cache row.
+    assert [title for title, _ in cards] == ["Storage", "gpu-box"]
+    storage, node = (body for _, body in cards)
+    assert "cache" not in html.lower()
 
     # Folders on two drives add both up and say so; a share larger than the drives never draws past the end of the bar.
     assert "/ 1.0 TB" in storage and "<b>100.0 GB</b> free" in storage and "on 2 drives" in storage
     widths = [float(width) for width in re.findall(r'class="progress-bar[^"]*" style="width: ([\d.]+)%"', storage)]
     assert widths == [90.0]
     assert '<td title="llm">llm</td>' in storage and '<td title="projectors">projectors</td>' in storage
+    assert 'href="/files"' in storage
 
-    # A compute node's card says its state; one that is not answering says why it shows nothing.
-    assert "/var/models" in node and "bg-green-lt" in node and ">ready<" in node and "/var/storage" not in html
+    # Folders on one drive count it once: 2 TB, of which 1 TB is free; models take 302 GB of it.
+    assert "/var/models" in node and "<b>302.0 GB</b>" in node and "/ 2.0 TB" in node and "<b>1.0 TB</b> free" in node
+    assert '<td title="llm">llm</td><td class="text-end">300.0 GB</td>' in node and '<td title="adapters">adapters</td>' in node
+    assert "drives" not in node and "bg-green-lt" in node and ">ready<" in node and 'href="/files?machine=gpu-box"' in node
+
     assert "laptop" in html and "This node is offline" in html
-    assert html.count('role="progressbar"') == 3
+    assert html.count('role="progressbar"') == 2
 
 
 def test_problems_and_an_empty_listing_are_said_plainly():

@@ -13,7 +13,7 @@ from weightroom.file_views import destinations
 
 
 def test_destination_inventory_uses_matching_place_and_does_not_trust_offline_copies():
-    file = dict(path='/cache/a.gguf', place='storage_llm', size=40, facts={'name': 'A'})
+    file = dict(path='/storage/a.gguf', place='llm', size=40, facts={'name': 'A'})
     found = dict(artifact_machine='front', nodes=[
         dict(name='front', answering=True, places=[]),
         dict(name='atlas', answering=True, places=[dict(name='image', free=99), dict(name='llm', free=80)],
@@ -31,8 +31,8 @@ def test_destination_inventory_uses_matching_place_and_does_not_trust_offline_co
 
 @pytest.fixture
 def inspector(library_desk):
-    server, compute, cache, storage, node = library_desk
-    file = Path(gguf(cache / 'llm' / 'inspector.gguf', general__name='Inspector <test>',
+    server, compute, storage, node = library_desk
+    file = Path(gguf(storage / 'llm' / 'inspector.gguf', general__name='Inspector <test>',
                      general__architecture='qwen3', general__size_label='32B',
                      qwen3__context_length=40960, qwen3__block_count=64, qwen3__attention__layer_norm_rms_epsilon='9.999999974752427e-07',
                      tokenizer__chat_template='safe <script>window.badMetadata = true</script> ' + 'long metadata ' * 50))
@@ -111,10 +111,10 @@ def test_real_copy_move_distribution_and_confirmed_deletion(inspector):
             page.wait_for_timeout(50)
         assert target.read_bytes() == file.read_bytes()
         page.goto('http://console.test/file?path=' + quote(str(file), safe=''))
-        page.get_by_label('Destination', exact=True).select_option('storage_llm')
+        page.get_by_label('Destination', exact=True).select_option('classifier')
         page.get_by_role('button', name='Copy file', exact=True).click()
-        playwright.expect(page.locator('.said-box')).to_contain_text('Copying inspector.gguf to storage_llm.')
-        copied = storage / 'llm' / file.name
+        playwright.expect(page.locator('.said-box')).to_contain_text('Copying inspector.gguf to classifier.')
+        copied = storage / 'classifier' / file.name
         deadline = time.monotonic() + 10
         while not copied.exists() and time.monotonic() < deadline:
             page.wait_for_timeout(50)
@@ -123,7 +123,7 @@ def test_real_copy_move_distribution_and_confirmed_deletion(inspector):
         while 'View transfer progress' in server.get('/file', params={'path': str(file)}).text and time.monotonic() < deadline:
             page.wait_for_timeout(50)
         # The real server refuses overwriting the copy; errors render in the same inspector.
-        refused = server.post('/file', data={'path': str(file), 'to': 'storage_llm', 'do': 'move'})
+        refused = server.post('/file', data={'path': str(file), 'to': 'classifier', 'do': 'move'})
         assert refused.status_code == 400 and 'The destination already exists. No file was overwritten.' in refused.text
         assert 'data-file-page' in refused.text
         page.goto('http://console.test/file?path=' + quote(str(copied), safe=''))
@@ -138,10 +138,10 @@ def test_real_copy_move_distribution_and_confirmed_deletion(inspector):
         assert not copied.exists() and file.exists() and target.exists()
         page.goto('http://console.test/file?path=' + quote(str(file), safe=''))
         page.get_by_label('Action', exact=True).select_option('move')
-        page.get_by_label('Destination', exact=True).select_option('storage_llm')
+        page.get_by_label('Destination', exact=True).select_option('classifier')
         original = file.read_bytes()
         page.get_by_role('button', name='Move file', exact=True).click()
-        playwright.expect(page.locator('.said-box')).to_contain_text('Moving inspector.gguf to storage_llm.')
+        playwright.expect(page.locator('.said-box')).to_contain_text('Moving inspector.gguf to classifier.')
         deadline = time.monotonic() + 10
         while file.exists() and time.monotonic() < deadline:
             page.wait_for_timeout(50)

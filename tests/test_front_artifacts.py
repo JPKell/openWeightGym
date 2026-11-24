@@ -27,7 +27,7 @@ def test_cold_settings_and_files_are_accessible_without_compute(desk, front_sett
         assert response.status_code == 200, (path, response.status_code, response.text[:500])
         assert 'Something went wrong' not in response.text
     files = browser.get('/files?complete=1').text
-    assert 'Set up optional control node cache or storage' in files
+    assert 'Set up optional control node model storage' in files
     assert 'store (compute)' not in files
     settings = browser.get('/settings').text
     assert 'id="models-folder"' in settings and 'Save file locations' in settings
@@ -37,19 +37,18 @@ def test_front_locations_work_without_compute_and_persist(desk, tmp_path):
     browser, compute, _ = desk
     compute.off = True
     sign_in(browser, 'jordan')
-    cache, storage = tmp_path / 'front-cache', tmp_path / 'front-storage'
-    saved = browser.post('/settings/model-files', data={
-        'file_machine': 'front', 'models_folder': str(cache), 'models_storage_folder': str(storage)})
+    storage = tmp_path / 'front-storage'
+    saved = browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(storage)})
     assert saved.status_code == 200 and 'Control node file locations are available now' in saved.text, saved.text[saved.text.find('said-box'):][:600]
-    assert (cache / 'llm').is_dir() and (storage / 'image').is_dir()
+    assert (storage / 'llm').is_dir() and (storage / 'image').is_dir()
     file = gguf(storage / 'llm' / 'front-model.gguf', general__name='Control node model', general__architecture='qwen')
-    listing = browser.get('/files?tier=storage&complete=1')
+    listing = browser.get('/files?complete=1')
     assert listing.status_code == 200 and 'front-model.gguf' in listing.text and 'Control node model' in listing.text
     assert 'No model-file locations are available yet' not in listing.text
     detail = browser.get('/file', params={'path': file})
     assert detail.status_code == 200 and 'Control node model' in detail.text
     changed = compute.front.state.console_settings.changes.of('turnstile')
-    assert changed['models_folder'] == str(cache) and changed['models_storage_folder'] == str(storage)
+    assert changed['models_folder'] == str(storage) and not changed.get('models_storage_folder')
     sign_in(browser, 'pat')
     assert browser.get('/files').status_code == 403
     assert browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': '/tmp/forbidden'}).status_code == 403
@@ -60,64 +59,56 @@ def categorized_files(desk, tmp_path):
     server, compute, _ = desk
     compute.off = True
     sign_in(server, 'jordan')
-    cache, storage = tmp_path / 'cache', tmp_path / 'storage'
-    server.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache),
-                                             'models_storage_folder': str(storage)})
+    storage = tmp_path / 'storage'
+    server.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(storage)})
     files = {}
     for kind, folder in [('model', 'llm'), ('image', 'image'), ('audio', 'audio'),
                          ('adapter', 'adapters'), ('projector', 'projectors')]:
         filename = f'category-{kind}.safetensors' if kind == 'image' else f'category-{kind}.gguf'
-        for tier, root in [('cache', cache), ('storage', storage)]:
-            path = root / folder / filename
-            if kind == 'image':
-                path.write_bytes(b'\x00' * 8)
-            else:
-                gguf(path, general__name=kind, general__type=kind if kind in ('adapter', 'projector') else 'model')
-            files[tier, kind] = path
+        path = storage / folder / filename
+        if kind == 'image':
+            path.write_bytes(b'\x00' * 8)
+        else:
+            gguf(path, general__name=kind, general__type=kind if kind in ('adapter', 'projector') else 'model')
+        files[kind] = path
     return server, files
 
 
-@pytest.mark.parametrize('tier', ['cache', 'storage'])
 @pytest.mark.parametrize('kind', ['model', 'image', 'audio', 'adapter', 'projector'])
-def test_file_categories_filter_full_pages_and_polling(categorized_files, tier, kind):
+def test_file_categories_filter_full_pages_and_polling(categorized_files, kind):
     server, files = categorized_files
-    listing = server.get('/files', params={'tier': tier, 'type': kind, 'complete': '1'})
+    listing = server.get('/files', params={'type': kind, 'complete': '1'})
     assert listing.status_code == 200
-    assert f'hx-get="/files?part=list&amp;tier={tier}&amp;type={kind}"' in listing.text
-    assert f'href="/files?tier={tier}&amp;type={kind}"' in listing.text  # the type pills keep the location
-    assert 'href="/files?tier=storage"' in listing.text and 'href="/files?tier=cache"' in listing.text  # the location rows
-    poll = server.get('/files', params={'tier': tier, 'type': kind, 'part': 'list'})
+    assert f'hx-get="/files?part=list&amp;type={kind}"' in listing.text
+    assert f'href="/files?type={kind}"' in listing.text  # the type pills
+    assert 'href="/files"' in listing.text and 'tier=' not in listing.text  # the Storage row; there is no cache to choose
+    poll = server.get('/files', params={'type': kind, 'part': 'list'})
     assert poll.status_code == 200
     for body in (listing.text, poll.text):
-        assert files[tier, kind].name in body
-        assert all(path.name not in body for (location, other), path in files.items() if location == tier and other != kind)
-    if tier == 'storage':
-        # filtering retains knowledge of the matching cached copy: its Cache box is ticked
-        assert f'aria-label="{files[tier, kind].name} in Cache" checked' in listing.text
-    else:
-        # Each polled piece of the page, with when the files were last checked and the maintenance panel.
-        assert set(re.findall(r'id="([^"]+)"[^>]*hx-swap-oob="true"', poll.text)) == {
-            'files-checked', 'files-cleanup', 'files-distributions', 'files-places', 'files-storage',
-            'files-maintenance', 'files-maintenance-details'}
+        assert files[kind].name in body
+        assert all(path.name not in body for other, path in files.items() if other != kind)
+    assert f'aria-label="{files[kind].name} in Storage: In storage.' in listing.text
+    # Each polled piece of the page, with when the files were last checked and the maintenance panel.
+    assert set(re.findall(r'id="([^"]+)"[^>]*hx-swap-oob="true"', poll.text)) == {
+        'files-checked', 'files-distributions', 'files-places', 'files-storage', 'files-maintenance'}
 
 
 def test_file_category_keeps_location_totals_and_storage_actions(categorized_files, desk):
     server, files = categorized_files
-    original = server.get('/files?tier=storage&complete=1').text
-    filtered = server.get('/files?tier=storage&type=audio&complete=1').text
+    original = server.get('/files?complete=1').text
+    filtered = server.get('/files?type=audio&complete=1').text
     model_bytes = lambda text: re.findall(r'<span class="text-secondary">Models</span> <b>([^<]+)</b>', text)
     assert model_bytes(original) == model_bytes(filtered)
     assert 'name="file_type" value="audio"' in filtered
     desk[1].off = False  # deleting a library file requires every node to verify it is unused
-    path = files['storage', 'audio']
+    path = files['audio']
     deleted = server.post('/file', data={'do': 'delete', 'path': str(path), 'name': path.name,
                                         'return': 'storage', 'file_type': 'audio'})
     assert deleted.status_code == 200, re.findall(r'role="alert"[^>]*>(.*?)</div>', deleted.text, re.S)
     assert deleted.url.params['type'] == 'audio'
     left = server.get(str(deleted.url) + '&complete=1')
-    # The cache still holds a copy, so the file is listed as not in storage, with its Storage box ready to tick.
-    assert 'not in storage' in left.text and f'aria-label="{path.name} in Storage">' in left.text
-    assert all(path.exists() for (tier, kind), path in files.items() if tier == 'storage' and kind != 'audio')
+    assert path.name not in left.text.split('id="files-storage-table"', 1)[1] and not path.exists()
+    assert all(path.exists() for kind, path in files.items() if kind != 'audio')
 
 
 def test_file_category_survives_polling_refresh_and_reload(categorized_files):
@@ -133,7 +124,7 @@ def test_file_category_survives_polling_refresh_and_reload(categorized_files):
             selected = page.locator('nav[aria-label="File type"] [aria-current="page"]')
             playwright.expect(selected).to_have_text('Audio')
             table = page.locator('#files-storage-table')
-            playwright.expect(table).to_contain_text(files['storage', 'audio'].name)
+            playwright.expect(table).to_contain_text(files['audio'].name)
             assert 'category-model.gguf' not in table.inner_text()
             page.evaluate('window.priorFiles = document.querySelector("#files-storage")')
             page.wait_for_function('document.querySelector("#files-storage") !== window.priorFiles', timeout=10000)
@@ -143,7 +134,7 @@ def test_file_category_survives_polling_refresh_and_reload(categorized_files):
             page.set_viewport_size({'width': 390, 'height': 1000})
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.locator('nav[aria-label="File type"]').get_by_role('link', name='All files', exact=True).click()
-            playwright.expect(page.locator('#files-storage-table')).to_contain_text(files['storage', 'model'].name)
+            playwright.expect(page.locator('#files-storage-table')).to_contain_text(files['model'].name)
             assert not errors
         finally:
             browser.close()
@@ -152,10 +143,9 @@ def test_file_category_survives_polling_refresh_and_reload(categorized_files):
 def test_compute_node_files_join_the_library_and_survive_polling(desk, tmp_path):
     server, _, _ = desk
     sign_in(server, 'jordan')
-    cache, storage = tmp_path / 'front-cache', tmp_path / 'front-storage'
-    server.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache),
-                                             'models_storage_folder': str(storage)})
-    gguf(cache / 'llm' / 'front-only.gguf', general__architecture='qwen')
+    storage = tmp_path / 'front-storage'
+    server.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(storage)})
+    gguf(storage / 'llm' / 'front-only.gguf', general__architecture='qwen')
     worker = tmp_path / 'worker'
     worker.mkdir(exist_ok=True)
     worker_file = gguf(worker / 'node-only.gguf', general__name='Node model', general__architecture='qwen')
@@ -217,19 +207,18 @@ def test_offline_node_locations_are_queued_then_delivered_only_to_that_node(desk
     browser, compute, _ = desk
     compute.off = True
     sign_in(browser, 'jordan')
-    cache, storage = str(tmp_path / 'node-cache'), str(tmp_path / 'node-storage')
-    response = browser.post('/settings/model-files', data={
-        'file_machine': 'compute', 'models_folder': cache, 'models_storage_folder': storage})
+    storage = str(tmp_path / 'node-storage')
+    response = browser.post('/settings/model-files', data={'file_machine': 'compute', 'models_folder': storage})
     assert response.status_code == 200 and 'Locations saved on the control node' in response.text
     pending = compute.front.state.console_settings.changes.of('node-files:compute')['pending']
-    assert pending['locations'] == {'models_folder': cache, 'models_storage_folder': storage}
+    assert pending['locations'] == {'models_folder': storage}  # the retired second folder is left as it is
     assert compute.front.state.console_settings.changes.of('turnstile').get('models_folder', '') == ''
     compute.off = False
     Changes(str(tmp_path / 'loadcoach.db')).seen('loadcoach', said(
         {'models_folder': '', 'models_storage_folder': ''}, {}, {}))
     response = browser.get('/settings?file_machine=compute')
     assert response.status_code == 200 and 'Locations saved on the control node' not in response.text, compute.front.state.log.db.execute("SELECT what, detail FROM events WHERE kind='settings'").fetchall()
-    assert cache in response.text and storage in response.text
+    assert storage in response.text and 'name="models_storage_folder"' not in response.text
     assert not compute.front.state.console_settings.changes.of('node-files:compute')
 
 
@@ -237,26 +226,34 @@ def test_front_paths_validate_before_creating_or_saving_folders(desk, tmp_path):
     browser, compute, _ = desk
     compute.off = True
     sign_in(browser, 'jordan')
-    for cache, storage in (('relative', ''), (str(tmp_path / 'nested'), str(tmp_path / 'nested' / 'llm'))):
-        response = browser.post('/settings/model-files', data={
-            'file_machine': 'front', 'models_folder': cache, 'models_storage_folder': storage})
+    # A relative path, and a retired second folder inside model storage, are refused before anything is made.
+    for form in ({'models_folder': 'relative'}, {'models_folder': str(tmp_path / 'nested'), 'models_storage_folder': str(tmp_path / 'nested' / 'llm')}):
+        response = browser.post('/settings/model-files', data={'file_machine': 'front', **form})
         assert response.status_code == 400
     assert not (tmp_path / 'nested').exists()
     assert compute.front.state.console_settings.changes.of('turnstile').get('models_folder', '') == ''
 
 
-def test_front_library_promotes_without_overwriting_and_disabling_preserves_files(desk, tmp_path):
+def former_folder(browser, storage, former):
+    """Control node model storage, beside a retired second folder an older installation still has."""
+    saved = browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(storage),
+                                                       'models_storage_folder': str(former)})
+    assert saved.status_code == 200, saved.text[saved.text.find('said-box'):][:400]
+
+
+def test_a_former_folders_file_copies_into_model_storage_without_overwriting_and_disabling_preserves_files(desk, tmp_path):
     browser, compute, _ = desk
     compute.off = True
     sign_in(browser, 'jordan')
-    cache, storage = tmp_path / 'cache', tmp_path / 'storage'
-    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache),
-                                              'models_storage_folder': str(storage)})
-    source = Path(gguf(storage / 'llm' / 'tiny.gguf', general__architecture='qwen'))
+    storage, former = tmp_path / 'storage', tmp_path / 'former'
+    former_folder(browser, storage, former)
+    source = Path(gguf(former / 'llm' / 'tiny.gguf', general__architecture='qwen'))
     original = source.read_bytes()
+    detail = browser.get('/file', params={'path': str(source)}).text
+    assert '<option value="llm" selected>' in detail  # moving out of the former folder is what is offered
     promoted = browser.post('/file', data={'do': 'copy', 'path': str(source), 'to': 'llm', 'return': 'storage'})
     assert promoted.status_code == 200
-    target = cache / 'llm' / source.name
+    target = storage / 'llm' / source.name
     deadline = time.monotonic() + 5
     while not target.exists() and time.monotonic() < deadline:
         time.sleep(.01)
@@ -274,14 +271,13 @@ def test_front_library_promotes_without_overwriting_and_disabling_preserves_file
 
 
 @pytest.mark.parametrize('action', ['copy', 'move'])
-def test_front_promotion_returns_before_copy_finishes_and_prevents_conflicting_actions(desk, tmp_path, monkeypatch, action):
+def test_front_copy_returns_before_it_finishes_and_prevents_conflicting_actions(desk, tmp_path, monkeypatch, action):
     from turnstile.artifacts import carry
     browser, compute, _ = desk
     sign_in(browser, 'jordan')
-    cache, storage = tmp_path / 'cache', tmp_path / 'storage'
-    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache),
-                                              'models_storage_folder': str(storage)})
-    source = Path(gguf(storage / 'llm' / 'slow.gguf', general__architecture='qwen'))
+    storage, former = tmp_path / 'storage', tmp_path / 'former'
+    former_folder(browser, storage, former)
+    source = Path(gguf(former / 'llm' / 'slow.gguf', general__architecture='qwen'))
     original = source.read_bytes()
     started, release = threading.Event(), threading.Event()
 
@@ -299,86 +295,36 @@ def test_front_promotion_returns_before_copy_finishes_and_prevents_conflicting_a
         try:
             assert started.wait(2)
             response = pending.result(timeout=1)
-            assert response.status_code == 303 and 'tier=storage' in response.headers['location']
-            inventory = browser.get('/files?tier=storage&complete=1').text
-            assert ('copying' if action == 'copy' else 'moving') + ' to llm' in inventory
-            assert f'aria-label="{source.name} in Cache: It is being copied or moved now." disabled' in inventory
-            assert not (cache / 'llm' / source.name).exists() and source.is_file()
+            assert response.status_code == 303 and response.headers['location'].startswith('/files?')
+            inventory = browser.get('/files?complete=1').text
+            assert ('copying' if action == 'copy' else 'moving') + ' to llm' in inventory, re.findall(r'aria-label="slow[^"]*"[^>]*>', inventory)
+            assert f'aria-label="{source.name} in Storage: It is being copied or moved now." checked disabled' in inventory, re.findall(r'aria-label="slow[^"]*"[^>]*>', inventory)
+            assert not (storage / 'llm' / source.name).exists() and source.is_file()
             repeated = browser.post('/file', data=form)
             assert repeated.status_code == 400 and 'already being copied or moved' in repeated.text
             deleted = browser.post('/file', data={**form, 'do': 'delete', 'name': source.name})
             assert deleted.status_code == 400 and source.is_file()
-            cleanup = browser.post('/files', data={'do': 'clear-cache'})
-            assert 'Wait for active control node file transfers' in cleanup.text
         finally:
             release.set()
     deadline = time.monotonic() + 5
     while compute.front.state.front_files.tasks and time.monotonic() < deadline:
         time.sleep(.01)
-    assert (cache / 'llm' / source.name).read_bytes() == original
+    assert (storage / 'llm' / source.name).read_bytes() == original
     assert source.exists() == (action == 'copy')
     if action == 'copy':
         assert source.read_bytes() == original
-        assert f'aria-label="{source.name} in Cache" checked' in browser.get('/files?tier=storage&complete=1').text
 
 
-def test_storage_cache_box_copies_in_bulk_and_shows_progress(desk, tmp_path, monkeypatch):
-    from turnstile.artifacts import carry
-    server, compute, _ = desk
-    compute.off = True
-    sign_in(server, 'jordan')
-    cache, storage = tmp_path / 'cache', tmp_path / 'storage'
-    server.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache),
-                                             'models_storage_folder': str(storage)})
-    source = Path(gguf(storage / 'llm' / 'browser.gguf', general__architecture='qwen'))
-    release = threading.Event()
-
-    def slow_copy(source, target, progress):
-        if not release.wait(15):
-            raise OSError('Copy was not released by the browser test.')
-        carry(source, target, progress)
-
-    monkeypatch.setattr('turnstile.artifacts.carry', slow_copy)
-    with playwright.sync_playwright() as engine:
-        browser, page = browser_context(engine, server)
-        errors = []
-        page.on('pageerror', lambda error: errors.append(str(error)))
-        try:
-            page.goto('http://console.test/files?tier=storage')
-            page.get_by_role('checkbox', name=f'{source.name} in Cache', exact=True).check()
-            playwright.expect(page.locator('[data-file-boxes-summary]')).to_have_text('1 copy to make. The storage copy always stays.')
-            page.get_by_role('button', name='Apply changes', exact=True).click()
-            page.get_by_role('button', name='Are you sure? Apply changes', exact=True).click()  # two steps, as for the other file changes
-            playwright.expect(page.locator('#files-distributions')).to_contain_text('Bulk change running')
-            waiting = page.get_by_role('checkbox', name=f'{source.name} in Cache: Waiting for the bulk change running now.', exact=True)
-            playwright.expect(waiting).to_be_disabled()
-            # No second change can start while this one runs: both ways to start one are disabled.
-            playwright.expect(page.locator('[data-apply-boxes]')).to_be_disabled()
-            playwright.expect(page.locator('[data-transfer-files]')).to_be_disabled()
-            assert 'The form could not be submitted' not in page.content()
-            assert source.is_file() and not (cache / 'llm' / source.name).exists()
-            release.set()
-            done = page.get_by_role('checkbox', name=f'{source.name} in Cache', exact=True)
-            playwright.expect(done).to_be_checked(timeout=15000)
-            playwright.expect(page.locator('#files-distributions')).to_contain_text('Bulk change finished: 1 of 1 done.')
-            assert source.read_bytes() == (cache / 'llm' / source.name).read_bytes()
-            assert not errors
-        finally:
-            release.set()
-            browser.close()
-
-
-def test_front_promotion_failure_is_visible_and_can_be_retried(desk, tmp_path, monkeypatch):
+def test_a_front_copy_failure_is_visible_and_can_be_retried(desk, tmp_path, monkeypatch):
     from turnstile.artifacts import carry
     browser, compute, _ = desk
     compute.off = True
     sign_in(browser, 'jordan')
-    cache, storage = tmp_path / 'cache', tmp_path / 'storage'
-    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache),
-                                              'models_storage_folder': str(storage)})
-    source = Path(gguf(storage / 'llm' / 'retry.gguf', general__architecture='qwen'))
+    storage, former = tmp_path / 'storage', tmp_path / 'former'
+    former_folder(browser, storage, former)
+    source = Path(gguf(former / 'llm' / 'retry.gguf', general__architecture='qwen'))
     def refused(*args):
-        raise OSError('Cache drive refused the copy.')
+        raise OSError('The storage drive refused the copy.')
     monkeypatch.setattr('turnstile.artifacts.carry', refused)
     form = {'do': 'copy', 'path': str(source), 'to': 'llm', 'return': 'storage'}
     response = browser.post('/file', data=form)
@@ -386,26 +332,25 @@ def test_front_promotion_failure_is_visible_and_can_be_retried(desk, tmp_path, m
     deadline = time.monotonic() + 5
     while compute.front.state.front_files.tasks and time.monotonic() < deadline:
         time.sleep(.01)
-    listing = browser.get('/files?tier=storage&complete=1').text
-    assert 'Cache drive refused the copy.' in listing and f'aria-label="{source.name} in Cache">' in listing
-    assert source.is_file() and not (cache / 'llm' / source.name).exists()
-    assert 'Cache drive refused the copy.' in browser.get('/file', params={'path': str(source)}).text
+    listing = browser.get('/files?complete=1').text
+    assert 'The storage drive refused the copy.' in listing
+    assert source.is_file() and not (storage / 'llm' / source.name).exists()
+    assert 'The storage drive refused the copy.' in browser.get('/file', params={'path': str(source)}).text
     monkeypatch.setattr('turnstile.artifacts.carry', carry)
     assert browser.post('/file', data=form).status_code == 200
     deadline = time.monotonic() + 5
     while compute.front.state.front_files.tasks and time.monotonic() < deadline:
         time.sleep(.01)
-    listing = browser.get('/files?tier=storage&complete=1').text
-    assert f'aria-label="{source.name} in Cache" checked' in listing and 'Cache drive refused the copy.' not in listing
-    assert (cache / 'llm' / source.name).read_bytes() == source.read_bytes()
+    listing = browser.get('/files?complete=1').text
+    assert 'The storage drive refused the copy.' not in listing
+    assert (storage / 'llm' / source.name).read_bytes() == source.read_bytes()
 
 
 def test_queued_node_paths_recheck_permissions_before_delivery(desk, tmp_path):
     browser, compute, users = desk
     compute.off = True
     sign_in(browser, 'jordan')
-    browser.post('/settings/model-files', data={'file_machine': 'compute', 'models_folder': str(tmp_path / 'cache'),
-                                              'models_storage_folder': str(tmp_path / 'storage')})
+    browser.post('/settings/model-files', data={'file_machine': 'compute', 'models_folder': str(tmp_path / 'storage')})
     users.change('jordan', group='plain')
     compute.off = False
     browser.portal.call(compute.front.state.publish_file_settings)
@@ -417,8 +362,8 @@ def test_offline_node_folder_reset_preserves_other_queued_locations(desk, tmp_pa
     browser, compute, _ = desk
     compute.off = True
     sign_in(browser, 'jordan')
-    storage = str(tmp_path / 'storage')
-    browser.post('/settings/model-files', data={'file_machine': 'compute', 'models_folder': str(tmp_path / 'cache'),
+    storage = str(tmp_path / 'former')  # a retired second folder, still set on an older node
+    browser.post('/settings/model-files', data={'file_machine': 'compute', 'models_folder': str(tmp_path / 'storage'),
                                               'models_storage_folder': storage})
     reset = browser.post('/settings/loadcoach', data={'machine': 'compute', 'reset': 'models_folder'})
     assert reset.status_code == 200 and 'File locations are saved on the control node' in reset.text
@@ -426,7 +371,7 @@ def test_offline_node_folder_reset_preserves_other_queued_locations(desk, tmp_pa
     assert queued == {'models_folder': None, 'models_storage_folder': storage}
     local = Changes(str(tmp_path / 'loadcoach.db'))
     local.seen('loadcoach', said({'models_folder': '', 'models_storage_folder': ''}, {}, {}))
-    local.put('loadcoach', 'models_folder', str(tmp_path / 'old-cache'), 'jordan')
+    local.put('loadcoach', 'models_folder', str(tmp_path / 'old-storage'), 'jordan')
     compute.off = False
     browser.get('/settings?file_machine=compute')
     assert local.of('loadcoach') == {'models_storage_folder': storage}
@@ -438,14 +383,14 @@ def test_front_downloads_use_the_existing_verified_hub_contract(desk, tmp_path):
     compute.off = True
     sign_in(browser, 'jordan')
     storage = tmp_path / 'storage'
-    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': '', 'models_storage_folder': str(storage)})
+    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(storage)})
     store = compute.front.state.front_files
     browser.portal.call(store.web.aclose)
     store.web = compute.hub.client()
     page = browser.get('/hub?repository=acme/tiny-GGUF')
     assert page.status_code == 200 and 'tiny-q4.gguf' in page.text
-    started = browser.post('/hub', data={'repository': 'acme/tiny-GGUF', 'file': 'tiny-q4.gguf', 'place': 'storage_llm'})
-    assert started.status_code == 200 and 'coming down to storage_llm' in started.text
+    started = browser.post('/hub', data={'repository': 'acme/tiny-GGUF', 'file': 'tiny-q4.gguf', 'place': 'llm'})
+    assert started.status_code == 200 and 'coming down to llm' in started.text
     target = storage / 'llm' / 'acme--tiny-GGUF' / 'tiny-q4.gguf'
     deadline = time.monotonic() + 3
     while not target.exists() and time.monotonic() < deadline:
@@ -459,8 +404,7 @@ def test_front_download_uses_its_saved_token_with_compute_offline(desk, tmp_path
     sign_in(browser, 'jordan')
     compute.off = True
     storage = tmp_path / 'storage'
-    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': '',
-                                              'models_storage_folder': str(storage)})
+    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(storage)})
     store = compute.front.state.front_files
     browser.portal.call(store.web.aclose)
     store.web = compute.hub.client()
@@ -472,8 +416,8 @@ def test_front_download_uses_its_saved_token_with_compute_offline(desk, tmp_path
     page = browser.get('/hub?repository=acme/tiny-GGUF')
     assert page.status_code == 200 and 'tiny-q4.gguf' in page.text
     assert compute.hub.seen[-1][2]['authorization'] == 'Bearer good'
-    started = browser.post('/hub', data={'repository': 'acme/tiny-GGUF', 'file': 'tiny-q4.gguf', 'place': 'storage_llm'})
-    assert started.status_code == 200 and 'coming down to storage_llm' in started.text
+    started = browser.post('/hub', data={'repository': 'acme/tiny-GGUF', 'file': 'tiny-q4.gguf', 'place': 'llm'})
+    assert started.status_code == 200 and 'coming down to llm' in started.text
     target = storage / 'llm' / 'acme--tiny-GGUF' / 'tiny-q4.gguf'
     deadline = time.monotonic() + 3
     while not target.exists() and time.monotonic() < deadline:
@@ -489,8 +433,7 @@ def test_front_civitai_uses_current_provider_token_for_discovery_and_download(de
     sign_in(browser, 'jordan')
     compute.off = True
     storage = tmp_path / 'storage'
-    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': '',
-                                              'models_storage_folder': str(storage)})
+    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(storage)})
     captured = []
     async def search(http, words, token='', adult=False):
         captured.append(('search', token))
@@ -511,7 +454,7 @@ def test_front_civitai_uses_current_provider_token_for_discovery_and_download(de
         assert browser.get('/mirrorwall-discovery?q=style').status_code == 200
     assert captured == [('search', 'fake-first-civitai'), ('search', 'fake-current-civitai')]
     started = browser.post('/mirrorwall-discovery', json={'repository': 'civitai/123',
-                           'files': ['model.safetensors'], 'place': 'storage_image'})
+                           'files': ['model.safetensors'], 'place': 'image'})
     assert started.status_code == 202, started.text
     target = storage / 'image' / 'civitai--123' / 'model.safetensors'
     deadline = time.monotonic() + 3
@@ -521,24 +464,23 @@ def test_front_civitai_uses_current_provider_token_for_discovery_and_download(de
     assert captured[-2:] == [('files', 'fake-current-civitai'), ('fetch', 'fake-current-civitai')]
 
 
-def test_front_downloads_never_go_into_the_cache(desk, tmp_path):
-    """With a cache alone on the control node, nothing is offered or accepted as a download destination."""
+def test_front_downloads_need_model_storage_and_offer_its_llm_folder_first(desk, tmp_path):
+    """With no model storage on the control node, nothing is offered or accepted as a download destination."""
     browser, compute, _ = desk
     compute.off = True
     sign_in(browser, 'jordan')
-    cache = tmp_path / 'cache'
-    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache), 'models_storage_folder': ''})
-    store = compute.front.state.front_files
+    store, owner = compute.front.state.front_files, compute.front.state.users.by_name('jordan')
     browser.portal.call(store.web.aclose)
     store.web = compute.hub.client()
-    page = browser.get('/hub?repository=acme/tiny-GGUF')
-    assert page.status_code == 200 and 'tiny-q4.gguf' in page.text and 'name="place"' not in page.text
-    assert 'Set a model storage folder</a>' in page.text
-    refused = browser.post('/hub', data={'repository': 'acme/tiny-GGUF', 'file': 'tiny-q4.gguf', 'place': 'llm'})
-    assert 'never the cache' in refused.text and not (cache / 'llm' / 'acme--tiny-GGUF').exists()
-    civitai = browser.post('/mirrorwall-discovery', json={'repository': 'civitai/123', 'files': ['a.safetensors'], 'place': 'image'})
-    assert civitai.status_code == 400 and 'never the cache' in civitai.json()['error']['message']
-    assert not (cache / 'image').exists() or not any((cache / 'image').iterdir())
+    refused = browser.portal.call(store.request, owner, 'POST', '/loadcoach/downloads',
+                                  b'{"repository": "acme/tiny-GGUF", "files": ["tiny-q4.gguf"], "place": "llm"}')
+    assert refused.status_code == 400 and 'Set a model storage folder' in refused.json()['error']['message']
+    listed = browser.portal.call(store.request, owner, 'GET', '/loadcoach/hub?repository=acme/tiny-GGUF', b'').json()
+    assert listed['places'] == []
+    storage = tmp_path / 'storage'
+    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(storage)})
+    page = browser.get('/hub?repository=acme/tiny-GGUF').text
+    assert '<option value="llm" selected>' in page and 'Download to model storage' in page
 
 
 def test_front_civitai_search_uses_civitai_metadata_and_current_preview_policy(desk, monkeypatch, tmp_path):
@@ -607,32 +549,6 @@ def test_civitai_cards_reject_wrong_provider_data_and_show_model_metadata(desk):
         browser.close()
 
 
-def test_front_cache_cleanup_keeps_conflicting_storage_copies(desk, tmp_path):
-    browser, compute, _ = desk
-    sign_in(browser, 'jordan')
-    cache, storage = tmp_path / 'cache', tmp_path / 'storage'
-    browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': str(cache),
-                                              'models_storage_folder': str(storage)})
-    source = Path(gguf(cache / 'llm' / 'tiny.gguf', general__architecture='qwen'))
-    original = source.read_bytes()
-    retained = storage / 'llm' / source.name
-    retained.write_bytes(original.replace(b'qwen', b'abcd'))
-    store = compute.front.state.front_files
-    response = browser.post('/files', data={'do': 'clear-cache'})
-    assert response.status_code == 200
-    deadline = time.monotonic() + 3
-    while store.cleanup.get('state') == 'running' and time.monotonic() < deadline:
-        time.sleep(.02)
-    assert source.read_bytes() == original and retained.read_bytes() != original
-    assert any('differ' in reason for reason in store.cleanup['failures'])
-    retained.write_bytes(original)
-    browser.post('/files', data={'do': 'clear-cache'})
-    deadline = time.monotonic() + 3
-    while store.cleanup.get('state') == 'running' and time.monotonic() < deadline:
-        time.sleep(.02)
-    assert not source.exists() and retained.read_bytes() == original
-
-
 @pytest.mark.parametrize('width', [1440, 768, 390, 320])
 def test_offline_storage_setup_and_model_list_spacing_in_browser(desk, tmp_path, width):
     server, compute, _ = desk
@@ -642,9 +558,9 @@ def test_offline_storage_setup_and_model_list_spacing_in_browser(desk, tmp_path,
         browser, page = browser_context(engine, server)
         page.set_viewport_size({'width': width, 'height': 1000})
         page.goto('http://console.test/files')
-        page.get_by_role('link', name='Set up optional control node cache or storage', exact=True).click()
-        page.get_by_label('Active cache path', exact=True).fill(str(tmp_path / 'cache'))
-        page.get_by_label('Storage library path', exact=True).fill(str(tmp_path / 'storage'))
+        page.get_by_role('link', name='Set up optional control node model storage', exact=True).click()
+        playwright.expect(page.get_by_label('Former second model folder', exact=True)).to_have_count(0)
+        page.get_by_label('Model storage path', exact=True).fill(str(tmp_path / 'storage'))
         page.get_by_role('button', name='Save file locations', exact=True).click()
         playwright.expect(page.locator('.said-box')).to_contain_text('Control node file locations are available now')
         page.goto('http://console.test/files')

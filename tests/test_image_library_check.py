@@ -1,4 +1,4 @@
-"""Image compatibility uses trusted header identities across cache/storage nodes."""
+"""Image compatibility uses trusted header identities across every node's model storage."""
 import json
 from types import SimpleNamespace
 
@@ -160,7 +160,7 @@ def test_library_check_offers_language_models_as_encoders_and_names_their_node(t
         assert answer.status_code == 200, answer.text
         slot = next(one for one in answer.json()['slots'] if one['slot'] == 'text_encoder')
         assert slot['candidates'] == [encoder]
-        assert slot['choices'] == [{'path': encoder, 'machine': 'front', 'tier': 'storage'}]
+        assert slot['choices'] == [{'path': encoder, 'machine': 'front'}]
         answer = client.post('/turnstile/models/image-check', headers=headers, json={
             'source_machine': 'front', 'settings': {'flags': {'model': weights},
                                                     'sdcpp': {'family': 'flux2-klein', 'components': {'text_encoder': encoder}}}})

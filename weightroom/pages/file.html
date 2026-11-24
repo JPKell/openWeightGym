@@ -26,7 +26,7 @@
   <div class="file-identity">
     {% call card('File record') %}
       {{ file_record([
-        ('Location', artifact_machine ~ ' · ' ~ file.tier|default('cache'), 'location'),
+        ('Location', artifact_machine ~ ' · model storage', 'location'),
         ('Place', file.place, 'place'),
         ('Modified', file.modified|timestamp if file.modified else 'Not reported', 'modified'),
         ('Last used', file.last_used|timestamp if file.last_used else 'Never', 'last-used')
@@ -78,7 +78,7 @@
       {% else %}
         {% set here_folder = places|selectattr('name', 'equalto', file.place)|map(attribute='folder')|first %}
         {% set other_places = places|rejectattr('name', 'equalto', file.place)|rejectattr('folder', 'equalto', here_folder)|list %}
-        {% set preferred_place = file.place.removeprefix('storage_') if file.tier == 'storage' else 'storage_' ~ file.place %}
+        {% set preferred_place = file.place.removeprefix('storage_') if file.place.startswith('storage_') else 'storage_' ~ file.place %}
         {% if other_places %}
         <form method="post" action="/file" data-hold-refresh data-file-transfer>
           <input type="hidden" name="path" value="{{ file.path }}">
@@ -91,7 +91,7 @@
         </form>
         {% else %}<p class="small text-secondary mb-0">There is no other configured place. A second is named under [places] in loadcoach.toml.</p>{% endif %}
       {% endif %}
-      {% call more('How moving and distribution work') %}Copy keeps the original and existing model paths. Move checks the copy, updates model paths, then removes the original. Loaded models keep answering and use the new path on their next load. Stored files are first copied to the matching active cache and SHA-256 verified before distribution; node copies are verified again.{% endcall %}
+      {% call more('How moving and distribution work') %}Copy keeps the original and existing model paths. Move checks the copy, updates model paths, then removes the original. Loaded models keep answering and use the new path on their next load. Distribution sends the file straight from storage into each node's model storage, and checks each copy's SHA-256.{% endcall %}
       <details class="file-delete border-top mt-2 pt-2"><summary class="text-danger">Delete file <span class="small text-secondary">· {{ 'protected' if file.used_by else 'unused' }}</span></summary>
         {% if file.used_by %}<p class="small mt-2 mb-0">It is used by {% for model in file.used_by %}<a href="{{ address(model) }}">{{ model }}</a>{{ ', ' if not loop.last }}{% endfor %}. Remove {{ 'that model' if file.used_by|length == 1 else 'those models' }} first, and then the file can be deleted.</p>
         {% else %}<p class="small text-secondary mt-2 mb-2">Deleting permanently removes this file and frees {{ file.size|size }}. It can only come back by downloading it again. To confirm, type the file's name.</p>

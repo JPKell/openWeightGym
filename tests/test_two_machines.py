@@ -301,7 +301,7 @@ def test_required_file_store_gets_one_longer_retry_after_a_short_timeout(tmp_pat
     assert wire.calls.count((9442, "/loadcoach/files")) == 2
 
 
-def test_clear_cache_keeps_files_used_on_other_nodes_and_refuses_an_unknown_node(tmp_path):
+def test_there_is_no_cache_to_clear_or_consolidate_and_no_node_is_asked_to_clean_up(tmp_path):
     users = Users(str(tmp_path / "accounts.db"), {
         "manager": Group(can=frozenset({"manage-models"})),
         "system": Group(can=frozenset({"follow-settings"})),
@@ -315,11 +315,9 @@ def test_clear_cache_keeps_files_used_on_other_nodes_and_refuses_an_unknown_node
     statement.replace_key(rig_key, "r" * 40)
     facts = {"what": "model", "name": "One", "architecture": "tiny", "size_label": "1B"}
     primary_state = {"files": {"places": [{"name": "llm", "folder": "/compute"}],
-                               "files": [{"path": "/compute/one.gguf", "place": "llm", "size": 10,
-                                          "facts": facts, "used_by": ["one"]}]}}
-    artifact_state = {"files": {"places": [{"name": "llm", "folder": "/cache"}],
-                                "files": [{"path": "/cache/one.gguf", "place": "llm", "tier": "cache",
-                                           "size": 10, "facts": facts, "used_by": []}]}}
+                               "files": [{"path": "/compute/one.gguf", "place": "llm", "size": 10, "facts": facts, "used_by": []}]}}
+    artifact_state = {"files": {"places": [{"name": "llm", "folder": "/models/llm"}],
+                                "files": [{"path": "/models/llm/one.gguf", "place": "llm", "size": 10, "facts": facts, "used_by": []}]}}
     wire = Two(worker(primary_key, "compute", False, primary_state),
                worker(rig_key, "rig", False, artifact_state))
     settings = Settings(compute="compute", data=str(tmp_path), machine_key_file=primary_key,
@@ -327,46 +325,11 @@ def test_clear_cache_keeps_files_used_on_other_nodes_and_refuses_an_unknown_node
                         machines={"rig": {"compute": "http://compute:9442", "machine_key_file": rig_key}})
     with TestClient(build_app(settings, httpx.AsyncClient(transport=wire), users=users),
                     base_url="http://front:8442") as front:
-        started = front.post("/turnstile/artifacts/files/clear-cache", headers=headers)
-        assert started.status_code == 202
-        assert artifact_state["cleanup_request"] == {"mode": "clear-cache", "keep": ["/cache/one.gguf"]}
-        primary_state.pop("files")
-        refused = front.post("/turnstile/artifacts/files/clear-cache", headers=headers)
-        assert refused.status_code == 409 and "compute" in refused.json()["error"]["message"]
-
-
-def test_consolidate_cache_promotes_storage_copies_of_files_used_on_any_node(tmp_path):
-    users = Users(str(tmp_path / "accounts.db"), {
-        "manager": Group(can=frozenset({"manage-models"})),
-        "system": Group(can=frozenset({"follow-settings"})),
-    })
-    users.add("jordan", "manager")
-    users.add("weightroom", "system")
-    headers = {"authorization": "Bearer " + users.new_key("jordan")}
-    (tmp_path / "weightroom.key").write_text(users.new_key("weightroom"))
-    primary_key = machine_key(tmp_path)
-    rig_key = str(tmp_path / "rig.key")
-    statement.replace_key(rig_key, "r" * 40)
-    one = {"what": "model", "name": "One", "architecture": "tiny", "size_label": "1B"}
-    two = {**one, "name": "Two"}
-    primary_state = {"files": {"places": [{"name": "llm", "folder": "/compute"}],
-                               "files": [{"path": "/compute/one.gguf", "place": "llm", "size": 10, "facts": one, "used_by": ["one"]},
-                                         {"path": "/compute/two.gguf", "place": "llm", "size": 10, "facts": two, "used_by": ["two"]},
-                                         {"path": "/compute/gone.gguf", "place": "llm", "size": 10, "facts": one, "used_by": ["gone"]}]}}
-    artifact_state = {"files": {"places": [{"name": "llm", "folder": "/cache"}],
-                                "files": [{"path": "/cache/two.gguf", "place": "llm", "tier": "cache", "size": 10, "facts": two, "used_by": []},
-                                          {"path": "/storage/one.gguf", "place": "storage_llm", "tier": "storage", "size": 10, "facts": one, "used_by": []},
-                                          {"path": "/storage/two.gguf", "place": "storage_llm", "tier": "storage", "size": 10, "facts": two, "used_by": []}]}}
-    wire = Two(worker(primary_key, "compute", False, primary_state),
-               worker(rig_key, "rig", False, artifact_state))
-    settings = Settings(compute="compute", data=str(tmp_path), machine_key_file=primary_key,
-                        auth_key_file=str(tmp_path / "weightroom.key"), artifact_machine="rig",
-                        machines={"rig": {"compute": "http://compute:9442", "machine_key_file": rig_key}})
-    with TestClient(build_app(settings, httpx.AsyncClient(transport=wire), users=users),
-                    base_url="http://front:8442") as front:
-        started = front.post("/turnstile/artifacts/files/consolidate-cache", headers=headers)
-        assert started.status_code == 202 and started.json()["absent"] == ["gone.gguf"]
-        assert artifact_state["cleanup_request"] == {"mode": "promote", "promote": ["/storage/one.gguf"]}
+        for action in ("clear-cache", "consolidate-cache", "cleanup-nodes"):
+            assert front.post("/turnstile/artifacts/files/" + action, headers=headers).status_code in (404, 405)
+        listed = front.get("/turnstile/artifacts/files", headers=headers).json()
+        assert "cleanup" not in listed and all("cleanup" not in node for node in listed["nodes"])
+    assert "cleanup_request" not in primary_state and "cleanup_request" not in artifact_state
 
 
 def test_weightroom_status_controls_target_the_selected_loadcoach(tmp_path):

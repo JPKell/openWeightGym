@@ -1,41 +1,42 @@
-"""Optional model-file storage on the control node, independent of inference workers."""
+"""Optional model storage on the control node, independent of inference workers."""
 
 import asyncio
 import hashlib
 import json
 import os
 import threading
-import time
-from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
 from loadcoach import hub
-from loadcoach.config import NO_STORAGE, model_places, shared_places, storage_places
-from loadcoach.files import SPARE, carry, model_files_in, room, sha256_of
-from loadcoach.file_index import FileIndex, tier_of
+from loadcoach.config import NO_STORAGE, model_places
+from loadcoach.files import SPARE, carry, room, sha256_of
+from loadcoach.file_index import UNLISTED, FileIndex
 from loadcoach.gguf import facts, read_metadata
 from mirrorwall.assets import supported, image_asset, facts as image_facts
 from soundroom.model import audio_asset, facts as audio_facts
 
 
 def checked_roots(values):
-    """Validate optional, separate absolute cache and storage roots before saving."""
+    """Validate the control node's model storage root before saving.
+
+    `models_storage_folder` is retired: while an older installation still sets it, its folders stay
+    ordinary places beside the storage root's, until it is cleared."""
     if set(values) - {'models_folder', 'models_storage_folder'}:
-        raise ValueError('Only cache and storage locations can be changed here.')
+        raise ValueError('Only the model storage location can be changed here.')
     roots = {name: values.get(name, '') for name in ('models_folder', 'models_storage_folder')}
     if any(not isinstance(value, str) or value and not Path(value).is_absolute() for value in roots.values()):
-        raise ValueError('Cache and storage locations must be full paths, or empty to disable them.')
+        raise ValueError('The model storage location must be a full path, or empty to disable it.')
     if all(roots.values()):
-        cache, storage = (Path(value).resolve() for value in roots.values())
-        if cache == storage:
-            return roots  # one folder for both: every file in it is in the cache and in storage at once
-        cache_places = [Path(folder) for folder in model_places(str(cache), {}).values()]
-        storage_places = [Path(folder) for folder in model_places('', {}, str(storage)).values()]
-        if any(a == b or a in b.parents or b in a.parents for a in cache_places for b in storage_places):
-            raise ValueError('Cache and storage must be one folder, or two folders that do not hold one another.')
+        root, former = (Path(value).resolve() for value in roots.values())
+        if root == former:
+            return roots
+        mine = [Path(folder) for folder in model_places(str(root), {}).values()]
+        theirs = [Path(folder) for folder in model_places('', {}, str(former)).values()]
+        if any(a == b or a in b.parents or b in a.parents for a in mine for b in theirs):
+            raise ValueError('The model storage folder and the former second folder must not hold one another.')
     return roots
 
 
@@ -54,7 +55,7 @@ class FrontFiles:
         self.web = httpx.AsyncClient(timeout=30, follow_redirects=True)
         self.fetching, self.tasks, self.receiving = {}, set(), set()
         self.moving, self.transfer_failures = {}, {}
-        self.cleanup, self.stopping = {}, threading.Event()
+        self.stopping = threading.Event()
         # An upgraded installation may predate this kind. Create only its child
         # beneath an already mounted, configured root, never a missing root.
         for name, folder in self.places().items():
@@ -62,7 +63,7 @@ class FrontFiles:
                 Path(folder).mkdir(exist_ok=True)
 
     def places(self):
-        """Resolve configured tiers; empty paths leave control node storage disabled."""
+        """Resolve the configured root; an empty path leaves control node storage disabled."""
         roots = checked_roots(self.roots())
         return model_places(roots['models_folder'], {}, roots['models_storage_folder'])
 
@@ -98,13 +99,13 @@ class FrontFiles:
     def inventory(self, refresh=False):
         """List the control node's available folders and files from the kept index, reporting inaccessible locations inline."""
         spots = self.places()
-        places, files, problems, shared = [], [], [], shared_places(spots)
+        places, files, problems = [], [], []
         for name, folder in spots.items():
             if not Path(folder).is_dir():
                 problems.append(f'{folder} is not available. Check the folder or mount on the control node.')
                 continue
             try:
-                places.append({'name': name, 'folder': folder, 'tier': tier_of(name), 'shared': name in shared, **room(folder), 'files': 0})
+                places.append({'name': name, 'folder': folder, **room(folder), 'files': 0})
             except OSError as problem:
                 problems.append(f'{folder}: {problem}')
         index = self.index.current({place['name']: place['folder'] for place in places}, refresh=refresh, every=self.every())
@@ -114,10 +115,10 @@ class FrontFiles:
                 if kept['place'] != place['name']:
                     continue
                 place['files'] += kept['size']
-                files.append({**{key: value for key, value in kept.items() if key != 'mtime'},
-                              'used_by': [], 'last_used': None, 'moving': self.moving.get(kept['path']), 'shared': place['name'] in shared,
+                files.append({**{key: value for key, value in kept.items() if key not in UNLISTED},
+                              'used_by': [], 'last_used': None, 'moving': self.moving.get(kept['path']),
                               'transfer_failure': self.transfer_failures.get(kept['path'])})
-        return {'places': places, 'files': files, 'cleanup': dict(self.cleanup), 'problems': problems,
+        return {'places': places, 'files': files, 'problems': problems,
                 'checked': FileIndex.checked(index)}
 
     def changed(self, *paths):
@@ -150,11 +151,7 @@ class FrontFiles:
                     return response({'sha256': await asyncio.to_thread(sha256_of, str(path))})
                 description, metadata = await asyncio.to_thread(self.describe, path)
                 return response({'path': str(path), 'size': path.stat().st_size, 'facts': description, 'metadata': metadata})
-            if method == 'POST' and action == 'files/cleanup':
-                return self.start_cleanup(user, asked)
             if method == 'POST' and action in ('files/copy', 'files/move', 'files/delete'):
-                if self.cleanup.get('state') == 'running':
-                    raise ValueError('Wait for cache maintenance to finish before moving or deleting files.')
                 path = self.path(asked.get('path', ''))
                 if not path.is_file():
                     raise ValueError('That file is no longer available on the control node.')
@@ -226,7 +223,7 @@ class FrontFiles:
                                         if all((Path(folder) / hub.folder_of(repository) / name).exists() for name in names)), None)
                     row['parts'] = len(names)
                 return response({'repository': repository, 'files': rows, 'places': [
-                    {'name': name, 'free': room(folder)['free']} for name, folder in sorted(storage_places(spots).items()) if Path(folder).is_dir()]})
+                    {'name': name, 'free': room(folder)['free']} for name, folder in sorted(spots.items()) if Path(folder).is_dir()]})
             if method == 'POST' and action == 'downloads':
                 return await self.download(user, asked)
             if method == 'POST' and action in ('downloads/stop', 'downloads/discard'):
@@ -243,7 +240,7 @@ class FrontFiles:
                     path.with_name(path.name + '.part').unlink(missing_ok=True)
                     self.fetching.pop(str(path), None)
                 return response({})
-            return response({'error': {'message': 'Choose a compute node for model configuration or cache maintenance.'}}, 409)
+            return response({'error': {'message': 'Choose a compute node for model configuration.'}}, 409)
         except hub.Refused as problem:
             return response({'error': {'message': str(problem)}}, problem.status)
         except (OSError, ValueError, TypeError, KeyError) as problem:
@@ -278,96 +275,12 @@ class FrontFiles:
         return httpx.Response(202, json={'copying' if copy else 'moving': path, 'to': place,
                                        'path': str(target), 'target': str(target), 'size': progress['of']})
 
-    def start_cleanup(self, user, asked):
-        """Consolidate cache or clear only files with a verified retained storage copy."""
-        if self.tasks or self.receiving:
-            return httpx.Response(409, json={'error': {'message': 'Wait for active control node file transfers to finish.'}})
-        mode = asked.get('mode')
-        if mode not in ('clear-cache', 'promote'):
-            raise ValueError('Choose cache consolidation or verified cache cleanup.')
-        spots = self.places()
-        # A folder that is the cache and storage at once is left alone: its files are the storage copies themselves.
-        spots = {name: folder for name, folder in spots.items() if name not in shared_places(spots)}
-        cached = {name: Path(folder) for name, folder in spots.items() if not name.startswith('storage_')}
-        stored = {name.removeprefix('storage_'): Path(folder) for name, folder in spots.items() if name.startswith('storage_')}
-        if mode == 'clear-cache' and not stored:
-            raise ValueError('The cache and storage are one folder: there is no separate cache to clear.' if shared_places(self.places())
-                             else 'Configure a storage library before clearing the cache.')
-        keep, promote = asked.get('keep', []), asked.get('promote', [])
-        if not isinstance(keep, list) or not isinstance(promote, list):
-            raise ValueError('Keep and promote must be lists of model-file paths.')
-        protected = {str(self.path(path).resolve()) for path in keep}
-        sources = [self.path(path) for path in promote]
-        if any(not source.is_file() or not any(root.resolve() in source.resolve().parents for root in stored.values()) for source in sources):
-            raise ValueError('Promoted files must be in the control node storage.')
-        self.cleanup = {'mode': mode, 'state': 'running', 'since': time.time(), 'saved': 0, 'removed': 0,
-                        'freed': 0, 'promoted': 0, 'protected': 0, 'failures': []}
-
-        def work():
-            """Copy and verify outside the event loop; never remove the only verified copy."""
-            operations = []
-            if mode == 'promote':
-                for source in sources:
-                    place, root = next((name, root) for name, root in stored.items() if root.resolve() in source.resolve().parents)
-                    operations.append((source, cached.get(place), source.relative_to(root)))
-            else:
-                for place, root in cached.items():
-                    operations.extend((source, stored.get(place), source.relative_to(root)) for source in model_files_in(str(root)))
-            for source, folder, relative in operations:
-                try:
-                    if self.stopping.is_set():
-                        raise InterruptedError('Control node file maintenance stopped.')
-                    if folder is None:
-                        raise ValueError(f'{source.name}: no matching {"cache" if mode == "promote" else "storage"} folder.')
-                    target = self.path(str(folder / relative))
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    size = source.stat().st_size
-                    if not target.exists():
-                        if room(str(target.parent))['free'] < size + SPARE:
-                            raise ValueError(f'{target.parent}: not enough free space.')
-                        carry(source, target, {'done': 0, 'of': size})
-                        self.cleanup['promoted' if mode == 'promote' else 'saved'] += 1
-                    if target.stat().st_size != size or sha256_of(str(source), self.stopping) != sha256_of(str(target), self.stopping):
-                        raise ValueError(f'{source.name}: cache and storage copies differ. Both were kept.')
-                    if mode == 'clear-cache':
-                        if str(source.resolve()) in protected:
-                            self.cleanup['protected'] += 1
-                        else:
-                            if self.stopping.is_set():
-                                raise InterruptedError('Control node file maintenance stopped.')
-                            source.unlink()
-                            self.cleanup['removed'] += 1
-                            self.cleanup['freed'] += size
-                except (OSError, ValueError) as problem:
-                    self.cleanup['failures'].append(str(problem))
-
-        async def run():
-            """Publish terminal maintenance state and retain progress for the Files page."""
-            try:
-                await asyncio.to_thread(work)
-                self.cleanup.update(state='complete', ended=time.time())
-                self.log.add('file', 'cache-cleaned', user.name, machine='front', **self.cleanup)
-            except asyncio.CancelledError:
-                self.cleanup.update(state='failed', failure='Control node file maintenance stopped.')
-                raise
-            except (OSError, ValueError) as problem:
-                self.cleanup.update(state='failed', failure=str(problem))
-            finally:
-                await asyncio.to_thread(self.index.stale)
-
-        task = asyncio.create_task(run())
-        self.tasks.add(task)
-        task.add_done_callback(self.tasks.discard)
-        return httpx.Response(202, json=dict(self.cleanup))
-
     async def receive(self, user, place, relative, pieces, size, digest, progress, source=''):
         """Write a file sent from a compute node into a control node place, and publish it only once its size and SHA-256 match.
 
         `pieces` yields its bytes. Until then it is a hidden file beside where it goes, which no listing
         shows; a failed or interrupted copy leaves nothing behind.
         """
-        if self.cleanup.get('state') == 'running':
-            raise ValueError('Wait for cache maintenance to finish before copying files to the control node.')
         folder = self.places().get(place)
         if folder is None or not Path(folder).is_dir():
             raise ValueError(f'Control node has no folder for {place}. Set its locations in Settings.')
@@ -406,20 +319,18 @@ class FrontFiles:
             self.receiving.discard(str(target))
 
     async def download(self, user, asked):
-        """Download verified repository files with this node's current credential into storage."""
+        """Download verified repository files with this node's current credential into model storage."""
         repository, names, place = asked.get('repository', ''), asked.get('files'), asked.get('place')
-        if self.cleanup.get('state') == 'running':
-            raise ValueError('Wait for cache maintenance to finish before downloading files.')
         if not isinstance(repository, str) or not hub.REPOSITORY.fullmatch(repository) or not isinstance(names, list) or not names:
             raise ValueError('Choose a repository, files and a destination.')
-        stored = storage_places(self.places())
+        stored = self.places()
         if not stored:
             raise ValueError(NO_STORAGE)
         folder = stored.get(place)
-        if place == 'storage_classifier' and folder and Path(folder).parent.is_dir():
+        if place in ('classifier', 'storage_classifier') and folder and Path(folder).parent.is_dir():
             Path(folder).mkdir(exist_ok=True)
         if folder is None or not Path(folder).is_dir():
-            raise ValueError('Downloads go into storage, never the cache. Choose a control node storage folder that exists.')
+            raise ValueError('Choose a control node model storage folder that exists.')
         token_kind = 'civitai_token' if repository.startswith('civitai/') else 'hub_token'
         entries = hub.chosen(await hub.files(self.web, repository, self.token(token_kind), classifier=Path(folder).name == 'classifier'), names)
         targets = [self.path(str(Path(folder) / hub.folder_of(repository) / Path(entry['path']).name)) for entry in entries]

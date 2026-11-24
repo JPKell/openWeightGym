@@ -83,9 +83,9 @@ def listed_in(folder: Path, path: Path) -> bool:
     return supported(path) and depth <= maximum
 
 
-def tier_of(place: str) -> str:
-    """A place named storage_NAME is the library; every other place is the cache."""
-    return "storage" if place.startswith("storage_") else "cache"
+# Keys kept with each file that a listing leaves out: the index's own mtime, and the tier an older
+# index recorded when a node had a separate model cache.
+UNLISTED = ("mtime", "tier")
 
 
 class FileIndex:
@@ -146,7 +146,7 @@ class FileIndex:
             if encoder_candidate(file, facts) and facts.get('image_identity', {}).get('version') != IDENTITY_VERSION:
                 return {**before, 'facts': {**facts, 'image_identity': encoder_identity(file)}}  # tensor shapes only; other facts stay
             return before
-        entry = {"path": str(file), "place": place, "tier": tier_of(place), "size": seen.st_size, "mtime": seen.st_mtime,
+        entry = {"path": str(file), "place": place, "size": seen.st_size, "mtime": seen.st_mtime,
                  "modified": datetime.fromtimestamp(seen.st_mtime).isoformat(timespec="seconds")}
         try:
             entry["facts"] = self.describe(file)
@@ -165,7 +165,7 @@ class FileIndex:
                 try:
                     for file in model_files_in(folder):
                         if str(file) in files:
-                            continue  # cache and storage set to one folder: listed once, under the cache place, which comes first
+                            continue  # two places that are one folder: listed once, under the place that comes first
                         if self.accept is not None:
                             self.accept(str(file))
                         try:

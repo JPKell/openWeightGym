@@ -54,7 +54,7 @@ from db import DatabaseRegistry
 from db.maintenance import Barrier, Gate
 from loadcoach import statement
 from loadcoach.component_versions import interval_seconds
-from loadcoach.config import CLI, read_settings, model_places
+from loadcoach.config import CLI, kind_of, read_settings, model_places
 from loadcoach.groups import read_group
 from loadcoach.log import FRONT, Log, machine_slot, public_number, origin_number
 from loadcoach.files import PIECE, SPARE, sha256_of
@@ -143,8 +143,8 @@ class Settings:
     allow_caller_to_specify_destination: bool = True  # callers may name the node a task or request runs on. Off: the control node picks. Settings → General
     toollocker_url: str = ""  # optional control node ToolLocker upstream; port 8443 never wakes compute
     artifact_machine: str = ""  # control-node-side LoadCoach that owns downloads; empty prefers front_cpu
-    models_folder: str = ""  # optional model cache on the control node; no inference service is required
-    models_storage_folder: str = ""  # optional model library on the control node; empty disables this tier
+    models_folder: str = ""  # optional model storage on the control node; no inference service is required
+    models_storage_folder: str = ""  # retired second root; when set, its folders stay ordinary places beside models_folder's
     image_adult_previews: bool = False  # permit individual users to opt in to adult Civitai previews
     allow_image_generation: bool = True
     allow_video_generation: bool = True
@@ -1979,7 +1979,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return [*nodes, {'name': 'front', 'answering': True, **await asyncio.to_thread(front_files.inventory, refresh)}]
 
     async def model_files_available(request):
-        """The complete cache/storage picker, including preflight capacity warnings."""
+        """The complete model storage file picker, including preflight capacity warnings."""
         user = caller(key_of(request))
         if user is None:
             return error(401, "Missing or wrong API key.")
@@ -2037,7 +2037,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                          if not file.get('moving') and (file.get('facts', {}).get('what') == 'image'
                                                      or file.get('facts', {}).get('image_component')
                                                      or (file.get('facts', {}).get('image_identity') or {}).get('kind') == 'text_encoder')]
-                return sorted(files, key=lambda pair: (pair[0]['name'] != source, pair[1].get('tier') == 'storage'))
+                return sorted(files, key=lambda pair: pair[0]['name'] != source)
             # Upgrade older indexes once; unchanged language/audio file descriptions stay cached.
             from mirrorwall.components import IDENTITY_VERSION
             if any(file['facts'].get('image_identity', {}).get('version') != IDENTITY_VERSION for _, file in image_files()):
@@ -2052,11 +2052,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             # Name the node of each suggestion: a copy on the source node needs no transfer, so others are offered only without one.
             places = {}
             for node, file in image_files():
-                places.setdefault(file['path'], {}).setdefault(node['name'], file.get('tier', ''))
+                places.setdefault(file['path'], []).append(node['name'])
             for slot in checked['slots']:
-                slot['choices'] = [{'path': path, 'machine': machine, 'tier': tier} for path in slot.get('candidates', [])
-                                   for machine, tier in (((source, places[path][source]),) if source in places.get(path, {})
-                                                         else places.get(path, {}).items())]
+                slot['choices'] = [{'path': path, 'machine': machine} for path in slot.get('candidates', [])
+                                   for machine in ([source] if source in places.get(path, []) else dict.fromkeys(places.get(path, [])))]
         except (ValueError, TypeError, AttributeError, KeyError) as problem:
             return error(400, str(problem))
         return JSONResponse(checked, headers={'cache-control':'no-store'})
@@ -2075,7 +2074,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             raise ValueError(f"Could not verify {path} on {machine}.")
         return answer.json()["sha256"]
 
-    async def promote_model_file(user, step, progress=None, *, stopped="The cache promotion stopped; the model was not added."):
+    async def copy_within_machine(user, step, progress=None, *, stopped="The copy stopped before it was complete."):
         """Use Files' atomic copy between two places of one machine and wait for the complete copy.
         `progress`, if given, follows how far it has got."""
         body = json.dumps({"path": step["file"]["path"], "to": step["place"]["name"], "relative": step["relative"]}).encode()
@@ -2087,7 +2086,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             await asyncio.sleep(.5)
             answer = await ask_machine(user, "GET", "/loadcoach/files", machine=step["node"], timeout=30)
             if answer is None or answer.status_code != 200:
-                raise ValueError("The copy could not be verified." if progress is not None else "The cache promotion could not be verified; the model was not added.")
+                raise ValueError("The copy could not be verified.")
             files = answer.json()["files"]
             if any(file["path"] == step["path"] for file in files):
                 return
@@ -2150,7 +2149,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
 
         `machine` names one destination; `machines` names several, which are all checked before any
         is started. Each destination is then a job of its own, and a file two of them need placed in
-        the same spot, such as one stored file promoted into its cache, is placed once.
+        the same spot is placed once.
         """
         user = caller(key_of(request))
         if user is None:
@@ -2252,7 +2251,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 prepared["allocations"][(step["node"], place.get("filesystem", place["folder"]))]["bytes"] -= step["file"]["size"]
         for key, allocation in prepared["allocations"].items():
             if allocation["free"] < allocation["bytes"] + installation_reservations.get(key, 0) + SPARE:
-                raise ValueError(f"Not enough cache space on {allocation['node']} after pending transfers; no action was started.")
+                raise ValueError(f"Not enough model storage space on {allocation['node']} after pending transfers; no action was started.")
         placing.update((step["node"], step["path"]) for step in prepared["steps"] if not step["existing"])
         return {"destination": destination, "candidate": candidate, "selected": selected, "inventory": inventory, "prepared": prepared}
 
@@ -2277,7 +2276,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             """Place a verified bundle, then publish its model configuration."""
             try:
                 placed = await install_files(prepared, lambda machine, path: managed_digest(user, machine, path, job),
-                                             lambda step: promote_model_file(user, step, job),
                                              lambda step, digest, progress: transfer_model_file(user, step, digest, progress), job,
                                              claim=placement_claim)
                 job.update(state='creating', working_machine=destination, done=0, of=0, progress_available=False)
@@ -2369,7 +2367,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                 return error(409, 'This file is used by a configured model. Update that model before moving or deleting its file.')
         answer = await ask_machine(user, request.method, path, body, timeout=None)
         if answer is None:
-            return error(503, f"Model files on {file_store()} are unavailable. Configure control node cache and storage in Settings → General, or connect that node.")
+            return error(503, f"Model files on {file_store()} are unavailable. Configure control node model storage in Settings → General, or connect that node.")
         return JSONResponse(answer.json(), status_code=answer.status_code, headers={"cache-control": "no-store"})
 
     async def file_inventory(user, refresh: bool = False) -> dict:
@@ -2391,13 +2389,12 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
             nodes.append({"name": name, "state": 'ready' if name == 'front' else reports.get(name, {}).get("state", "unknown"),
                           "answering": answering, "checked": found.get("checked"),
                           "places": found.get("places", []), "files": found.get("files", []),
-                          "problems": found.get('problems', []), "cleanup": found.get("cleanup", {}),
+                          "problems": found.get('problems', []),
                           'conversions': found.get('conversions', [])})
         source = next(node for node in nodes if node['name'] == file_store())
         return {"artifact_machine": file_store(), "places": source["places"], "files": source["files"],
                 "front_enabled": any(front_file_roots().values()),
                 "store_available": bool(source['places']),
-                "cleanup": source.get("cleanup", {}),
                 "nodes": nodes, "distributions": [{**job, "finished": job.get("state") in FINISHED_TASKS} for job in [*shown_jobs(),
                     *[{**job, 'machine': node['name'], 'source': node['name'], 'file': job['scope'],
                        'kind': 'video-conversion' if job.get('kind')=='video-conversion' else 'classifier-conversion', 'targets': {}}
@@ -2413,63 +2410,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         found = await file_inventory(user, refresh=request.query_params.get("refresh") == "1")
         return JSONResponse(found, headers={"cache-control": "no-store"})
 
-    async def artifact_cleanup(request: Request) -> Response:
-        """Clear the control node's active cache safely, or remove unused files from answering compute nodes."""
-        user = caller(key_of(request))
-        if user is None:
-            return error(401, "Missing or wrong API key.")
-        if not user.can("manage-models"):
-            return error(403, "Your account may not manage model files.")
-        action = request.path_params.get("action", request.url.path.rsplit("/", 1)[-1])
-        if arranging():
-            return error(409, "Wait for the bulk change of files to finish before cleaning up.")
-        if action in ("clear-cache", "consolidate-cache"):
-            # What is kept and what is copied is decided on what is in the folders now, not on a kept list.
-            listed = await file_inventory(user, refresh=True)
-            unavailable = [node["name"] for node in listed["nodes"] if not node.get("answering")]
-            if unavailable:
-                return error(409, "Cache cleanup cannot safely determine every configured model while these nodes are unavailable: "
-                             + ", ".join(unavailable) + ".")
-
-            def identity(file: dict) -> tuple:
-                """Extract the stable model identity used to compare artifact references."""
-                facts = file.get("facts") or {}
-                return (Path(file["path"]).name, file.get("size"), facts.get("what", "model"),
-                        facts.get("name"), facts.get("architecture"), facts.get("size_label"))
-
-            # Every file a model uses on any node, control node included, so the control node's cache holds the whole working set.
-            used = {identity(file) for node in listed["nodes"] for file in node["files"] if file.get("used_by")}
-            cached = [file for file in listed["files"] if file.get("tier", "cache") == "cache"]
-            if action == "clear-cache":
-                body = {"mode": "clear-cache", "keep": [file["path"] for file in cached if identity(file) in used]}
-            else:
-                missing = used - {identity(file) for file in cached}
-                promote = {identity(file): file["path"] for file in listed["files"]
-                           if file.get("tier") == "storage" and identity(file) in missing}
-                body = {"mode": "promote", "promote": list(promote.values())}
-            answer = await ask_machine(user, "POST", "/loadcoach/files/cleanup", json.dumps(body).encode(), timeout=None)
-            if answer is None:
-                return error(503, f"The control node model-file store ({artifact_machine}) is not answering.")
-            found = answer.json()
-            if action == "consolidate-cache" and answer.status_code == 202:
-                found["absent"] = sorted(name for name, *_ in missing - set(promote))  # used somewhere, but control node has no copy at all
-            return JSONResponse(found, status_code=answer.status_code)
-        if action != "cleanup-nodes":
-            return error(404, "That file cleanup action is not available.")
-        names = [name for name in machines.names if name != file_store()]
-        body = json.dumps({"mode": "unused"}).encode()
-        answers = await asyncio.gather(*(ask_machine(user, "POST", "/loadcoach/files/cleanup", body,
-                                                     machine=name, timeout=None) for name in names))
-        cleaned, unavailable = {}, []
-        for name, answer in zip(names, answers):
-            if answer is None:
-                unavailable.append(name)
-            elif answer.status_code in (200, 202):
-                cleaned[name] = answer.json()
-            else:
-                unavailable.append(f"{name}: {answer.json().get('error', {}).get('message', 'cleanup failed')}")
-        return JSONResponse({"nodes": cleaned, "unavailable": unavailable}, status_code=202)
-
     def spotter_base(name: str) -> str:
         """Resolve the configured Spotter endpoint for a compute node."""
         return settings.machines[node(name)].get("spotter", "").rstrip("/")
@@ -2482,7 +2422,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
     async def distribute_one(user: User, source: Path, relative: str, digest: str, node: dict, job: dict) -> None:
         """Stream one validated control node artifact to the selected compute location."""
         name = node["name"]
-        target = next((place for place in node["places"] if place["name"] == job["source_place"]), node["places"][0])
+        target = library.place_for(node, kind_of(job["source_place"]))
+        if target is None:
+            job["targets"][name] = {"state": "failed", "done": 0, "of": job["size"],
+                                    "why": f"{name} has no {kind_of(job['source_place'])} model storage folder."}
+            return
         state = job["targets"][name] = {"state": "preparing", "place": target["name"], "done": 0, "of": job["size"]}
         prepared = json.dumps({"place": target["name"], "relative": relative, "size": job["size"], "sha256": digest}).encode()
         answer = await ask_machine(user, "POST", "/spotter/files/prepare", prepared, spotter=True, machine=name, timeout=30)
@@ -2508,51 +2452,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         except (OSError, httpx.HTTPError, ValueError) as problem:
             state.update(state="failed", why=f"{type(problem).__name__}: {problem}")
 
-    async def stage_from_storage(user: User, source: Path, file: dict, job: dict) -> tuple[Path, dict, str]:
-        """Copy a stored file into the matching control node cache and return its verified cache copy."""
-        if file.get("tier") != "storage":
-            return source, file, await asyncio.to_thread(sha256_of, str(source))
-        cache_name = file["place"].removeprefix("storage_")
-        cache = next((place for place in job["source_places"] if place["name"] == cache_name and place.get("tier") == "cache"), None)
-        if cache is None:
-            raise ValueError(f"Storage place {file['place']} has no matching active cache named {cache_name}.")
-        target = Path(cache["folder"]) / source.name
-        job.update(state="staging", staged_from=str(source), path=str(target), source_place=cache_name,
-                   staging={"done": 0, "of": file["size"]})
-        if not target.is_file():
-            body = json.dumps({"path": str(source), "to": cache_name}).encode()
-            started = await ask_machine(user, "POST", "/loadcoach/files/copy", body, timeout=None)
-            if started is None or started.status_code not in (202, 409):
-                why = started.json()["error"]["message"] if started is not None else "The control node model-file store is not answering."
-                raise OSError(f"The storage file could not be staged in cache: {why}")
-            missing = 0
-            while not target.is_file():
-                await asyncio.sleep(1)
-                listed = await ask_machine(user, "GET", "/loadcoach/files", timeout=None)
-                if listed is None or listed.status_code != 200:
-                    continue
-                source_now = next((one for one in listed.json().get("files", []) if one["path"] == str(source)), None)
-                progress = (source_now or {}).get("moving") or {}
-                job["staging"]["done"] = progress.get("done", 0)
-                missing = 0 if progress else missing + 1
-                if missing >= 3:
-                    raise OSError("The storage-to-cache copy stopped before the cache file was complete.")
-        if target.stat().st_size != file["size"]:
-            raise OSError(f"The existing cache file {target.name} is not the same size as the stored file.")
-        job["state"] = "checking cache"
-        stored_digest, cached_digest = await asyncio.gather(
-            asyncio.to_thread(sha256_of, str(source)), asyncio.to_thread(sha256_of, str(target)))
-        if stored_digest != cached_digest:
-            raise OSError(f"The cache file {target.name} does not match the stored file's SHA-256.")
-        job["staging"]["done"] = file["size"]
-        cached = {**file, "path": str(target), "place": cache_name, "tier": "cache"}
-        return target, cached, cached_digest
-
     async def run_distribution(user: User, source: Path, file: dict, selected: list[str], job: dict, nodes: list[dict]) -> None:
         """Copy an artifact to selected nodes and retain per-node outcomes."""
         try:
             job["state"] = "checking"
-            source, file, digest = await stage_from_storage(user, source, file, job)
+            digest = await asyncio.to_thread(sha256_of, str(source))
             job["sha256"] = digest
             job.update(path=str(source), source_place=file["place"])
             root = Path(next(place["folder"] for place in job["source_places"] if place["name"] == file["place"]))
@@ -2645,7 +2549,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         return JSONResponse({"cleared": cleared})
 
     async def arrange(request: Request) -> Response:
-        """Make the files in the cache and on each node what the Files page's boxes say, in one background job.
+        """Make the files in storage and on each node what the Files page's boxes say, in one background job.
 
         The body is {"changes": [{"row", "at", "keep"}]}, a change for each box that was changed. They
         are checked against a fresh look through every folder; if one cannot be made, none is.
@@ -2671,9 +2575,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         if arranging():
             return error(409, "Another bulk change is still running. Wait for it to finish; Files shows how far it has got.")
         found = await file_inventory(user, refresh=True)  # what is copied and removed is decided on what is there now
-        busy = [node["name"] for node in found["nodes"] if (node.get("cleanup") or {}).get("state") == "running"]
-        if busy:
-            return error(409, "Wait for the cleanup on " + ", ".join(busy) + " to finish.")
         try:
             if transfer is not None:
                 changes = library.transfer_changes(found, transfer)
@@ -2710,7 +2611,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
         async def copy(step):
             """Copy within one machine through its own Files copy, or between machines checked by SHA-256."""
             if step["source"] == step["machine"]:
-                await promote_model_file(user, {"file": step["source_file"], "place": step["place"], "relative": step["relative"],
+                await copy_within_machine(user, {"file": step["source_file"], "place": step["place"], "relative": step["relative"],
                                                 "node": step["machine"], "path": step["path"]}, step, stopped="The copy stopped before it was complete.")
                 return
             step["state"] = "checking"
@@ -3635,8 +3536,6 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, waker
                             Route("/turnstile/machines/{name}/wake", machine_wake, methods=["POST"]),
                             Route("/turnstile/artifacts/files", artifact_files),
                             Route("/turnstile/artifacts/settings", front_file_settings, methods=['GET', 'POST']),
-                            *[Route("/turnstile/artifacts/files/" + action, artifact_cleanup, methods=["POST"])
-                              for action in ("clear-cache", "consolidate-cache", "cleanup-nodes")],
                             Route("/turnstile/artifacts/distribute", distribute, methods=["POST"]),
                             Route("/turnstile/artifacts/distributions", distribution_list),
                             Route("/turnstile/artifacts/distributions/clear", distribution_clear, methods=["POST"]),

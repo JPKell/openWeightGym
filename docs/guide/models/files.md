@@ -30,9 +30,11 @@ See [Video models](/docs/model-guides/video-models) for component requirements a
 
 ## Limits and troubleshooting
 
-Every folder in the models and storage roots is a location: the standard `llm`, `adapters`, `projectors`, `image`, `audio`, `encoders` and `classifier`, plus any other folder already there, such as `video`. `video` is searched as deeply as `image`, and its files are read as image and video components. A folder added to a node's root appears after that node restarts; on the control node it appears on the next Refresh. Only recognised model formats are listed, so a folder holding other data shows as an empty location.
+Each node has one model storage folder, set in **Settings → Model file locations**; models load from it directly, and there is no separate cache. Every folder in it is a location: the standard `llm`, `adapters`, `projectors`, `image`, `audio`, `encoders` and `classifier`, plus any other folder already there, such as `video`. `video` is searched as deeply as `image`, and its files are read as image and video components. A folder added to a node's root appears after that node restarts; on the control node it appears on the next Refresh. Only recognised model formats are listed, so a folder holding other data shows as an empty location.
 
-Downloads arrive in storage; active cache copies are promoted for use. A move preserves sources until destination copies succeed, and storage originals stay protected. **Clean unused copies** removes only eligible cache/compute copies backed by storage. Cleanup refuses unavailable usage evidence rather than guessing that a file is unused. A shared cache/storage directory has no separate cache to clear.
+The matrix has a **Storage** column for the control node's model storage, when it has one, and a column for each compute node. Downloads arrive in model storage. Adding a model copies its file only to a node that lacks it, into that node's folder of the same kind; a file already on the node is used where it is. A move preserves sources until destination copies succeed. **Clean unused copies** removes only compute-node copies that no model uses and that Storage also holds. Cleanup refuses unavailable usage evidence rather than guessing that a file is unused.
+
+A node that still has the retired second model folder (`models_storage_folder`) set keeps it working: its folders appear as extra locations named `storage_llm`, `storage_image` and so on. Move their files into model storage from each file's page, then clear the setting.
 
 Deletion is permanent and requires the current unused-file checks. Check the selected copy and all node usage before confirming it. Metadata is evidence read from the file, not a guarantee that its configuration will load.
 

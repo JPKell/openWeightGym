@@ -24,7 +24,7 @@
 {% endcall %}
 <section id="panel-files" data-panel="files">
 <div class="row g-3">
-{{ select('kind','Audio task') }}{{ select('file','Model file in cache or storage',required=true) }}
+{{ select('kind','Audio task') }}{{ select('file','Model file in storage',required=true) }}
 <div class="col-12 small text-secondary" id="{{ 'am-file-note' if live else 'file-note' }}">Choose a managed file. Family and task follow its runtime contract.</div>
 <div class="col-sm-6">{{ model_name('am-name', attrs={'maxlength':128, 'pattern':'[A-Za-z0-9][A-Za-z0-9._:\\/\\-]{0,127}' if live else none}) }}</div>{{ select('family','Model family',required=true) }}
 {% if live %}<div class="col-12 form-text" id="am-family-note"></div>{% endif %}

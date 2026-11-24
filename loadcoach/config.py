@@ -38,8 +38,8 @@ class Config:
     # The places model files are kept: a name for each, and its folder. Left empty, the folders
     # that the models already added are in, each named by its own path.
     places: dict[str, str] = field(default_factory=dict)
-    models_folder: str = ""  # optional active-cache root; its llm, adapters, projectors, image and audio folders replace [places]
-    models_storage_folder: str = ""  # optional complete library root; empty leaves this tier disabled
+    models_folder: str = ""  # this node's model storage: its llm, adapters, projectors, image and audio folders replace [places]
+    models_storage_folder: str = ""  # retired second root; when set, its folders are ordinary places beside models_folder's
     downloads_at_once: int = default_for("loadcoach", "downloads_at_once")
     hub_token_file: str = ""  # the file that holds the token of an account at Hugging Face, for repositories not open to all. Empty for none
     civitai_token_file: str = ""  # optional private Civitai download token; server-side file, never browser content
@@ -240,9 +240,12 @@ def root_folders(root: Path) -> tuple[str, ...]:
 
 
 def model_places(models_folder, places, models_storage_folder="") -> dict[str, str]:
-    """The active-cache destinations, plus an optional complete storage library.
+    """The node's model storage: the standard folders under its root, and every other folder already in it.
 
-    Each root holds the standard folders, and every other folder already in it is a place too."""
+    There is one kind of model folder. Every file in one is the node's own copy, used where it is.
+    `models_storage_folder` is retired: an installation that still sets it, to a folder other than
+    `models_folder`, keeps its folders as further places named storage_NAME, so that nothing moves,
+    and with no `models_folder` it is the root itself."""
     if models_storage_folder and (not isinstance(models_storage_folder, str) or not models_storage_folder.startswith("/")):
         raise ValueError("models_storage_folder must be a full path")
     if models_folder:
@@ -252,31 +255,20 @@ def model_places(models_folder, places, models_storage_folder="") -> dict[str, s
         made = {name: str(root / name) for name in root_folders(root)}
     else:
         made = dict(places)
-    if models_storage_folder:
+    if models_storage_folder and not (models_folder and os.path.realpath(models_storage_folder) == os.path.realpath(models_folder)):
         root = Path(models_storage_folder)
         made.update({f"storage_{name}": str(root / name) for name in root_folders(root)})
     return made
 
 
-# Files from Hugging Face and Civitai are kept in the storage library alone. The active cache
-# holds only copies promoted from storage for use, which cache cleanup can remove again.
-NO_STORAGE = ("Downloads from Hugging Face and Civitai go into model storage, never the cache. "
+# Files from Hugging Face and Civitai go into the node's model storage, where models use them.
+NO_STORAGE = ("Downloads from Hugging Face and Civitai go into model storage. "
               "Set a model storage folder in Settings → Model file locations first.")
 
 
-def storage_places(places: dict[str, str]) -> dict[str, str]:
-    """The storage places alone: where downloads from Hugging Face and Civitai may go."""
-    return {name: folder for name, folder in places.items() if name.startswith("storage_")}
-
-
-def shared_places(places: dict[str, str]) -> set[str]:
-    """The places whose folder is both a cache place and a storage place, as when models_folder and
-    models_storage_folder are set to one folder. A file there is in the cache and in storage at once,
-    so it is listed once, and nothing may take it for a second copy of itself, to save or to remove."""
-    real = {name: os.path.realpath(folder) for name, folder in places.items()}
-    cache = {folder for name, folder in real.items() if not name.startswith("storage_")}
-    storage = {folder for name, folder in real.items() if name.startswith("storage_")}
-    return {name for name, folder in real.items() if folder in cache & storage}
+def kind_of(place: str) -> str:
+    """The kind of folder a place is (llm, adapters, image…), whichever root it is under."""
+    return place.removeprefix("storage_")
 
 
 def checked(config: Config, path) -> Config:

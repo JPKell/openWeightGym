@@ -712,11 +712,10 @@ def test_the_files_page_lists_every_file_and_a_model_page_shows_what_its_file_sa
     assert 'href="/files"' in browser.get("/models?complete=1").text  # Files belongs to the Models category's rail.
 
     files = browser.get("/files?complete=1").text
-    assert 'value="clear-cache"' in files and 'value="consolidate-cache"' in files and 'value="clean-unused"' in files
-    assert "Large libraries can take an hour or more" in files and "continues in the background" in files
-    refused_cleanup = browser.post("/files", data={"do": "clear-cache"})
-    assert "Configure a model storage library before clearing the cache." in refused_cleanup.text
-    assert "The form could not be submitted" not in refused_cleanup.text
+    # One kind of model storage: no cache to clear or consolidate, and no tier to choose.
+    assert 'value="clear-cache"' not in files and 'value="consolidate-cache"' not in files and "tier=" not in files
+    for retired in ("clear-cache", "consolidate-cache", "cleanup-nodes"):
+        assert browser.post("/files", data={"do": retired}).status_code == 400
     assert f"{folder}" in files and "</b> free" in files and 'class="progress-bar"' in files  # the place, and the room on its drive
     # One compact location table and library matrix; polling replaces their fragments.
     assert "Library &amp; distribution" in files and 'id="files-places"' in files and 'aria-label="Model file locations"' in files
@@ -725,11 +724,11 @@ def test_the_files_page_lists_every_file_and_a_model_page_shows_what_its_file_sa
     assert "Fresh &lt;b&gt;Download&lt;/b&gt;" in files  # what a file says of itself is text like any other, never HTML
     part = browser.get("/files?part=list").text
     # The pieces alone, each to be put in the place of the one with its id, so that a part of the page someone closed stays closed.
-    assert "<html" not in part and part.count('hx-swap-oob="true"') == 7 and "Fresh-Download.Q8.gguf" in part
+    assert "<html" not in part and part.count('hx-swap-oob="true"') == 5 and "Fresh-Download.Q8.gguf" in part
     assert 'id="files-distributions" hx-swap-oob="true"' in part
     assert 'id="files-checked" hx-swap-oob="true"' in part  # when each list of files was last checked
-    assert 'data-refresh-companions="#files-checked, #files-cleanup, #files-distributions, #files-places' in files
-    assert 'hx-get="/files?part=list&amp;tier=storage"' in files and 'data-file-matrix' in files
+    assert 'data-refresh-companions="#files-checked, #files-distributions, #files-places' in files
+    assert 'hx-get="/files?part=list"' in files and 'data-file-matrix' in files
     assert 'All locations</option>' in files and 'Select all visible files' in files
     assert "Last used" not in files and "<th data-sort=\"text\">Place</th>" not in files
 
@@ -737,7 +736,7 @@ def test_the_files_page_lists_every_file_and_a_model_page_shows_what_its_file_sa
     link = re.search(r'href="(/models\?file=[^"]+)"', files).group(1).replace("&amp;", "&")
     form = browser.get(link + '&complete=1').text
     # The file is offered by where it is, then its name; its folders are left to the option's title.
-    assert 'name="artifact" class="form-select"' in form and f'title="{fresh}"' in form and 'compute · cache · Fresh-Download.Q8.gguf' in form
+    assert 'name="artifact" class="form-select"' in form and f'title="{fresh}"' in form and 'compute · Fresh-Download.Q8.gguf' in form
     assert 'value="fresh-download.q8"' in form and f'>{Path(fresh).parent}' not in form
     assert "Trained context: 32,768 tokens." in form and re.search(r'<section[^>]*id="add-model"', form)
 
@@ -751,61 +750,6 @@ def test_the_files_page_lists_every_file_and_a_model_page_shows_what_its_file_sa
     assert "In-Use.Q4.gguf" in one and "<code>tiny.block_count</code>" in one and '<a href="/models/mine">mine</a>' in one
     assert "Remove that model first" in one and 'value="delete"' not in one  # a file in use offers no way to delete it
     assert browser.get("/file?path=/etc/passwd").status_code == 404
-
-
-def test_files_separates_cache_and_storage_and_promotes_or_two_click_deletes(tmp_path):
-    cache, storage = tmp_path / "cache", tmp_path / "storage"
-    for root in (cache, storage):
-        for kind in ("llm", "adapters", "projectors"):
-            (root / kind).mkdir(parents=True)
-    cached = gguf(cache / "llm" / "kept.gguf", general__name="Kept", general__architecture="tiny")
-    gguf(storage / "llm" / "kept.gguf", general__name="Kept", general__architecture="tiny")
-    stored = gguf(storage / "llm" / "new.gguf", general__name="New", general__architecture="tiny")
-    data = tmp_path / "data"
-    data.mkdir()
-    users = Users(str(data / "accounts.db"), GROUPS)
-    for name, group in (("jordan", "admin"), ("panel", "front")):
-        users.add(name, group)
-        if name != "panel":
-            users.change(name, password="correct horse")
-    places = {kind: str(cache / kind) for kind in ("llm", "adapters", "projectors")}
-    places.update({"storage_" + kind: str(storage / kind) for kind in ("llm", "adapters", "projectors")})
-    Models(str(tmp_path / "loadcoach.db")).put("mine", {"gpus": 0, "flags": {"model": cached, "ctx-size": 2048}})
-    later = Later()
-    switch = Switch(build_loadcoach(Config(database=str(tmp_path / "loadcoach.db"), gpus=(), places=places,
-        nvidia_smi="no-such-program", machine_key_file=machine_key(tmp_path), front="http://front:8442"),
-        FakeHub({}).client(), door(later, 8442)))
-    front = later.app = turnstile_to(tmp_path, users, {8442: switch}, keep_console_settings_on_front=True)
-    settings = Settings(compute="http://compute", key=users.new_key("panel"), data=str(data))
-    with TestClient(build_app(settings, door(front, 8442))) as browser:
-        sign_in(browser, "jordan")
-        cache_page = browser.get("/files?tier=cache&complete=1").text
-        places_html = cache_page.split('id="files-places"', 1)[1].split('<nav class="nav nav-pills', 1)[0].replace("<wbr>", "")
-        assert places_html.count(str(cache)) == 1 and places_html.count(str(storage)) == 1
-        # A card each for the control node (nothing set up), the cache and storage; each lists its subfolders, and a drive counts once.
-        assert places_html.count('<tr aria-label=') == 2 and 'aria-label="Storage"' in places_html
-        assert places_html.count('<td title="llm">llm</td>') == 2 and places_html.count("</b> free") == 2 and "drives" not in places_html
-        assert "Last used" not in cache_page and "All locations" in cache_page
-        assert 'in use</small>' in cache_page and "compute" in cache_page
-        assert 'href="/models/mine">mine</a>' not in cache_page
-
-        storage_page = browser.get("/files?tier=storage&complete=1").text
-        table = storage_page.split('id="files-storage-table"', 1)[1].split("</table>", 1)[0]
-        head = table.split("</thead>", 1)[0]
-        assert all(heading in head for heading in ("File", "Size", "It says it is", "Storage", "Cache"))
-        assert "Used by" not in head and "Last used" not in table and "Place" not in head
-        # Storage keeps both; the cached copy a model uses stays, and the other can be ticked into the cache.
-        assert table.count('in Storage: In storage. Delete it from storage on the file&#39;s own page." checked disabled') == 2
-        assert 'aria-label="kept.gguf in Cache: Used by mine. Change that model first." checked disabled' in table
-        assert 'aria-label="new.gguf in Cache">' in table and "in use" in table
-        assert storage_page.count("Apply changes") == 1 and "data-confirm-two>Apply changes" in storage_page
-
-        promoted = browser.post("/file", data={"path": stored, "to": "llm", "return": "storage", "do": "copy"})
-        assert promoted.url.path == "/files" and promoted.url.params["tier"] == "storage", re.findall(r'<div[^>]*class="[^"]*alert[^>]*>(.*?)</div>', promoted.text, re.S)
-        deadline = time.monotonic() + 5
-        while not (cache / "llm" / "new.gguf").exists() and time.monotonic() < deadline:
-            time.sleep(.05)
-        assert (cache / "llm" / "new.gguf").exists() and Path(stored).exists()
 
 
 def test_a_file_is_moved_and_deleted_from_its_own_page(desk, tmp_path):
@@ -1112,27 +1056,22 @@ def test_model_file_locations_are_selected_and_saved_per_machine(live_desk, tmp_
     sign_in(browser, "jordan")
     page = browser.get("/settings").text
     assert 'id="model-files"' in page and 'name="file_machine"' in page
-    assert 'name="models_folder"' in page and 'name="models_storage_folder"' in page
-    locations = browser.post("/settings/model-files", data={"file_machine": "compute", "models_folder": str(tmp_path / "cache"),
-                                                              "models_storage_folder": str(tmp_path / "storage")})
+    # One model storage folder; the retired second folder is offered only where one is still set.
+    assert 'name="models_folder"' in page and 'name="models_storage_folder"' not in page
+    locations = browser.post("/settings/model-files", data={"file_machine": "compute", "models_folder": str(tmp_path / "storage")})
     assert "Saved. Restart LoadCoach on that machine" in locations.text
-    cache, storage = str(tmp_path / "cache"), str(tmp_path / "storage")
+    storage = str(tmp_path / "storage")
     compute_page = browser.get('/compute-nodes').text
-    for name, value in (('models_folder', cache), ('models_storage_folder', storage)):
-        assert f'name="value-{name}" class="form-control font-monospace" value="{value}"' in compute_page
-    unchanged = browser.post('/settings/loadcoach', data={
-        'machine': 'compute', 'value-models_folder': cache, 'value-models_storage_folder': storage})
+    assert f'name="value-models_folder" class="form-control font-monospace" value="{storage}"' in compute_page
+    unchanged = browser.post('/settings/loadcoach', data={'machine': 'compute', 'value-models_folder': storage})
     assert "Nothing was changed." in unchanged.text
-    cache = str(tmp_path / 'active & "quoted" models')
-    saved = browser.post('/settings/loadcoach', data={
-        'machine': 'compute', 'value-models_folder': cache, 'value-models_storage_folder': ''})
+    storage = str(tmp_path / 'model & "quoted" storage')
+    saved = browser.post('/settings/loadcoach', data={'machine': 'compute', 'value-models_folder': storage})
     assert saved.status_code == 200 and 'Saved.' in saved.text
-    cache_field = re.search(r'name="value-models_folder"[^>]* value="([^"]*)"', saved.text)
-    assert cache_field and unescape(cache_field[1]) == cache
-    assert 'name="value-models_storage_folder" class="form-control font-monospace" value=""' in saved.text
+    field = re.search(r'name="value-models_folder"[^>]* value="([^"]*)"', saved.text)
+    assert field and unescape(field[1]) == storage
     from loadcoach.settings import Changes
-    assert Changes(str(tmp_path / 'loadcoach.db')).of('loadcoach') == {
-        'models_folder': cache, 'models_storage_folder': ''}
+    assert Changes(str(tmp_path / 'loadcoach.db')).of('loadcoach') == {'models_folder': storage}
 
 
 def test_the_settings_page_shows_every_program_and_changes_what_may_be_changed(live_desk, tmp_path):
@@ -1577,7 +1516,7 @@ def test_a_model_file_is_found_at_hugging_face_and_brought_down_from_the_site(de
     browser, switch, _ = desk
     there, fast, storage = switch.hub, tmp_path / "fast", tmp_path / "storage"
     fast.mkdir()
-    # No places are named in this LoadCoach, so its one place is the folder its one model is in: a cache, never a download's destination.
+    # No places are named in this LoadCoach, so its models' own folder is listed, but it is not model storage and takes no downloads.
     Models(str(tmp_path / "loadcoach.db")).put("stays", {"gpus": 1, "flags": {"model": gguf(fast / "stays.gguf", general__name="Stays"), "ctx-size": 2048}})
     target = storage / "llm" / "acme--tiny-GGUF" / "tiny-q4.gguf"
 
@@ -1599,42 +1538,42 @@ def test_a_model_file_is_found_at_hugging_face_and_brought_down_from_the_site(de
     assert 'href="/hub?repository=acme/tiny-GGUF&amp;kind=">acme/tiny-GGUF</a>' in found and "Nothing found" in browser.get("/hub?q=llama").text
     files = browser.get("/hub?q=acme/tiny-GGUF").text  # a repository typed out goes straight to its files
     assert 'name="file" value="tiny-q4.gguf"' in files and "and the other 1 of its 2 parts" in files
-    # With no storage there is nowhere to choose, and the cache is refused when asked for anyway.
+    # With no model storage there is nowhere to choose, and a model's own folder is refused when asked for anyway.
     assert 'name="place"' not in files and 'href="/settings#model-files">Set a model storage folder</a>' in files
-    cached = browser.post("/hub", data={"repository": there.repository, "file": ["tiny-q4.gguf"], "place": str(fast)})
-    assert "never the cache" in cached.text and not (fast / "acme--tiny-GGUF").exists()
+    refused = browser.post("/hub", data={"repository": there.repository, "file": ["tiny-q4.gguf"], "place": str(fast)})
+    assert "Set a model storage folder" in refused.text and not (fast / "acme--tiny-GGUF").exists()
     none = browser.get("/hub?repository=acme/none")
     assert none.status_code == 403 and "no such repository" in none.text
-    unticked = browser.post("/hub", data={"repository": there.repository, "place": "storage_llm"})
+    unticked = browser.post("/hub", data={"repository": there.repository, "place": "llm"})
     assert unticked.status_code == 400 and "Tick the files you want." in unticked.text and 'value="tiny-q4.gguf"' in unticked.text
 
-    # With a storage library on the control node, the storage places alone are offered.
-    browser.post("/settings/model-files", data={"file_machine": "front", "models_folder": "", "models_storage_folder": str(storage)})
+    # With model storage on the control node, its places are offered.
+    browser.post("/settings/model-files", data={"file_machine": "front", "models_folder": str(storage)})
     store = switch.front.state.front_files
     browser.portal.call(store.web.aclose)
     store.web = there.client()
     files = browser.get("/hub?repository=acme/tiny-GGUF").text
-    assert '<option value="storage_llm">' in files and '<option value="llm">' not in files
+    assert re.search(r'<option value="llm"( selected)?>', files) and 'storage_llm' not in files
 
     # It comes down, is stopped, and is gone on with. The list of downloads shows each step and has the button for the next.
     there.slow = 0.02
-    started = browser.post("/hub", data={"repository": there.repository, "file": ["tiny-q4.gguf"], "place": "storage_llm"})
-    assert "1 file, " in started.text and "coming down to storage_llm." in started.text and str(started.url).split("?")[0].endswith("/hub")
+    started = browser.post("/hub", data={"repository": there.repository, "file": ["tiny-q4.gguf"], "place": "llm"})
+    assert "1 file, " in started.text and "coming down to llm." in started.text and str(started.url).split("?")[0].endswith("/hub")
     until(lambda: 'value="stop"' in browser.get("/downloads").text)
     assert "acme/tiny-GGUF" in browser.get("/downloads").text
     browser.post("/downloads", data={"do": "stop", "path": str(target)})
     until(lambda: 'value="continue"' in browser.get("/downloads").text)
     assert "stopped" in browser.get("/downloads").text and not target.exists()
     there.slow = 0
-    browser.post("/downloads", data={"do": "continue", "repository": there.repository, "file": "tiny-q4.gguf", "place": "storage_llm"})
+    browser.post("/downloads", data={"do": "continue", "repository": there.repository, "file": "tiny-q4.gguf", "place": "llm"})
     until(target.exists)
     assert target.read_bytes() == there.files["tiny-q4.gguf"] and "tiny-q4.gguf" not in browser.get("/downloads").text
 
     # What is here already is marked and cannot be ticked. It is on Files, to be added as a model.
     again = browser.get("/hub?repository=acme/tiny-GGUF").text
-    assert "in storage_llm</span>" in again and 'value="tiny-q4.gguf" type="checkbox" class="form-check-input" disabled' in again
-    assert "tiny-q4.gguf</a>" in browser.get("/files?complete=1&tier=storage").text and "tiny-q4.gguf</a>" in browser.get("/files?complete=1").text
-    assert not any(path.name.startswith("tiny-q4") for path in fast.rglob("*"))  # nothing of it was ever in the cache
+    assert "in llm</span>" in again and 'value="tiny-q4.gguf" type="checkbox" class="form-check-input" disabled' in again
+    assert "tiny-q4.gguf</a>" in browser.get("/files?complete=1").text
+    assert not any(path.name.startswith("tiny-q4") for path in fast.rglob("*"))  # nothing of it went into the models' own folder
 
 
 def test_the_cards_show_their_room_and_a_model_page_what_the_model_measured(live_desk, tmp_path):

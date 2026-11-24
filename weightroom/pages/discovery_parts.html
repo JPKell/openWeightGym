@@ -25,7 +25,7 @@
 
 {% macro download_queue() %}
 {% set content = caller() %}
-{% call card('Download activity', hint='Transfers continue while you browse. Manage downloaded files in your storage library.', class_='mt-4', actions='<a href="/files?tier=storage" class="btn btn-outline-secondary btn-sm">Open Files</a>'|safe) %}
+{% call card('Download activity', hint='Transfers continue while you browse. Manage downloaded files in model storage.', class_='mt-4', actions='<a href="/files" class="btn btn-outline-secondary btn-sm">Open Files</a>'|safe) %}
 {{ content }}
 <p class="text-secondary small mb-0 discovery-queue-hint">Downloads go to model storage. Files are checked before they become available.</p>
 {% endcall %}

@@ -67,11 +67,11 @@ from loadcoach.database_operations import DatabaseOperations
 from db.health import stores_health, async_stores_health
 from loadcoach.tasks import Tasks
 from loadcoach.capture import answer_text, request_text, said_wrong
-from loadcoach.config import NO_STORAGE, Config, checked, data_folder, read_settings, shared_places, storage_places
+from loadcoach.config import NO_STORAGE, Config, checked, data_folder, read_settings
 from loadcoach.setting_catalog import changeable_for, retired_for, validate_patch
 from loadcoach.settings import CHANGEABLE, NOW, Changes, front_programs, program_name, said
-from loadcoach.files import NESTED_DEPTH, NESTED_PLACES, SPARE, carry, model_files_in, room, sha256_of
-from loadcoach.file_index import NODE_INDEX, FileIndex, tier_of
+from loadcoach.files import NESTED_DEPTH, NESTED_PLACES, SPARE, carry, room, sha256_of
+from loadcoach.file_index import NODE_INDEX, UNLISTED, FileIndex
 from loadcoach.gguf import facts, goes_with, read_metadata
 from loadcoach.log import Log, token_counts
 from loadcoach.diagnostics import Timeline
@@ -246,7 +246,6 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
     # Files being carried from one place to another right now, by the path they are leaving:
     # {"to": the place, "done": bytes so far, "of": bytes in all}.
     moving: dict[str, dict] = {}
-    cleanup: dict = {}
     carrying: set[asyncio.Task] = set()
     # Set when a model file may be waiting to have its SHA-256 worked out, which a model's fingerprint needs. `read_files` does the work.
     hashing = asyncio.Event()
@@ -1540,20 +1539,19 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         await paced()
         used, last_used, spots = model_files(), pace["of"]["last_used"], places()
         index = await asyncio.to_thread(file_index.current, spots, refresh=request.query_params.get("refresh") == "1")
-        found, where, shared = [], [], shared_places(spots)
+        found, where = [], []
         for place, folder in spots.items():
             if not Path(folder).is_dir():
                 continue  # a place whose folder is not there holds nothing
-            # shared: the cache and storage are one folder, so its files are in both at once
-            here = {"name": place, "folder": folder, "tier": tier_of(place), "shared": place in shared, **room(folder), "files": 0}
+            here = {"name": place, "folder": folder, **room(folder), "files": 0}
             where.append(here)
             for kept in index["files"].values():
                 if kept["place"] != place:
                     continue
                 here["files"] += kept["size"]
                 models = used.get(os.path.realpath(kept["path"]), [])
-                entry = {key: value for key, value in kept.items() if key != "mtime"}
-                entry.update(used_by=models, moving=moving.get(kept["path"]), shared=place in shared,
+                entry = {key: value for key, value in kept.items() if key not in UNLISTED}
+                entry.update(used_by=models, moving=moving.get(kept["path"]),
                              # When any model that uses it was last asked for, as far back as the log goes.
                              last_used=max((last_used[name] for name in models if name in last_used), default=None))
                 found.append(entry)
@@ -1562,9 +1560,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         for part in found:
             if part.get("facts", {}).get("what") in ("adapter", "projector"):
                 part["goes_with"] = [{"path": file["path"], "models": file["used_by"]} for file in whole if goes_with(part["facts"], file["facts"])]
-        # A finished cleanup is reported for ten minutes, then drops off the Files page.
-        shown = cleanup if cleanup.get("state") == "running" or time.time() - cleanup.get("ended", 0) < 600 else {}
-        return JSONResponse({"places": where, "files": found, "cleanup": shown, "checked": FileIndex.checked(index),
+        return JSONResponse({"places": where, "files": found, "checked": FileIndex.checked(index),
                              "problems": index.get("problems", []),
                              "conversions": [*classifier_jobs.jobs.recent(user.identity or user.name),*video_conversions.jobs.recent(user.identity or user.name)]})
 
@@ -1667,7 +1663,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return denied
         path = request.query_params.get("path", "")
         if not in_a_place(path) or path in moving:
-            return error(404, "Choose a complete model file in cache/storage.")
+            return error(404, "Choose a complete model file in model storage.")
         digest = await asyncio.to_thread(sha256_of, path)
         return JSONResponse({"path": path, "sha256": digest, "size": os.stat(path).st_size})
 
@@ -1677,7 +1673,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             return denied
         path = request.query_params.get("path", "")
         if not in_a_place(path) or path in moving:
-            return error(404, "Choose a complete model file in cache/storage.")
+            return error(404, "Choose a complete model file in model storage.")
         return FileResponse(path, media_type="application/octet-stream", headers={"cache-control": "no-store"})
 
     async def move(source: Path, target: Path, by: str, caller: str) -> None:
@@ -1727,131 +1723,6 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         log.add("file", "deleted", user.name, address(request), path=path, size=size)
         await asyncio.to_thread(files_changed, path)
         return JSONResponse({"deleted": path, "freed": size})
-
-    async def files_cleanup(request: Request, user: User) -> Response:
-        """Safely empty unused cache files, optionally preserving every cache file in storage first, or promote storage files into the cache."""
-        if denied := lacks(user, "manage-models"):
-            return denied
-        asked = await read_json(request, {"mode", "keep", "promote"})
-        if isinstance(asked, Response):
-            return asked
-        mode = asked.get("mode")
-        if mode not in ("clear-cache", "unused", "promote"):
-            return error(400, "mode must be clear-cache, unused or promote.")
-        if cleanup.get("state") == "running":
-            return error(409, "File cleanup is already running.")
-        if moving:
-            return error(409, "Wait for current file copies or moves to finish before cleaning up.")
-        configured, used = places(), set(model_files())
-        # A folder that is the cache and storage at once is left alone: its files are the storage copies themselves.
-        configured = {name: folder for name, folder in configured.items() if name not in shared_places(configured)}
-        cache_places = {name: Path(folder) for name, folder in configured.items() if not name.startswith("storage_")}
-        storage_places = {name.removeprefix("storage_"): Path(folder) for name, folder in configured.items() if name.startswith("storage_")}
-        if mode == "clear-cache" and not storage_places:
-            return error(409, "The cache and storage are one folder: there is no separate cache to clear." if shared_places(places())
-                         else "Configure a model storage library before clearing the cache.")
-        keep = asked.get("keep", [])
-        if not isinstance(keep, list) or any(not isinstance(path, str) for path in keep):
-            return error(400, "keep must be a list of cache file paths.")
-        roots = [folder.resolve() for folder in cache_places.values()]
-        protected = {os.path.realpath(path) for path in keep}
-        if any(not any(Path(path).is_relative_to(root) for root in roots) for path in protected):
-            return error(400, "Every kept file must be inside an active cache place.")
-        used.update(protected)
-        promote = asked.get("promote", [])
-        if not isinstance(promote, list) or any(not isinstance(path, str) for path in promote):
-            return error(400, "promote must be a list of storage file paths.")
-        storage_roots = {name: folder.resolve() for name, folder in storage_places.items()}
-        promote = [Path(os.path.realpath(path)) for path in promote]
-        if any(not path.is_file() or not any(path.is_relative_to(root) for root in storage_roots.values()) for path in promote):
-            return error(400, "Every promoted file must be a file inside a storage place.")
-
-        def consolidate() -> dict:
-            """Copy each named storage file into the cache place it belongs to, as Promote does for one file."""
-            promoted, failures = 0, []
-            for source in promote:
-                place, root = next((name, root) for name, root in storage_roots.items() if source.is_relative_to(root))
-                if place not in cache_places:
-                    failures.append(f"{source.name}: no matching cache place")
-                    continue
-                target = cache_places[place] / source.relative_to(root)
-                try:
-                    if target.exists():
-                        if target.stat().st_size != source.stat().st_size:
-                            raise OSError(f"cache has a different-sized {target.name}")
-                        continue
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    size = source.stat().st_size
-                    if room(str(target.parent))["free"] < size + SPARE:
-                        raise OSError(f"{target.parent} does not have enough free space")
-                    carry(source, target, {"done": 0, "of": size})  # size-checked and published atomically; nothing is deleted, so no hash pass
-                    promoted += 1
-                except OSError as problem:
-                    failures.append(f"{source.name}: {problem}")
-            return {"promoted": promoted, "failures": failures}
-
-        def clean() -> dict:
-            """Apply the reviewed model-file cleanup and return counts and failures."""
-            saved = removed = freed = 0
-            failures = []
-            for place, folder in cache_places.items():
-                storage = storage_places.get(place)
-                for source in model_files_in(str(folder)) if folder.is_dir() else []:
-                    real = os.path.realpath(source)
-                    in_use = real in used
-                    if mode == "clear-cache" and storage is None:
-                        failures.append(f"{place}: no matching storage place")
-                        continue
-                    target = storage / source.relative_to(folder) if storage else None
-                    try:
-                        if target is not None:
-                            target.parent.mkdir(parents=True, exist_ok=True)
-                            created = False
-                            if target.exists():
-                                if target.stat().st_size != source.stat().st_size:
-                                    raise OSError(f"storage has a different-sized {target.name}")
-                            else:
-                                size = source.stat().st_size
-                                if room(str(storage))["free"] < size + SPARE:
-                                    raise OSError(f"{storage} does not have enough free space")
-                                progress = {"done": 0, "of": size}
-                                carry(source, target, progress)
-                                created = True
-                            if sha256_of(str(source), stopping) != sha256_of(str(target), stopping):
-                                if created:
-                                    target.unlink(missing_ok=True)
-                                raise OSError(f"storage copy of {target.name} did not match the cache file")
-                            if created:
-                                saved += 1
-                        if not in_use:
-                            size = source.stat().st_size
-                            source.unlink()
-                            read_before.pop(str(source), None)
-                            removed += 1
-                            freed += size
-                    except OSError as problem:
-                        failures.append(f"{source.name}: {problem}")
-            return {"saved": saved, "removed": removed, "freed": freed, "protected": len(protected), "failures": failures}
-
-        cleanup.clear()
-        cleanup.update(state="running", mode=mode, by=user.name, started=datetime.now().isoformat(timespec="seconds"))
-
-        async def work() -> None:
-            """Run cleanup off the event loop and retain its completion or failure status."""
-            try:
-                result = await asyncio.to_thread(consolidate if mode == "promote" else clean)
-                cleanup.update(state="complete", ended=time.time(), **result)
-                log.add("file", {"clear-cache": "cache-cleared", "unused": "unused-cleaned", "promote": "cache-consolidated"}[mode],
-                        user.name, address(request), **result)
-            except (OSError, InterruptedError) as problem:
-                cleanup.update(state="failed", ended=time.time(), failure=f"{type(problem).__name__}: {problem}")
-            finally:
-                await asyncio.to_thread(file_index.stale)
-
-        task = asyncio.create_task(work())
-        carrying.add(task)
-        task.add_done_callback(carrying.discard)
-        return JSONResponse(dict(cleanup), status_code=202)
 
     async def file_facts(request: Request, user: User) -> Response:
         """Everything one model file says about itself. Only for a file a model uses, or one in the folders looked through."""
@@ -1927,8 +1798,7 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         """With `?search=WORDS`, the repositories at Hugging Face that match. With `?repository=OWNER/NAME`, the model files of that one.
 
         A file is listed with `here`, the place it already is in, and the parts of a split model
-        are one row. The storage places are listed too, each with its free room, to choose where a
-        file goes: a download is never put in the cache.
+        are one row. The places are listed too, each with its free room, to choose where a file goes.
         """
         if denied := lacks(user, "manage-models"):
             return denied
@@ -1956,13 +1826,13 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if request.query_params.get('kind') == 'classifier':
             for row in listed:
                 row['decision_ready'] = row['file'].lower().endswith('.gguf') and await hub.decision_header(web, repository, row['file'], hub_token())
-        spots = {name: folder for name, folder in places().items() if Path(folder).is_dir()}
+        # Downloads go only into configured model storage, never the folders models merely happen to be in.
+        spots = {name: folder for name, folder in dict(config.places).items() if Path(folder).is_dir()}
         for row in listed:
             names = [Path(part["path"]).name for part in row["parts"]]
             row["here"] = next((name for name, folder in spots.items() if all((Path(folder) / hub.folder_of(repository) / one).exists() for one in names)), None)
             row["parts"] = len(names)
-        kept = sorted(storage_places(spots).items())
-        return JSONResponse({"repository": repository, "files": listed, "places": [{"name": name, "free": room(folder)["free"]} for name, folder in kept]})
+        return JSONResponse({"repository": repository, "files": listed, "places": [{"name": name, "free": room(folder)["free"]} for name, folder in sorted(spots.items())]})
 
     def left_behind() -> dict[str, dict]:
         """Downloads that were not finished and are not coming now, by the path each would have. Found by the `.part` files they left."""
@@ -1998,25 +1868,24 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         return JSONResponse(await asyncio.to_thread(image_parts, asked.get("settings") or {}, spots.get("image", ""), list(spots.values())))
 
     async def download_start(request: Request, user: User) -> Response:
-        """Bring `files` of `repository` down into the storage place `place`. Each starts now and runs on; the list of downloads shows how far it has got.
+        """Bring `files` of `repository` down into the place `place`. Each starts now and runs on; the list of downloads shows how far it has got.
 
         Naming one part of a split model brings all its parts. A file left half done is gone on
-        with from where it stopped. `place` may be left out where there is only one storage place.
-        A cache place is refused: downloads are kept in storage alone.
+        with from where it stopped. `place` may be left out where there is only one place.
         """
         if denied := lacks(user, "manage-models"):
             return denied
         asked = await read_json(request, {"repository", "files", "place"})
         if isinstance(asked, Response):
             return asked
-        repository, names, spots = asked.get("repository"), asked.get("files"), storage_places(places())
+        repository, names, spots = asked.get("repository"), asked.get("files"), dict(config.places)
         place = asked.get("place") or (next(iter(spots)) if len(spots) == 1 else "")
         if not isinstance(repository, str) or not hub.REPOSITORY.fullmatch(repository) or not isinstance(names, list) or not names or not all(isinstance(name, str) for name in names):
             return error(400, "Give repository as OWNER/NAME, and files as a list of the files wanted from it.")
         if not spots:
             return error(409, NO_STORAGE)
         if place not in spots or not Path(spots[place]).is_dir():
-            return error(400, f"Downloads go into storage, never the cache. There is no storage place named {place!r} with a folder that exists. Storage places: {', '.join(spots)}")
+            return error(400, f"There is no place named {place!r} with a folder that exists. Places: {', '.join(spots)}")
         try:
             wanted = hub.chosen(await hub.files(web, repository, download_token(repository), classifier=Path(spots.get(place, '')).name == 'classifier'), names)
         except hub.Refused as problem:
@@ -2800,12 +2669,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             choices=[["true", "Yes - require VRAM"], ["false", "No - allow host RAM spill"]],
         )
         reported["models_folder"].update(
-            label="Active model cache",
-            says="Models this node actively uses, split into llm, adapters, projectors and image below this root.",
-        )
-        reported["models_storage_folder"].update(
-            label="Model storage library",
-            says="The complete used and unused model library. Empty leaves storage disabled; new installations start empty.",
+            label="Model storage",
+            says="Every model file this node keeps, split into llm, adapters, projectors, image, audio and encoders below this root. Models load from here.",
         )
         changes.seen("loadcoach", reported)
 
@@ -3367,7 +3232,6 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
             route("/loadcoach/files/hash", file_digest),
             route("/loadcoach/files/content", file_content),
             route("/loadcoach/files/delete", file_delete, "POST"),
-            route("/loadcoach/files/cleanup", files_cleanup, "POST"),
             route("/loadcoach/hub", hub_look),
             *audio_package_routes(route, lacks, read_json, error, audio_packages, address),
             route("/loadcoach/download-credentials", download_credentials),

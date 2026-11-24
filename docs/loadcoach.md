@@ -3449,8 +3449,8 @@ for itself again every five seconds, so it stays true while it is open.
 Above the list, Compute node pills show All nodes' models (`/models`) or one node's
 (`/models?node=NAME`), and the LLM/Image/Audio pills select the table type. Below the model
 list is a form to add a model: the compute nodes to add it to (ticked boxes; a node that is not
-accepting work cannot be ticked), a cache/storage file picker, the engine, the name, a projector
-picker, context size and cards. The pickers label each file `node · tier · file name · size`
+accepting work cannot be ticked), a model storage file picker, the engine, the name, a projector
+picker, context size and cards. The pickers label each file `node · file name · size`
 and keep the full path as its title. Choosing a file fills the name with the file's own name,
 lower-cased and without its extension, unless a name has been typed. The trained-context note
 and the reason Add cannot be used yet sit in a row beneath the fields. Cards defaults to
@@ -3465,11 +3465,11 @@ added to it for this: with it, a taken name gets `409` and nothing changes.
 per node/filesystem, including pending installs and 1 GiB spare, before queueing any mutation.
 `machine` names one destination and answers with its job. `machines` names several: each is
 checked before any starts, a refusal from one is reported as `NODE: why. Nothing was started.`,
-and the answer is `{"jobs": [...]}`, one per node. A file that several destinations place in
-the same spot, such as a stored file promoted into its cache, is counted once against free
-space and placed once. The other installations wait for it and use the copy whose SHA-256
-matches.
-Storage promotion uses Files' atomic copy without removing the original. Transfers use signed
+and the answer is `{"jobs": [...]}`, one per node. A file already on a destination node is used
+where it is; any other is copied once into that node's model storage folder of the same kind. A
+file that several installations place in the same spot is counted once against free space and
+placed once. The other installations wait for it and use the copy whose SHA-256 matches.
+Transfers use signed
 `/loadcoach/files/hash` and `/loadcoach/files/content` with Spotter's existing size/hash-verified
 receiver; relative audio/component paths are retained and conflicting files are never overwritten.
 A model is created with `?new` only after all files verify. Failed installs retain completed file
@@ -3861,20 +3861,22 @@ Physical-host identity is verified before service and power API actions.
 Added in milestone 15. A file is not a model: two models can use one file, and a file can be
 used by none. So files have pages of their own, for people with `manage-models`.
 
+**One model storage folder per node.** Each node, and optionally the control node, keeps its model
+files in one folder, `models_folder` (labelled *Model storage*). Models load from it directly; there
+is no separate cache, no promotion and nothing to consolidate. The retired `models_storage_folder`
+is still honoured: set to a different folder, its subfolders become ordinary places named
+`storage_llm`, `storage_image` and so on, so existing model paths keep working; set to the same
+folder it is ignored; set alone it is the root. Place names never change, so no file moves.
+
 **`/files`.** At the top, each node has one horizontally scrolling row of place bars. The node's
 absolute model root is shown once beside its name; place and file names below are relative to
-that root. Control node's active cache and complete Storage library have separate rows, with Storage's
-absolute root beside its heading. Each bar shows free space, model-file space and other use.
+that root. The control node's row is headed *Storage*. Each bar shows free space, model-file space
+and other use. The page refreshes itself every five seconds, so copy and move progress remains current.
 
-Below are Cache and Storage pills. Cache retains separate model, adapter and projector tables.
-Its model table omits place and last-used columns, combines model use across answering nodes,
-and names those nodes separately. The page refreshes itself every five seconds, so copy and move
-progress remains current.
-
-**Storage is the complete library, and its view is where files are placed in bulk.** It has a row
-for every file in storage, then a row for each file found only in the control node's cache or on a node,
-marked *not in storage*. Beside File, Size and It says it is there is a box for Storage, one for
-the Cache and one for each compute node, ticked where a copy of the file is. Two copies are the
+**The library matrix is where files are placed in bulk.** It has a row for every file in the
+control node's storage, then a row for each file found only on a node, marked *not in storage*.
+Beside File, Size and It says it is there is a box for Storage (when the control node keeps
+files) and one for each compute node, ticked where a copy of the file is. Two copies are the
 same file when name, size and description match, as elsewhere on Files. Ticking a box copies the
 file there; clearing one removes that copy. **Apply changes** (two clicks) sends every changed
 box at once, and the line beside it counts the copies to make and remove. A box in a column's
@@ -3888,30 +3890,27 @@ offers and the changes turnstile accepts (`POST /turnstile/artifacts/arrange`):
   into Storage first. Its copies elsewhere are kept until then.
 - A copy a model uses on that node is kept, with *in use* under its box; change the model first.
 - A node that is not answering or has no model folders has no boxes to change.
-- New copies go into the destination's cache folder of the same kind (`llm`, `adapters`, `image`…),
-  at the same relative path. On control node they are made from the nearest copy: the other tier on the
-  same machine, a hard link when it is the same drive. To a node they are streamed from the control node's
-  cache or storage, or another node, through that node's Spotter, which checks the SHA-256 before
-  publishing the file. A node's file kept in storage comes the other way: control node streams it from
-  the node, checks size and SHA-256 against the node's own hash, and only then names it.
+- New copies go into the destination's folder of the same kind (`llm`, `adapters`, `image`…, or
+  `storage_` + kind where only the retired folder has one), at the same relative path. To a node
+  they are streamed from the control node's storage or another node, through that node's Spotter,
+  which checks the SHA-256 before publishing the file. A node's file kept in storage comes the
+  other way: control node streams it from the node, checks size and SHA-256 against the node's own
+  hash, and only then names it.
 - Every change is checked against a fresh look through every folder, as Refresh files does. Only
   boxes changed since the page was drawn are sent, so a copy that arrived since is not removed.
   If any change cannot be made, the page says why for each and none is made, including when the
   destinations lack room for the new copies plus 1 GiB (copies removed from the same node count).
 
 The change runs in the background: removals first, then copies, one at a time to each machine
-and to all machines at once. One bulk change runs at a time, and cleanups wait for it. Files
-shows how far it has got and every failed step with why, until ten minutes after it ends; the
-boxes being changed say *waiting*, *checking* or *copying*. While a box on the page has been
-changed and not applied, the five-second refresh leaves the table alone (`data-hold-refresh` in
-`static/pieces.js`).
+and to all machines at once. One bulk change runs at a time. Files shows how far it has got and
+every failed step with why, until ten minutes after it ends; the boxes being changed say
+*waiting*, *checking* or *copying*. While a box on the page has been changed and not applied, the
+five-second refresh leaves the table alone (`data-hold-refresh` in `static/pieces.js`).
 
-**Cache and storage may be one folder.** Give `models_folder` and `models_storage_folder` the same
-path, on the control node or a node, to keep a single folder. Each file there is in the cache and in storage
-at once: the index lists it once, under the cache place; Files shows one *Storage and cache*
-card; Storage has no Cache column; and the file's page offers no move to its own folder. Clear
-cache, Consolidate cache and Cleanup nodes leave such a folder alone, since its files are the
-storage copies themselves. Two different folders must still not hold one another.
+**Clean unused copies** removes, through the same rules, every compute-node copy that no model on
+that node uses and that Storage also holds. Storage files, files in use and files with no storage
+copy are kept.
+
 Control node storage is optional and can be configured under Settings → General without compute.
 See the [storage setup and offline delivery contract](operations.md#model-file-storage).
 Each refresh gives unavailable nodes a short deadline; an absent store produces an inline setup
@@ -3920,55 +3919,35 @@ or offline state rather than a generic error page. An existing worker can still 
 The page answers from a kept list of each machine's files ([loadcoach/file_index.py](../loadcoach/file_index.py)),
 not by reading every file on each visit. On a compute node spotter looks through LoadCoach's
 places every `files_every` minutes (System → Compute nodes, 10 by default, 0 for only when
-asked) and keeps the list as `files-index.json` in LoadCoach's data folder; the control node's own cache
-and storage keep `front-files-index.json` in turnstile's, with turnstile's `files_every`. A look
+asked) and keeps the list as `files-index.json` in LoadCoach's data folder; the control node's own
+storage keeps `front-files-index.json` in turnstile's, with turnstile's `files_every`. A look
 reads only files that are new or have changed size or time. Moves, copies, deletes, downloads
-and received files put their own lines right at once, and a cleanup has the next listing look
-again. **Refresh files** at the top of the page looks through every folder on the control node and every
-node now, and names any node that did not answer. Which models use a file, when it was last
-used and transfer progress are never kept: they are asked on each listing. Clear cache,
-Consolidate cache and the in-use check before a control node move or delete always look again first, so
-they decide on what is in the folders, not on the kept list. The page shows when each list was
-last checked.
+and received files put their own lines right at once. **Refresh files** at the top of the page
+looks through every folder on the control node and every node now, and names any node that did
+not answer. Which models use a file, when it was last used and transfer progress are never kept:
+they are asked on each listing. The in-use check before a control node move or delete always
+looks again first, so it decides on what is in the folders, not on the kept list. The page shows
+when each list was last checked.
 
 Hugging Face discovery is its own **HuggingFace** item in the Models navigation. Downloads remain
-visible there and on Files while they are active.
-
-The top of Files has two two-step maintenance actions. **Clear cache** first asks every configured
-LoadCoach which files its models use. It refuses to delete while any node cannot answer. It then
-makes or verifies a SHA-256-matching storage copy of every control node cache file and removes only cache
-files unused across all nodes; a matching cache file used by any configured model remains active.
-It also refuses to run without matching storage places or while another file copy/move is active.
-Cleanup runs in the background so proxy/browser timeouts cannot interrupt full-file hashing; Files
-polls and reports running, completed or failed state. **Cleanup nodes** asks every LoadCoach outside the control node to remove files unused by its configured
-models and reports nodes that did not answer. The page warns that byte-for-byte cache and Storage
-verification can take an hour or more for a large library and continues in the background.
-If a cache file must be restored, its verified Storage copy remains available: select Storage on
-Files and use **Promote** to copy it atomically back into the matching active cache place.
-**Consolidate cache** does that for every file at once: it asks every configured LoadCoach which
-files its models use (refusing while any node cannot answer), and copies each such file that control node
-has in Storage but not in its cache into the matching cache place. A used file control node has no copy of
-at all is named in the result. A finished cleanup or consolidation message stays on Files for ten
-minutes, then clears.
+visible there and on Files while they are active. They go only into a configured model storage
+folder: a LoadCoach with no `models_folder` or `[places]` lists the folders its models are in but
+refuses downloads with a link to Settings.
 
 When `models_folder` is set, the places are the fixed `llm`, `adapters`, and `projectors`
 subfolders below that one per-node root. Settings → Model file locations selects control node or any
-compute node and edits both `models_folder` and `models_storage_folder`; changes apply after that
+compute node and edits `models_folder` (and the retired `models_storage_folder` while it has a value); changes apply after that
 node's LoadCoach restarts. With an empty root, explicit `[places]` retain
 their older meaning. Spotter derives the same effective places, including a saved setting change,
 so uploads cannot escape the selected root.
 
-`models_storage_folder` optionally adds a complete library as `storage_llm`, `storage_adapters`,
-and `storage_projectors`. Downloads go only to these places. It may be the same path as
-`models_folder`; see the Files pages above. `POST /loadcoach/files/copy` takes the same
-`path` and `to` fields as move and retains the source and existing model bindings. Same-drive
-copies use a hard link; cross-drive copies check byte size, without an independent destination
-hash check. This promotes a stored file into the active cache. The setting defaults empty.
+`POST /loadcoach/files/copy` takes the same `path` and `to` fields as move and retains the
+source and existing model bindings. Same-drive copies use a hard link; cross-drive copies check
+byte size, without an independent destination hash check.
 
-Distribution accepts a file from either tier. A cache source goes directly to Spotter. A storage
-source is first copied to the correspondingly named cache (`storage_llm` to `llm`, for example),
-then the storage and cache SHA-256 values are compared. Only that verified cache path is sent to
-Spotter. The storage copy remains in the complete library.
+Distribution sends a file straight from where it is: the source is hashed, and Spotter on each
+destination checks that SHA-256 before publishing the copy into the node's folder of the same kind.
+The source stays where it was.
 
 On 2026-10-17, control node CPU's startup settings report confirmed the saved storage root
 `/mnt/usb/ai/models` and all six effective cache/library places. The initial compute, control node

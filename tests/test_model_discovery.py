@@ -252,7 +252,7 @@ def test_civitai_bounded_pages_filters_errors_and_download(desk, tmp_path, width
         page.get_by_role('button', name='Choose file', exact=True).first.click()
         page.get_by_role('button', name='weights.safetensors', exact=False).click()
         playwright.expect(page.locator('#mw-success')).to_contain_text('Download started')
-        assert downloads[-1] == {'repository': 'civitai/1', 'files': ['weights.safetensors'], 'place': 'storage_image'}
+        assert downloads[-1] == {'repository': 'civitai/1', 'files': ['weights.safetensors'], 'place': 'image'}  # model storage's own image folder
         folder = Path(os.environ.get('DISCOVERY_SCREENSHOTS', tmp_path)); folder.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(folder / f'civitai-{width}.png'), full_page=True)
         for count in (12, 1, 2):

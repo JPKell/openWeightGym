@@ -33,7 +33,7 @@ def test_hash_reports_bytes_without_changing_digest_or_cancellation(tmp_path):
 
 
 def test_verification_is_visible_before_reads_and_destination_remains_fixed():
-    file={'path':'/front/storage/model.gguf','place':'storage_llm','tier':'storage','size':100}
+    file={'path':'/front/models/llm/model.gguf','place':'llm','size':100}
     prepared=plan({'flags':{'model':file['path'],'ctx-size':2048},'gpus':0},[node('front',[file]),node('compute')],'compute','front')
     job={'machine':'compute','state':'queued'}
     available={('front',file['path']):'digest'}
@@ -45,15 +45,12 @@ def test_verification_is_visible_before_reads_and_destination_remains_fixed():
         await asyncio.sleep(0)
         if (machine,path) not in available:raise ValueError('Missing')
         return available[(machine,path)]
-    async def promote(step):
-        assert job['state']=='promoting' and job['working_machine']=='front' and job['machine']=='compute'
-        available[('front',step['path'])]='digest'
     async def transfer(step,digest,progress):
         assert progress['state']=='copying' and progress['machine']=='compute'
         available[('compute',step['path'])]=digest
-    asyncio.run(execute(prepared,digest,promote,transfer,job))
+    asyncio.run(execute(prepared,digest,transfer,job))
     assert seen[0]==('front',file['path'])
-    assert ('compute','/compute/cache/model.gguf') in seen
+    assert ('compute','/compute/models/llm/model.gguf') in seen
 
 
 def test_retry_during_installation_does_not_create_another_job(tmp_path,monkeypatch):

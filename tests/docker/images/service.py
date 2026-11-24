@@ -15,7 +15,7 @@ def base(name):
 
 
 def places(name):
-    return dict(model_places(str(base(name) / 'cache'), {}, str(base(name) / 'storage')))
+    return dict(model_places(str(base(name) / 'storage'), {}))
 
 
 def private_file(path, value):
@@ -82,7 +82,7 @@ def application(role, name):
         return build_app(Settings(compute='compute', data=str(base('front')), host='0.0.0.0',
             machine_key_file=str(base('front') / 'compute.key'),
             auth_key_file=str(base('front') / 'console.key'), machines_poll_seconds=1,
-            models_folder=str(base('front') / 'cache'), models_storage_folder=str(base('front') / 'storage'),
+            models_folder=str(base('front') / 'storage'),
             machines={'rig': {'compute': 'http://rig:8442', 'spotter': 'http://rig:8444',
                               'machine_key_file': str(base('front') / 'rig.key')}},
         )), 8442

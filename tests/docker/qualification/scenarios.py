@@ -27,7 +27,7 @@ def download_model(page, origin, repository, filename, place):
     page.get_by_role('button', name='Download selected files', exact=True).click()
     deadline = time.monotonic() + 600
     while time.monotonic() < deadline:
-        page.goto(origin + '/files?tier=storage')
+        page.goto(origin + '/files')
         page.wait_for_function("!document.querySelector('[data-deferred-loader][aria-busy=true]')", timeout=60000)
         if page.locator('a[href^="/file?"]').filter(has_text=Path(filename).name).count():
             return {'downloaded': filename}
@@ -318,9 +318,9 @@ if __name__ == '__main__':
         page = context.new_page()
         try:
             result = (download_model(page, args.origin, args.repository or 'bartowski/SmolLM2-135M-Instruct-GGUF',
-                                     args.model_file or 'SmolLM2-135M-Instruct-Q4_K_M.gguf', 'storage_llm') if args.scenario == 'download-llm' else
+                                     args.model_file or 'SmolLM2-135M-Instruct-Q4_K_M.gguf', 'llm') if args.scenario == 'download-llm' else
                       download_model(page, args.origin, args.repository or 'OlegSkutte/sdxl-turbo-GGUF',
-                                     args.model_file or 'sd_xl_turbo_1.0.q8_0.gguf', 'storage_image') if args.scenario == 'download-image' else
+                                     args.model_file or 'sd_xl_turbo_1.0.q8_0.gguf', 'image') if args.scenario == 'download-image' else
                       install_image(page, args.origin, args.name, args.node or ['beta']) if args.scenario == 'install-image' else
                       benchmark_nodes(page, args.origin, args.name, args.node or ['alpha', 'beta', 'gamma'], args.benchmark) if args.scenario == 'benchmark' else
                       generate_image(page, args.origin, args.name, args.output) if args.scenario == 'generate-image' else

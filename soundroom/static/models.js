@@ -101,9 +101,9 @@
     const options=choices.flatMap((file,index)=>{
       if (kind && !fileKinds(file).includes(kind)) return [];
       const filename=file.path.split('/').filter(Boolean).at(-1) || file.path;
-      const option=new Option(filename + ' · ' + file.machine + ' · ' + file.tier,String(index));
-      option.dataset.path=file.path; option.dataset.machine=file.machine; option.dataset.tier=file.tier;
-      option.disabled=Boolean(selected && (file.machine !== activeNode || file.tier === 'storage') && file.path !== selected.flags.model);
+      const option=new Option(filename + ' · ' + file.machine,String(index));
+      option.dataset.path=file.path; option.dataset.machine=file.machine;
+      option.disabled=Boolean(selected && file.machine !== activeNode && file.path !== selected.flags.model);
       return [option];
     });
     $('file').replaceChildren(new Option(options.length ? 'Choose an audio model file' : kind ? 'No model files for this task' : 'No audio model files available',''),...options);
@@ -211,7 +211,7 @@
     $('runtime').textContent = !reachable ? 'This node is unavailable. Saved settings and drafts remain visible; retry to reconnect.' : runtime?.available ? (runtime.label || runtime.id) + ' is installed on ' + activeNode + '.' : runtime?.why || inventory.catalogue?.error || '';
     $('runtime').hidden = !$('runtime').textContent;
     const file = chosen();
-    $('file-note').textContent = file ? file.machine + ' · ' + file.tier + '. ' + (file.tier === 'storage' ? 'Stored files are promoted and copied after space checks when adding a model.' : 'Managed model file.') : $('kind').value ? 'Showing files for ' + kinds[$('kind').value] + '. Choose All tasks to include files with unknown task metadata.' : 'Choose an audio task to filter model files in cache or storage.';
+    $('file-note').textContent = file ? file.machine + ' · model storage. Another node\'s file is copied into this node\'s storage, after space checks, when the model is added.' : $('kind').value ? 'Showing files for ' + kinds[$('kind').value] + '. Choose All tasks to include files with unknown task metadata.' : 'Choose an audio task to filter model files in storage.';
     $('session-note').textContent = families().find(one=>one.family === $('family').value)?.note || 'Optional runtime-specific session settings. Saved keys are preserved.';
   }
   function captureDraft() {
@@ -258,12 +258,12 @@
     selected = (inventory.models || []).find(row=>row.name === name) || null;
     $('form').reset(); $('defaults').value = '{}'; $('session').value = '{}';
     $('default-fields').replaceChildren();
-    // Always retain installed paths, even if a cache scan cannot currently see the file.
+    // Always retain installed paths, even if a storage scan cannot currently see the file.
     // Audio locations and configured profiles also identify weights when an older index lacks audio metadata.
     choices = nodes.flatMap(source=>(source.files || []).filter(file=>audioFile(file,source) && !file.moving && /\.(gguf|safetensors|pth|pt|bin|onnx)$/i.test(file.path)).map(file=>({...file,machine:source.name})));
     choices = choices.filter(file=>{const tasks=fileKinds(file); return !tasks.length || tasks.some(kind=>kind in kinds);});
     if (selected && !choices.some(file=>file.machine === activeNode && file.path === selected.flags.model)) {
-      choices.push({path:selected.flags.model,machine:activeNode,tier:'current',facts:{what:'audio',family:selected.audiocpp.family,kinds:[selected.audiocpp.kind]}});
+      choices.push({path:selected.flags.model,machine:activeNode,facts:{what:'audio',family:selected.audiocpp.family,kinds:[selected.audiocpp.kind]}});
     }
     $('kind').replaceChildren(new Option('All tasks',''),...Object.entries(kinds).map(([kind,label])=>new Option(label,kind)));
     $('kind').value=selected?.audiocpp.kind || '';
@@ -399,7 +399,7 @@
     $('install-status').hidden=!jobs.length;
     const kind=error ? 'warning' : jobs.some(job=>job.state === 'failed') ? 'danger' : jobs.every(terminal) ? 'success' : 'info';
     for (const value of ['info','warning','danger','success']) $('install-status').classList.toggle('alert-' + value,value === kind);
-    const states={queued:'Queued',promoting:'Preparing files',copying:'Copying files',complete:'Installed',failed:'Failed'};
+    const states={queued:'Queued',copying:'Copying files',complete:'Installed',failed:'Failed'};
     $('install-text').textContent=jobs.map(job=>job.name + ' on ' + job.destination + ': ' + (states[job.state] || job.state) +
       (job.state === 'copying' && job.of ? ' (' + Math.round(100 * (job.done || 0) / job.of) + '%)' : '') + (job.why ? ' · ' + job.why : '')).join('; ') + (error ? '. Progress unavailable: ' + error : '');
     $('install-retry').hidden=!error;

@@ -1,4 +1,4 @@
-"""Models pills and cache/storage pickers in Chromium; no real model loads."""
+"""Models pills and model storage pickers in Chromium; no real model loads."""
 import json
 import re
 from urllib.parse import urlsplit
@@ -12,7 +12,7 @@ from test_weightroom import desk, gguf, sign_in
 
 
 @pytest.mark.parametrize('width', [1440, 390])
-def test_model_type_pills_and_cache_warning_block_add(desk, tmp_path, monkeypatch, width):
+def test_model_type_pills_and_storage_warning_block_add(desk, tmp_path, monkeypatch, width):
     server, _, _ = desk
     file = gguf(tmp_path / 'available.gguf', general__architecture='tiny')
     library = Models(str(tmp_path / 'loadcoach.db'))
@@ -24,12 +24,14 @@ def test_model_type_pills_and_cache_warning_block_add(desk, tmp_path, monkeypatc
             text = response.text
             match = re.search(r'(<script type="application/json" id="model-file-inventory">)(.*?)(</script>)', text, re.S)
             inventory = json.loads(match[2])
-            source = inventory[0]; cache = source['places'][0]
-            cache['free'] = SPARE
-            source['places'].append({**cache,'name':'storage_'+cache['name'],'folder':'/stored','tier':'storage'})
-            source['files'][0].update(path='/stored/available.gguf',place='storage_'+cache['name'],tier='storage')
+            # The file is only on another node, and the chosen node's model storage has no room for a copy.
+            target = inventory[0]; place = target['places'][0]
+            place['free'] = SPARE
+            stored = {**target['files'][0], 'path': '/vault/llm/available.gguf'}
+            inventory.append({'name': 'vault', 'answering': True, 'places': [{**place, 'folder': '/vault/llm', 'free': 100 * SPARE}], 'files': [stored]})
+            target['files'] = []
             text = text[:match.start(2)] + json.dumps(inventory) + text[match.end(2):]
-            text = text.replace(file,'/stored/available.gguf')
+            text = text.replace(file,'/vault/llm/available.gguf').replace('&#34;machine&#34;: &#34;compute&#34;', '&#34;machine&#34;: &#34;vault&#34;')
             route.fulfill(content_type='text/html',body=text)
             return True
     with playwright.sync_playwright() as driver:
@@ -46,11 +48,11 @@ def test_model_type_pills_and_cache_warning_block_add(desk, tmp_path, monkeypatc
         playwright.expect(page.get_by_role('link',name='Add image model',exact=True)).to_be_visible()
         pills.get_by_role('link',name='Audio',exact=True).click()
         playwright.expect(page.get_by_role('link',name='Add audio model',exact=True)).to_be_visible()
-        # A storage-only model needs room on the source cache before Add can be used.
+        # A file on another node needs room in the chosen node's model storage before Add can be used.
         page.goto('http://console.test/models?low=1')
         page.locator('#file').select_option(index=1)
         playwright.expect(page.locator('[data-file-submit]')).to_be_disabled()
-        playwright.expect(page.locator('[data-file-warning]')).to_contain_text('Not enough cache space')
+        playwright.expect(page.locator('[data-file-warning]')).to_contain_text('Not enough model storage space on compute')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         assert not errors
         browser.close()

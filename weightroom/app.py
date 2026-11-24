@@ -2320,7 +2320,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 artifact = json.loads(form["artifact"][-1])
                 form["file"], form["source_machine"] = [artifact["path"]], [artifact["machine"]]
             except (ValueError, KeyError, TypeError):
-                return await models_page(request, person, "Choose a model file from cache/storage.", True)
+                return await models_page(request, person, "Choose a model file from model storage.", True)
         name = form.get("name", [""])[-1].strip()
         try:
             made = settings_from(form)
@@ -3709,15 +3709,17 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                     said=request.query_params.get('said', ''))
 
     async def change_file_locations(request: Request, person: Person) -> Response:
-        """Validate and save the selected node's model-file storage roots."""
+        """Validate and save the selected node's model storage root.
+
+        The retired second folder is sent only when the form shows it, so that it can be cleared."""
         form = await typed(request)
         machine = form.get("file_machine", "")
-        cache, storage = form.get("models_folder", "").strip(), form.get("models_storage_folder", "").strip()
-        if any(path and not path.startswith("/") for path in (cache, storage)):
-            return await settings_page(request, person, "Cache and storage paths must be full paths, or empty.", True, typed_in=form)
+        locations = {name: form[name].strip() for name in ("models_folder", "models_storage_folder") if name in form}
+        locations.setdefault("models_folder", "")
+        if any(path and not path.startswith("/") for path in locations.values()):
+            return await settings_page(request, person, "The model storage path must be a full path, or empty.", True, typed_in=form)
         endpoint = '/turnstile/artifacts/settings' if machine == 'front' else "/turnstile/machines/" + quote(machine, safe="") + "/settings/loadcoach"
-        answer = await ask("POST", endpoint, person.key,
-                           json={"models_folder": cache, "models_storage_folder": storage})
+        answer = await ask("POST", endpoint, person.key, json=locations)
         if answer.status_code not in (200, 202):
             return await settings_page(request, person, answer.json()["error"]["message"], True, typed_in=form)
         message = ('Saved. Control node file locations are available now.' if machine == 'front' else
@@ -5061,14 +5063,14 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         return "/file?path=" + quote(path, safe="/")
 
     async def all_files(request: Request, person: Person) -> dict | Response:
-        """Files cached on the control node and the storage available at every node."""
+        """Files in model storage and on every node."""
         return await fetch(request, person, "/turnstile/artifacts/files")
 
     def files_view(found: dict) -> dict:
         """Add display roots and combine each file's model use across answering nodes."""
-        def group(node: dict, tier: str) -> dict | None:
-            """Group related model files for the operator's file listing."""
-            places = [place for place in node.get("places", []) if place.get("tier", "cache") == tier]
+        def group(node: dict) -> dict | None:
+            """Group a node's model folders under their common root for the operator's file listing."""
+            places = node.get("places", [])
             if not places:
                 return None
             folders = [os.path.abspath(place["folder"]) for place in places]
@@ -5079,7 +5081,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             for place, folder in zip(places, folders):
                 relative = os.path.relpath(folder, root)
                 place["relative"] = place["name"].removeprefix("storage_") if relative == "." else relative
-            return {"tier": tier, "root": root, "places": places}
+            return {"root": root, "places": places}
 
         def identity(file: dict) -> tuple:
             """Extract a stable identity for catalogue and retained-evidence matching."""
@@ -5089,37 +5091,23 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
 
         uses: dict[tuple, dict[str, set[str]]] = {}
         for node in found.get("nodes", []):
-            node["place_groups"] = [one for tier in ("cache", "storage") if (one := group(node, tier))]
-            if len(node["place_groups"]) == 2 and all(place.get("shared") for one in node["place_groups"] for place in one["places"]):
-                # Cache and storage are one folder: one card, whose cache places carry the files.
-                node["place_groups"] = [{**node["place_groups"][0], "tier": "shared"}]
+            node["place_groups"] = [one] if (one := group(node)) else []
             for file in node.get("files", []):
                 if file.get("used_by"):
                     uses.setdefault(identity(file), {}).setdefault(node["name"], set()).update(file["used_by"])
 
         source = next((node for node in found.get("nodes", []) if node["name"] == found.get("artifact_machine")), {})
-        groups = {one["tier"]: one for one in source.get("place_groups", [])}
-        paths = {file["path"] for file in found.get("files", [])}
-        places = {place["name"]: place for place in found.get("places", [])}
+        root = next(iter(source.get("place_groups", [])), {}).get("root")
         for file in found.get("files", []):
-            tier = file.get("tier", "cache")
-            root = (groups.get(tier) or groups.get("shared") or {}).get("root")
             file["relative"] = os.path.relpath(file["path"], root) if root else Path(file["path"]).name
             by_node = uses.get(identity(file), {})
             file["used_by_all"] = sorted({model for models in by_node.values() for model in models})
             file["used_nodes"] = sorted(by_node)
-            if tier == "storage":
-                cache_name = file["place"].removeprefix("storage_")
-                cache = places.get(cache_name)
-                file["cache_place"] = cache_name if cache and cache.get("tier") == "cache" else ""
-                file["cached"] = bool(cache and str(Path(cache["folder"]) / Path(file["path"]).name) in paths)
         # The Storage view: a row for each file and a box for each place it can be, as turnstile will check them.
         relatives = {file["path"]: file["relative"] for file in found.get("files", [])}
         steps = {(step["row"], step["at"]): step for job in found.get("distributions", []) if job.get("kind") == "arrange"
                  and job["state"] == "running" for step in job["steps"] if step["state"] not in ("done", "failed")}
         found["library_columns"] = library.columns(found)
-        found["can_clean_cache"] = any(column['name'] == 'cache' for column in found['library_columns']) and any(
-            column['name'] == 'storage' for column in found['library_columns'])
         found["cleanable"] = len(library.cleanup_changes(found))
         found["arranging"] = any(job.get("kind") == "arrange" and job["state"] == "running" for job in found.get("distributions", []))
         found["library"] = []
@@ -5143,17 +5131,15 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if "manage-models" not in person.can:  # asked here too, so the page that comes first is refused like its files
             return page(request, "refused.html", person, status=403, why="Your account may not manage model files.")
         asked = request.query_params
-        tier = asked.get("tier", "storage")
-        tier = tier if tier in ("cache", "storage") else "storage"
         file_type = asked.get("type", "")
         file_type = file_type if file_type in dict(file_types) else ""
         machine = asked.get("machine", "")
         said, failed = asked.get("said", ""), asked.get("failed") == "1"
         # Where Refresh comes back to: this view, without what was said on it.
-        here = "/files?" + urlencode({"machine": machine} if machine else {"tier": tier} | ({"type": file_type} if file_type else {}))
+        here = "/files?" + urlencode({"machine": machine} if machine else {"type": file_type} if file_type else {})
         if initial_page(request):  # the downloads list asks for itself as soon as it is on the page
             return page(request, "files.html", person, deferred=True, fragment_url=fragment_url(request, "page"),
-                        said=said, failed=failed, downloads=[], downloads_later=True, tier=tier, machine=machine, here=here)
+                        said=said, failed=failed, downloads=[], downloads_later=True, machine=machine, here=here)
         part = asked.get("part") if asked.get("complete") != "1" else None
         found = await all_files(request, person)
         if isinstance(found, Response):
@@ -5165,7 +5151,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                            for node in found.get('nodes', [])]}
         if file_type:
             def matching(files):
-                """Filter rows after resolving model usage, cache copies and location totals."""
+                """Filter rows after resolving model usage, copies and location totals."""
                 return [file for file in files if file_kind(file) == file_type]
 
             found = {**found, "files": matching(found.get("files", [])),
@@ -5178,11 +5164,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         template = {"list": "files_poll.html", "page": "files_content.html"}.get(part, "files.html")  # list: the pieces, asked for again
         downloads = await coming(person) if template == "files.html" and platform().downloads else []
         return page(request, template, person, found=found, said=said, failed=failed, downloads=downloads, here=here,
-                    tier=tier, machine=machine, selected_node=selected_node, file_type=file_type, file_types=file_types,
+                    machine=machine, selected_node=selected_node, file_type=file_type, file_types=file_types,
                     address=model_address, file_address=file_address)  # fmt: skip
 
     async def files_do(request: Request, person: Person) -> Response:
-        """Validate and dispatch a model-file cleanup, copy or move operation."""
+        """Validate and dispatch a model-file transfer, unused-copy cleanup or bulk change."""
         fields = await typed_lists(request)
         form = {name: values[-1] for name, values in fields.items()}
         action = form.get("do", "")
@@ -5206,23 +5192,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             message = ("Unused-copy cleanup started. Storage originals and in-use copies stay." if action == "clean-unused"
                        else "Transfer started. Source copies stay until destination copies succeed.") if steps else "Nothing to change. Files are already in place or protected."
             return go("/files?said=" + quote(message))
-        if action not in ("clear-cache", "consolidate-cache", "cleanup-nodes"):
-            return Response("That file maintenance action is not available.", status_code=400)
-        answer = await ask("POST", f"/turnstile/artifacts/files/{action}", person.key)
-        if answer.status_code not in (200, 202):
-            return go("/files?said=" + quote(answer.json()["error"]["message"]))
-        result = answer.json()
-        if action == "clear-cache":
-            message = "Cache cleanup started. Progress is shown on Files."
-        elif action == "consolidate-cache":
-            message = "Cache consolidation started. Progress is shown on Files."
-            if result.get("absent"):
-                message += " Control node has no copy of: " + ", ".join(result["absent"]) + "."
-        else:
-            message = "Compute-node cleanup started. Progress is shown on Files."
-            if result.get("unavailable"):
-                message += " Not completed on: " + ", ".join(result["unavailable"]) + "."
-        return go("/files?said=" + quote(message))
+        return Response("That file maintenance action is not available.", status_code=400)
 
     async def arrange_files(person: Person, fields: dict[str, list[str]]) -> Response:
         """Send turnstile the boxes changed on the Storage view: a copy for each box ticked, a removal for each cleared.
@@ -5233,7 +5203,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         so a file that arrived somewhere since the page was drawn is not taken away again.
         """
         file_type = form_type if (form_type := (fields.get("file_type") or [""])[-1]) in dict(file_types) else ""
-        back = "/files?" + urlencode({"tier": "storage"} | ({"type": file_type} if file_type else {}))
+        back = "/files?" + urlencode({"type": file_type} if file_type else {})  # what is said is added with &
         columns, wanted, changes = fields.get("column", []), set(fields.get("want", [])), []
         for box in fields.get("boxes", []):
             row, _, flags = box.partition(":")
@@ -5408,7 +5378,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             done = f"Deleted {name}. {size(answer.json().get('freed'))} freed." if answer.status_code == 200 else ""
         if answer.status_code not in (200, 202):
             return await file_page(request, person, answer.json()["error"]["message"], failed=True, path=path)
-        destination = {"tier": "storage"} if form.get("return") == "storage" else {}
+        destination = {}
         if form.get("file_type") in dict(file_types) and form["file_type"]:
             destination["type"] = form["file_type"]
         return go("/files?" + urlencode({**destination, "said": done}))

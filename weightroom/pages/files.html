@@ -3,7 +3,7 @@
 {% block title %}Files · openWeightGym{% endblock %}
 {% block scripts %}<script src="/static/files.js?v=3" defer></script>{% endblock %}
 {% block main %}
-{% call page_header('Files', 'Manage model files in cache, storage and compute locations.') %}
+{% call page_header('Files', 'Manage model files in storage and on compute nodes.') %}
   <form method="post" action="/files"><input type="hidden" name="back" value="{{ here }}"><button class="btn btn-outline-secondary btn-sm" name="do" value="refresh-files" title="Look through every model folder again now, instead of waiting for the next check">Refresh files</button></form>
 {% endcall %}
 {{ said_box(said, failed|default(false)) }}

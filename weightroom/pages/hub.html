@@ -40,19 +40,21 @@
     </tbody>
   </table>
   </div>
-  {# Downloads are kept in storage alone; a model's file is promoted into the cache when it is used. #}
+  {# Downloads go into the node's model storage, where models use them. #}
   {% if found.places %}
+  {% set wanted = 'classifier' if request.query_params.get('kind') == 'classifier' else 'llm' %}
+  {% set default_place = (found.places|selectattr('name', 'equalto', wanted)|first) or (found.places|selectattr('name', 'equalto', 'storage_' ~ wanted)|first) %}
   <div class="row g-2 align-items-center mt-2 discovery-file-actions">
-    <div class="col-auto"><label for="place" class="col-form-label">Download to storage:</label></div>
+    <div class="col-auto"><label for="place" class="col-form-label">Download to model storage:</label></div>
     <div class="col col-md-6 col-xl-5">
       <select id="place" name="place" class="form-select">
-        {% for place in found.places %}<option value="{{ place.name }}"{% if request.query_params.get('kind') == 'classifier' and place.name == 'storage_classifier' %} selected{% endif %}>{{ place.name }}, {{ place.free|size }} free</option>{% endfor %}
+        {% for place in found.places %}<option value="{{ place.name }}"{% if default_place and place.name == default_place.name %} selected{% endif %}>{{ place.name }}, {{ place.free|size }} free</option>{% endfor %}
       </select>
     </div>
     <div class="col-12 col-md-auto"><button class="btn btn-primary">Download selected files</button></div>
   </div>
   {% else %}
-  {% call alert('info', class_='mt-2') %}Downloads go into model storage, never the cache. <a href="/settings#model-files">Set a model storage folder</a> to download files.{% endcall %}
+  {% call alert('info', class_='mt-2') %}Downloads go into model storage. <a href="/settings#model-files">Set a model storage folder</a> to download files.{% endcall %}
   {% endif %}
 </form>
 {% endcall %}
@@ -84,7 +86,7 @@
 {{ pager(hub_paging.previous, hub_paging.next, 'Page ' ~ hub_paging.page ~ ' · ' ~ found.found|length ~ ' repositories', target='hub-found') }}
 {% endcall %}
 {% elif not words %}
-{{ empty_state('A model library, ready to explore', 'Find a model family or paste a repository name. Choose the files you need and download them directly to your storage library.') }}
+{{ empty_state('A model library, ready to explore', 'Find a model family or paste a repository name. Choose the files you need and download them directly to model storage.') }}
 {% endif %}
 </div>
 {% call download_queue() %}{% include "downloads.html" %}{% endcall %}

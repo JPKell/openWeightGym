@@ -1,19 +1,17 @@
 {% from "parts.html" import card %}
 {% from "navigation_parts.html" import pills, pill_link, model_type_choices %}
-{% from "files_parts.html" import checked_note, cleanup_status, places_block, storage_table, distributions_table, maintenance, maintenance_details with context %}
-{% set location_query = 'machine=' ~ (machine|urlencode) if machine else 'tier=' ~ tier %}
-<div id="files" hx-get="/files?part=list&amp;{{ location_query }}{{ '&type=' ~ file_type if file_type else '' }}" hx-trigger="every 5s" hx-swap="none" data-refresh-companions="#files-checked, #files-cleanup, #files-distributions, #files-places, #files-storage, #files-maintenance"></div>
-<div id="files-cleanup">{{ cleanup_status(found) }}</div>
+{% from "files_parts.html" import checked_note, places_block, storage_table, distributions_table, maintenance with context %}
+{% set location_query = 'machine=' ~ (machine|urlencode) if machine else '' %}
+<div id="files" hx-get="/files?{{ ['part=list', location_query, 'type=' ~ file_type if file_type else '']|select|join('&') }}" hx-trigger="every 5s" hx-swap="none" data-refresh-companions="#files-checked, #files-distributions, #files-places, #files-storage, #files-maintenance"></div>
 <div id="files-distributions">{{ distributions_table(found) }}</div>
 {% set actions %}<div id="files-maintenance">{{ maintenance(found, here) }}</div>{% endset %}
 {% call card('Library & distribution', actions=actions, class_='files-matrix', body=false) %}
   <div id="files-places">{{ places_block(found) }}</div>
   <div class="p-3 border-top">
     {% call pills('File type') %}
-      {% call(value, label) model_type_choices(file_types) %}{{ pill_link(label, '/files?' ~ location_query ~ ('&type=' ~ value if value else ''), file_type == value) }}{% endcall %}
+      {% call(value, label) model_type_choices(file_types) %}{{ pill_link(label, '/files?' ~ ([location_query, 'type=' ~ value if value else '']|select|join('&')), file_type == value) }}{% endcall %}
     {% endcall %}
     <div id="files-storage">{{ storage_table(found, file_type) }}</div>
   </div>
 {% endcall %}
-<div id="files-maintenance-details">{{ maintenance_details(found) }}</div>
 <div id="files-checked">{{ checked_note(found) }}</div>

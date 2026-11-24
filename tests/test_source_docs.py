@@ -173,7 +173,7 @@ def test_api_page_lists_compatibility_gaps_custom_routes_and_scoped_headers(desk
     for text in ('Implemented OpenAI endpoints', 'Not implemented by openWeightGym', '/v1/chat/completions',
                  '/v1/responses', 'backend-dependent passthrough', 'purpose=batch',
                  '/v1/audio/generations', '/v1/audio/diarizations', '/turnstile/models/install',
-                 '/turnstile/artifacts/files/cleanup-nodes', '/loadcoach/services/{name}/key',
+                 '/turnstile/artifacts/arrange', '/loadcoach/services/{name}/key',
                  '/owg/extractions', '/owg/extraction-assets', 'stream:true',
                  'X-LoadCoach-Require-Model-ID', 'X-LoadCoach-Task', 'X-ToolLocker-Sets', 'X-Twilio-Signature',
                  'X-Suite-Application', 'X-Suite-Session-Mode', 'Idempotency-Key'):

@@ -2581,9 +2581,9 @@ def test_settings_are_changed_from_the_site_within_what_may_be_changed(fake_llam
     offload = setting(first, "loadcoach", "disable_ram_offload")
     assert offload["label"] == "Disable RAM offload" and offload["choices"] == [["true", "Yes - require VRAM"], ["false", "No - allow host RAM spill"]]
     root = setting(first, "loadcoach", "models_folder")
-    assert root["label"] == "Active model cache" and root["when"] == "restart"
-    storage = setting(first, "loadcoach", "models_storage_folder")
-    assert storage["label"] == "Model storage library" and storage["value"] == "" and storage["when"] == "restart"
+    assert root["label"] == "Model storage" and root["when"] == "restart"
+    # The retired second folder is not offered; one that is still set keeps working (see test_file_library).
+    assert not any(one["name"] == "models_storage_folder" for program in first["programs"] for one in program["settings"])
     assert setting(first, "loadcoach", "llama_server")["when"] == "restart" and setting(first, "loadcoach", "gpus")["when"] == "file"
     # Taken on at once.
     assert in_force == (1, True) and setting(changed, "loadcoach", "keep_text")["changed"]["value"] == 1
@@ -2781,79 +2781,34 @@ def test_a_file_is_moved_to_another_place_and_its_models_follow_without_anyone_b
         assert Path(spare).exists()  # a file nobody asked about is where it was
 
 
-def test_a_file_can_be_copied_from_storage_to_cache_without_removing_the_library_copy(fake_llama_server, tmp_path):
-    cache, storage = tmp_path / "cache", tmp_path / "storage"
-    cache.mkdir()
-    storage.mkdir()
-    source = gguf(storage / "m.gguf", general__name="Stored", general__architecture="tiny", tiny__context_length=4096)
-    with gateway(fake_llama_server, {}, places={"llm": str(cache), "storage_llm": str(storage)}) as caller:
+def test_a_file_can_be_copied_between_places_without_removing_the_original(fake_llama_server, tmp_path):
+    one, two = tmp_path / "one", tmp_path / "two"
+    one.mkdir()
+    two.mkdir()
+    source = gguf(one / "m.gguf", general__name="Stored", general__architecture="tiny", tiny__context_length=4096)
+    with gateway(fake_llama_server, {}, places={"llm": str(one), "classifier": str(two)}) as caller:
         admin = add_user(caller, "jordan", "admin")
-        copied = caller.post("/loadcoach/files/copy", json={"path": source, "to": "llm"}, headers=admin)
+        copied = caller.post("/loadcoach/files/copy", json={"path": source, "to": "classifier"}, headers=admin)
         assert copied.status_code == 202
-        target = cache / "m.gguf"
+        target = two / "m.gguf"
         deadline = time.monotonic() + 5
         while not target.exists() and time.monotonic() < deadline:
             time.sleep(0.05)
         assert Path(source).exists() and target.read_bytes() == Path(source).read_bytes()
         listed = caller.get("/loadcoach/files", headers=admin).json()
         by_path = {entry["path"]: entry for entry in listed["files"]}
-        assert by_path[source]["tier"] == "storage" and by_path[str(target)]["tier"] == "cache"
+        assert {by_path[source]["place"], by_path[str(target)]["place"]} == {"llm", "classifier"}
+        assert not {"tier", "shared", "cleanup"} & ({*listed} | {*by_path[source]})  # one kind of storage: no cache, nothing to clean up
 
 
-def test_clear_cache_preserves_storage_and_removes_only_unused_cache_files(fake_llama_server, tmp_path):
-    cache, storage = tmp_path / "cache", tmp_path / "storage"
-    cache.mkdir()
-    storage.mkdir()
-    used = gguf(cache / "used.gguf", general__name="Used")
-    spare = gguf(cache / "spare.gguf", general__name="Spare")
-    already = gguf(cache / "already.gguf", general__name="Already")
-    (storage / "already.gguf").write_bytes(Path(already).read_bytes())
-    places = {"llm": str(cache), "storage_llm": str(storage)}
-    with gateway(fake_llama_server, {"mine": model(used, 1)}, places=places) as caller:
-        admin = add_user(caller, "jordan", "admin")
-        refused = caller.post("/loadcoach/files/cleanup", json={"mode": "clear-cache", "keep": ["/etc/hostname"]}, headers=admin)
-        assert refused.status_code == 400 and "inside an active cache place" in refused.json()["error"]["message"]
-        started = caller.post("/loadcoach/files/cleanup", json={"mode": "clear-cache", "keep": [spare]}, headers=admin)
-        assert started.status_code == 202 and started.json()["state"] == "running"
-        deadline = time.monotonic() + 5
-        while (result := caller.get("/loadcoach/files", headers=admin).json()["cleanup"])["state"] == "running" and time.monotonic() < deadline:
-            time.sleep(0.02)
-        assert result["saved"] == 2 and result["removed"] == 1 and result["freed"] > 0 and result["protected"] == 1 and result["failures"] == []
-        assert Path(used).exists() and (storage / "used.gguf").exists()
-        assert Path(spare).exists() and (storage / "spare.gguf").exists()
-        assert not Path(already).exists() and (storage / "already.gguf").exists()
-
-
-def test_consolidate_promotes_storage_files_into_cache_and_the_status_expires(fake_llama_server, tmp_path, monkeypatch):
-    cache, storage = tmp_path / "cache", tmp_path / "storage"
-    cache.mkdir()
-    storage.mkdir()
-    stored = gguf(storage / "stored.gguf", general__name="Stored")
-    with gateway(fake_llama_server, {}, places={"llm": str(cache), "storage_llm": str(storage)}) as caller:
-        admin = add_user(caller, "jordan", "admin")
-        refused = caller.post("/loadcoach/files/cleanup", json={"mode": "promote", "promote": ["/etc/hostname"]}, headers=admin)
-        assert refused.status_code == 400 and "inside a storage place" in refused.json()["error"]["message"]
-        assert caller.post("/loadcoach/files/cleanup", json={"mode": "promote", "promote": [stored]}, headers=admin).status_code == 202
-        deadline = time.monotonic() + 5
-        while (result := caller.get("/loadcoach/files", headers=admin).json()["cleanup"])["state"] == "running" and time.monotonic() < deadline:
-            time.sleep(0.02)
-        assert result["promoted"] == 1 and result["failures"] == []
-        assert (cache / "stored.gguf").read_bytes() == Path(stored).read_bytes() and Path(stored).exists()
-        later = time.time() + 601
-        monkeypatch.setattr(time, "time", lambda: later)
-        assert caller.get("/loadcoach/files", headers=admin).json()["cleanup"] == {}
-
-
-def test_node_cleanup_removes_unused_cache_without_requiring_storage(fake_llama_server, tmp_path):
+def test_there_is_no_cache_cleanup_on_a_node(fake_llama_server, tmp_path):
     used = gguf(tmp_path / "used.gguf", general__name="Used")
     spare = gguf(tmp_path / "spare.gguf", general__name="Spare")
     with gateway(fake_llama_server, {"mine": model(used, 1)}, places={"llm": str(tmp_path)}) as caller:
         admin = add_user(caller, "jordan", "admin")
-        assert caller.post("/loadcoach/files/cleanup", json={"mode": "unused"}, headers=admin).status_code == 202
-        deadline = time.monotonic() + 5
-        while (result := caller.get("/loadcoach/files", headers=admin).json()["cleanup"])["state"] == "running" and time.monotonic() < deadline:
-            time.sleep(0.02)
-        assert result["removed"] == 1 and Path(used).exists() and not Path(spare).exists()
+        for mode in ("unused", "clear-cache", "promote"):
+            assert caller.post("/loadcoach/files/cleanup", json={"mode": mode}, headers=admin).status_code in (404, 405)
+        assert Path(used).exists() and Path(spare).exists()  # files are removed one at a time, by name
 
 
 def test_a_file_is_deleted_only_with_its_name_typed_and_only_if_no_model_uses_it(fake_llama_server, tmp_path):
@@ -2921,10 +2876,10 @@ def downloads(caller, who, until=lambda listed: not listed):
 
 def test_model_files_are_found_at_hugging_face_brought_down_and_gone_on_with(fake_llama_server, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("loadcoach.hub.PIECE", 64)  # small pieces, so that small files come in several
-    fast, stored, tiny, one, two = tmp_path / "fast", tmp_path / "stored", os.urandom(1000), os.urandom(700), os.urandom(500)
+    stored, tiny, one, two = tmp_path / "stored", os.urandom(1000), os.urandom(700), os.urandom(500)
     there = FakeHub({"tiny-q4.gguf": tiny, "parts/big-00001-of-00002.gguf": one, "parts/big-00002-of-00002.gguf": two})
-    folder = stored / "acme--tiny-GGUF"  # a repository's files go into a folder named after it, one below the storage place
-    with gateway(fake_llama_server, places={"fast": str(fast), "storage_llm": str(stored)}, web=there.client()) as caller:
+    folder = stored / "acme--tiny-GGUF"  # a repository's files go into a folder named after it, one below the place
+    with gateway(fake_llama_server, places={"llm": str(stored)}, web=there.client()) as caller:
         admin = add_user(caller, "jordan", "admin")
         pat = add_user(caller, "pat", "plain", by=admin)
         look = lambda who=admin, **what: caller.get("/loadcoach/hub", params=what, headers=who)  # noqa: E731
@@ -2934,9 +2889,7 @@ def test_model_files_are_found_at_hugging_face_brought_down_and_gone_on_with(fak
         found, nothing = look(search="TINY").json()["found"], look(search="llama").json()["found"]
         seen = look(repository=there.repository).json()
         wrong = [look(repository="no slash").status_code, look(repository="acme/other").status_code, start("none.gguf").status_code, start("tiny-q4.gguf", place="nowhere").status_code]
-        cache = start("tiny-q4.gguf", place="fast")  # the cache is never a download's destination
-
-        # One part of a split model brings both. The place need not be named where there is only one storage place.
+        # One part of a split model brings both. The place need not be named where there is only one.
         started = start("big-00002-of-00002.gguf", "tiny-q4.gguf")
         downloads(caller, admin)
         kept = {file.name: file.read_bytes() for file in folder.iterdir()}
@@ -2960,31 +2913,29 @@ def test_model_files_are_found_at_hugging_face_brought_down_and_gone_on_with(fak
         printed = capsys.readouterr().out
 
     assert closed == [403, 403, 403] and wrong == [400, 403, 404, 400]
-    assert cache.status_code == 400 and "never the cache" in cache.json()["error"]["message"] and not (fast / "acme--tiny-GGUF").exists()
     assert found == [{"repository": "acme/tiny-GGUF", "downloads": 5, "likes": 2, "made": "2026-01-02"}] and nothing == []
     # Smallest first. The two parts are one row. Nothing but model files is listed.
     assert [(row["file"], row["parts"], row["size"], row["here"]) for row in seen["files"]] == [("tiny-q4.gguf", 1, 1000, None), ("parts/big-00001-of-00002.gguf", 2, 1200, None)]
-    assert [place["name"] for place in seen["places"]] == ["storage_llm"] and seen["places"][0]["free"] > 0  # storage alone is offered
-    assert started.status_code == 202 and started.json()["to"] == "storage_llm" and started.json()["size"] == 2200
+    assert [place["name"] for place in seen["places"]] == ["llm"] and seen["places"][0]["free"] > 0
+    assert started.status_code == 202 and started.json()["to"] == "llm" and started.json()["size"] == 2200
     assert kept == {"tiny-q4.gguf": tiny, "big-00001-of-00002.gguf": one, "big-00002-of-00002.gguf": two}  # whole, and no `.part` left
-    assert [row["here"] for row in after] == ["storage_llm", "storage_llm"] and listed["tiny-q4.gguf"] == "storage_llm" and again.status_code == 409
+    assert [row["here"] for row in after] == ["llm", "llm"] and listed["tiny-q4.gguf"] == "llm" and again.status_code == 409
     assert [(entry["file"], entry["repository"], entry["state"], entry["done"]) for entry in left] == [("tiny-q4.gguf", "acme/tiny-GGUF", "stopped", 300)]
     assert resumed.status_code == 202 and (folder / "tiny-q4.gguf").read_bytes() == tiny and there.asked_of("cdn.test")[-1]["range"] == "bytes=300-"
     assert whats == ["downloading"] * 3 + ["downloaded"] * 3 + ["downloading", "downloaded"]
-    assert "acme/tiny-GGUF" in printed and "big-00001-of-00002.gguf" in printed and "storage_llm (" in printed and "fast (" not in printed
+    assert "acme/tiny-GGUF" in printed and "big-00001-of-00002.gguf" in printed and "llm (" in printed
 
 
-def test_with_no_storage_place_nothing_is_downloaded_into_the_cache(fake_llama_server, tmp_path):
-    there, cache = FakeHub({"tiny-q4.gguf": os.urandom(1000)}), tmp_path / "cache"
-    cache.mkdir()
-    with gateway(fake_llama_server, places={"llm": str(cache)}, web=there.client()) as caller:
+def test_with_no_model_storage_nothing_is_downloaded(fake_llama_server, tmp_path):
+    there = FakeHub({"tiny-q4.gguf": os.urandom(1000)})
+    with gateway(fake_llama_server, places={}, web=there.client()) as caller:
         admin = add_user(caller, "jordan", "admin")
         seen = caller.get("/loadcoach/hub", params={"repository": there.repository}, headers=admin).json()
         refused = [caller.post("/loadcoach/downloads", json={"repository": there.repository, "files": ["tiny-q4.gguf"], **chosen}, headers=admin)
                    for chosen in ({}, {"place": "llm"})]
     assert seen["files"] and seen["places"] == []  # the files are listed, with nowhere to put them
     assert [answer.status_code for answer in refused] == [409, 409]
-    assert all("never the cache" in answer.json()["error"]["message"] for answer in refused) and not any(cache.iterdir())
+    assert all("Set a model storage folder" in answer.json()["error"]["message"] for answer in refused)
 
 
 def test_a_download_that_goes_wrong_says_why_and_one_is_stopped_and_thrown_away(fake_llama_server, tmp_path, monkeypatch, capsys):

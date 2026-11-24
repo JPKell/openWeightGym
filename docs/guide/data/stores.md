@@ -28,6 +28,6 @@ Every worker has its own pair, including a CPU worker that runs on the control n
 
 Images and audio that people keep are files under the control node's `data/mirrorwall-assets/` and `data/soundroom-assets/`; their records are in `accounts.db`, and both are part of every recovery set. Temporary and unlogged images and audio are never written to a store, a file or a recovery set.
 
-Model files stay on the worker that owns them, in its model places, and are not part of a recovery set. Files downloaded from Hugging Face or Civitai go into model storage only, never the cache. A model's file reaches the cache only as a copy promoted from storage for use, and cache cleanup removes it again once it is unused.
+Model files stay on the worker that owns them, in its model places, and are not part of a recovery set. Each worker has one model storage folder, and models load from it directly. Files downloaded from Hugging Face or Civitai go into model storage; a node gets its own copy only when a model is added there.
 
-[Files](/files) shows a location summary and a library matrix. Select files, choose a source and destination, then copy or move them together. Moves keep source copies until destination copies succeed; storage originals stay. Clean unused copies removes eligible cache and compute copies, preserving files in use and files without a storage original. A shared cache/storage directory has no separate cache to clean.
+[Files](/files) shows a location summary and a library matrix. Select files, choose a source and destination, then copy or move them together. Moves keep source copies until destination copies succeed. Clean unused copies removes compute-node copies that no model uses and that the control node's storage also holds.

@@ -21,7 +21,7 @@ def base(name):
 
 
 def places(name):
-    return dict(model_places(str(base(name) / 'cache'), {}, str(base(name) / 'storage')))
+    return dict(model_places(str(base(name) / 'storage'), {}))
 
 
 def private_file(path, text):
@@ -101,7 +101,7 @@ def application(role, name):
             machine_key_file=str(base('front') / 'alpha.key'),
             auth_key_file=str(base('front') / 'console.key'), machines_poll_seconds=2,
             keep_console_settings_on_front=True, toollocker_url='http://toollocker:8443',
-            models_folder=str(base('front') / 'cache'), models_storage_folder=str(base('front') / 'storage'),
+            models_folder=str(base('front') / 'storage'),
             machines={node: {'compute': f'http://{node}:8442', 'spotter': f'http://{node}:8444',
                              'machine_key_file': str(base('front') / (node + '.key')),
                              **({'wake_mac': '02:00:00:00:00:03', 'wake_address': 'wake-listener'}
