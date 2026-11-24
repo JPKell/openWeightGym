@@ -19,6 +19,8 @@ SINGLE = {0: "<B", 1: "<b", 2: "<H", 3: "<h", 4: "<I", 5: "<i", 6: "<f", 7: "<?"
 TEXT, LIST = 8, 9
 SHORT = 16  # a list longer than this is counted, not kept: a vocabulary has a hundred thousand entries
 SANE = 2**28  # no name or text in a real file is longer; a longer one means the file is not what it claims
+# ggml itself has four, but video GGUFs keep Conv3d weights whole: WAN's patch embedding has five.
+MAX_DIMENSIONS = 8
 
 
 def read_metadata(path: str, count_parameters: bool = False, shapes: bool = False) -> dict:
@@ -99,7 +101,7 @@ def read_metadata(path: str, count_parameters: bool = False, shapes: bool = Fals
             for _ in range(tensors):
                 name = text()
                 dimensions = take('<I')
-                if not 1 <= dimensions <= 4:
+                if not 1 <= dimensions <= MAX_DIMENSIONS:
                     raise ValueError('invalid tensor dimensions')
                 found[name] = tuple(take('<Q') for _ in range(dimensions))
                 take('<I')  # tensor storage type
@@ -113,7 +115,7 @@ def read_metadata(path: str, count_parameters: bool = False, shapes: bool = Fals
             for _ in range(tensors):
                 text(keep=False)
                 dimensions = take('<I')
-                if not 1 <= dimensions <= 4:
+                if not 1 <= dimensions <= MAX_DIMENSIONS:
                     raise ValueError('invalid tensor dimensions')
                 elements = 1
                 for _ in range(dimensions):

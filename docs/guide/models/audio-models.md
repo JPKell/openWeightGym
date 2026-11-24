@@ -15,7 +15,7 @@ Use an account with [model management](/docs/system/abilities#ability-manage-mod
 ## Do it
 
 1. Open **Audio** under **Models**. Choose an installed model and node, or **Add audio model**.
-2. In **01 · Model & files**, select **Audio task**, **Model file in cache or storage**, **Model family** and **Model name**.
+2. In **01 · Model & files**, select **Audio task**, **Model file in storage**, **Model family** and **Model name**.
 3. Review **02 · Hardware**, **03 · Output** and **Advanced**. Choose the intended **Install on compute nodes** targets for a new model, then submit the editor.
 
 ## Options

@@ -219,6 +219,18 @@ def test_malformed_tensor_dimensions_are_reported_as_unreadable(tmp_path):
     assert identify(malformed, [tmp_path])["kind"] == "unreadable"
 
 
+def test_a_wan_gguf_with_a_five_dimensional_patch_embedding_is_identified(tmp_path):
+    """QuantStack's WAN GGUFs keep the Conv3d patch embedding whole; its input channels name the variant."""
+    folder = tmp_path / "video"
+    folder.mkdir()
+    ti2v = gguf(folder / "Wan2.2-TI2V-5B-Q8_0.gguf", {"patch_embedding.weight": (3072, 48, 1, 2, 2),
+                                                      "blocks.0.cross_attn.norm_k.weight": (3072,)}, {"general.architecture": "wan"})
+    found = identify(ti2v, [folder])
+    assert (found["kind"], found["family"], found["variant"]) == ("diffusion", "wan2.2", "ti2v-5b")
+    too_many = gguf(folder / "bad.gguf", {"patch_embedding.weight": (1,) * 9})
+    assert identify(too_many, [folder])["kind"] == "unreadable"
+
+
 @pytest.mark.parametrize("value", [float("inf"), float("nan"), -1, "1", True])
 def test_invalid_reference_sizes_fail_before_the_job_is_queued(value):
     front = SimpleNamespace(store=SimpleNamespace(asset=lambda *args: {"width": 640, "height": 480}))

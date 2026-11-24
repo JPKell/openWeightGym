@@ -230,7 +230,7 @@
       if (!control.checkValidity()) { fail(control.validationMessage,control); control.reportValidity(); return false; }
     }
     const values = read(), info = data.files.find(one => one.path === values.file);
-    if (!info) { fail('Choose a model file from cache or storage.',field('file')); return false; }
+    if (!info) { fail('Choose a model file from storage.',field('file')); return false; }
     if (!values.name.trim()) { fail('Enter a model name.',field('name')); return false; }
     if (models().some(model => model.id !== editing.id && model.name.toLowerCase() === values.name.trim().toLowerCase())) { fail('A model already uses this name.',field('name')); return false; }
     const root = values.root.trim().replace(/\/+$/,'');
