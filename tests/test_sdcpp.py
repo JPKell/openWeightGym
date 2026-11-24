@@ -783,7 +783,7 @@ def test_a_restarted_node_knows_its_image_runtime_build_before_any_job(image_set
 
 
 def test_an_unobservable_final_measurement_keeps_the_qualified_profile(image_settings):
-    """Live QA-106: stopping LoadCoach stops the child first, and its failed last look replaced the qualification."""
+    """Live QA-106: the final look at a stopped child failed and replaced the qualification or video evidence."""
     import asyncio, httpx
     from types import SimpleNamespace
     from loadcoach.config import Config
@@ -800,6 +800,10 @@ def test_an_unobservable_final_measurement_keeps_the_qualified_profile(image_set
     asyncio.run(runner.measure(server))
     kept = library.measure('flux', image_settings)['image_profile']
     assert kept['qualified'] and kept['runtime_capabilities'] and server.mib == [9000]
+    # Video evidence: capabilities without a qualified memory figure, as a finished clip records it.
+    library.measured('flux', image_settings, None, image_profile={'qualified': False, 'build': 'sdcpp:current', 'runtime_capabilities': {'supported_modes': ['vid_gen']}})
+    asyncio.run(runner.measure(server))
+    assert library.measurements('flux', image_settings)[0]['image_profile']['runtime_capabilities']
     server.build = 'sdcpp:rebuilt'  # another build has no evidence yet, so the failure is still recorded
     asyncio.run(runner.measure(server))
     assert library.measurements('flux', image_settings)[0]['image_profile'] == {'qualified': False, 'build': 'sdcpp:rebuilt', 'problem': 'Workflow observation unavailable'}

@@ -1053,10 +1053,13 @@ class Runner:
                 response=await self.client.get(server.url+'/health',headers=server.headers,timeout=3)
                 profile=response.json().get('image_profile') if response.is_success else None
             except (httpx.HTTPError,ValueError):
-                # An observation that cannot be made, such as the final one of a child already
-                # stopped with LoadCoach, is no evidence against this build's qualified profile.
-                prior=(self.models.measure(server.model,server.settings) or {}).get('image_profile',{})
-                if self.models.stored(server.model) and not (prior.get('qualified') and prior.get('build')==server.build):
+                # An observation that cannot be made, such as the final look at a child that has
+                # already stopped, is no evidence against this build's qualified or video profile.
+                # Video evidence is kept without a memory figure, so look at every point, not measure().
+                context=server.settings['flags'].get('ctx-size')
+                prior=next((point.get('image_profile',{}) for point in self.models.measurements(server.model,server.settings) if point['context']==context),{})
+                kept=prior.get('build')==server.build and (prior.get('qualified') or prior.get('runtime_capabilities'))
+                if self.models.stored(server.model) and not kept:
                     self.models.measured(server.model,server.settings,None,image_profile={'qualified':False,'build':server.build,'problem':'Workflow observation unavailable'})
                     server.mib=None
                 return
