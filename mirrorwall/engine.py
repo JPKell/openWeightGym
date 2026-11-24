@@ -34,6 +34,22 @@ def build_identity(options):
     return stamped_build(tuple((str(path),path.stat().st_size,path.stat().st_mtime_ns,path.stat().st_ino) for path in files))
 
 
+def scratch_folder(config):
+    """Where a session stages components: beside the node's data, on disk.
+
+    /tmp may be a small RAM-backed tmpfs, and staging hard-links components, which works only
+    within one filesystem; a copy into tmpfs would hold whole video weights in memory.
+    None (the system temporary folder) when the node has no settings file to count from.
+    """
+    path, told = getattr(config, 'path', ''), getattr(config, 'data', None)
+    if not path or not isinstance(told, str):
+        return None
+    from loadcoach.config import data_folder
+    folder = data_folder(Path(path), {'data': told}).resolve() / 'engine-scratch'
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return str(folder)
+
+
 def node_options(config):
     """Validate the optional installation without invoking an executable."""
     options=getattr(config,"engines",{}).get("sdcpp",{})
@@ -113,7 +129,7 @@ class SDCpp:
         expected = 0 if settings.get('gpus') == 0 else (1 if settings["sdcpp"].get("split_mode","single")=="single" else 2)
         if len(cards) != expected:
             raise ValueError("The admitted GPU count does not match the image profile.")
-        directory=tempfile.TemporaryDirectory(prefix="suite-image-engine-")
+        directory=tempfile.TemporaryDirectory(prefix="suite-image-engine-",dir=scratch_folder(config))
         try:
             token=secrets.token_urlsafe(32)
             path=Path(directory.name)/"launch.json"

@@ -716,3 +716,23 @@ def test_an_engine_that_drops_the_connection_is_reported_with_what_to_try():
     assert failure_detail(httpx.ReadError(''), SimpleNamespace(failure_detail=lambda: 'CUDA out of memory')) == 'CUDA out of memory'
     assert failure_detail(RuntimeError('sdcpp failed'), quiet) == 'sdcpp failed'
     assert failure_detail(TimeoutError(), quiet, video=True).startswith('Video generation exceeded')
+
+
+def test_engine_scratch_is_on_the_nodes_data_disk_so_components_hard_link(tmp_path):
+    """/tmp may be a small RAM-backed tmpfs: a session stages video weights beside the node's data instead."""
+    from types import SimpleNamespace
+    from mirrorwall.engine import scratch_folder
+    settings = tmp_path / 'settings' / 'loadcoach.toml'
+    settings.parent.mkdir()
+    config = SimpleNamespace(path=str(settings), data='../data')
+    folder = Path(scratch_folder(config))
+    assert folder == (tmp_path / 'data' / 'engine-scratch').resolve()
+    assert folder.stat().st_mode & 0o077 == 0
+    weights = tmp_path / 'models' / 'video' / 'wan.gguf'
+    weights.parent.mkdir(parents=True)
+    weights.write_bytes(b'GGUF')
+    staged = folder / 'diffusion.gguf'
+    import os
+    os.link(weights, staged)  # same filesystem as the models: no copy
+    assert staged.stat().st_ino == weights.stat().st_ino
+    assert scratch_folder(SimpleNamespace(path='', data='.')) is None  # no settings file to count from: the system's
