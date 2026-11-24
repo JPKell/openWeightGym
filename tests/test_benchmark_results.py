@@ -135,9 +135,15 @@ def test_live_filters_sorting_chart_and_dense_columns_in_browser(scored_library)
                 page.set_viewport_size({'width': width, 'height': 1100})
                 page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (theme, width)
+                # The chart redraws after a resize; wait for it to settle below its own heading, above the filters.
+                try:
+                    page.wait_for_function('''() => { const chart = document.querySelector('#heatmap-panel').getBoundingClientRect();
+                        return document.querySelector('#results-filters').getBoundingClientRect().top >= chart.bottom - 0.5; }''', timeout=5000)
+                except engine.Error:
+                    pass  # reported below with the measured boxes
                 chart = page.locator('#heatmap-panel').bounding_box()
                 filters = page.locator('#results-filters').bounding_box()
-                assert filters['y'] >= chart['y'] + chart['height'], (theme, width, chart, filters)
+                assert filters['y'] >= chart['y'] + chart['height'] - 0.5, (theme, width, chart, filters)
                 if width >= 1440:
                     assert filters['height'] < 90
         page.set_viewport_size({'width': 1440, 'height': 1100})

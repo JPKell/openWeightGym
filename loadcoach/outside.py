@@ -44,6 +44,10 @@ def check_service(name: str, settings: dict, taken: set[str]) -> None:
         raise ValueError(f"service {name!r}: ceiling is the most it may cost in 24 hours, in dollars. Leave it out for none.")
     price = lambda one: all(type(one.get(way, 0)) in (int, float) and 0 <= one.get(way, 0) < math.inf for way in ("in", "out"))  # noqa: E731
     good = lambda ours, one: isinstance(ours, str) and MODEL_NAME.fullmatch(ours) and isinstance(one, dict) and one.keys() <= {"theirs", "in", "out", "vision", "json_schema", "systemone"} and isinstance(one.get("theirs"), str) and one["theirs"] and price(one) and all(type(one.get(key, False)) is bool for key in ('vision', 'json_schema', 'systemone'))  # noqa: E731
+    for ours, one in (models.items() if isinstance(models, dict) else ()):
+        for way, field in (("in", "Price in"), ("out", "Price out")):
+            if isinstance(one, dict) and way in one and not (type(one[way]) in (int, float) and 0 <= one[way] < math.inf):
+                raise ValueError(f"service {name!r}, model {ours!r}: {field} ({way}) must be a number of dollars per million tokens, 0 or more, or left out. It was {one[way]!r}.")
     if not isinstance(models, dict) or not all(good(ours, one) for ours, one in models.items()):
         raise ValueError(f"service {name!r}: models is a list of OUR NAME = {{theirs, in, out}}. theirs is the service's own name for the model. in and out are prices in dollars for a million tokens, and may be left out.")
     if both := sorted(models.keys() & taken):

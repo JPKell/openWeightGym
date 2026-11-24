@@ -7,7 +7,7 @@ def collection_summary(collection):
     ready = sum(doc['state'] == 'ready' for doc in documents)
     indexing = sum(doc['state'] == 'indexing' for doc in documents)
     failed = sum(doc['state'] == 'failed' for doc in documents)
-    pending = len(documents) - ready - indexing - failed
+    pending = len(documents) - ready - indexing - failed  # includes sources whose indexing was stopped
     if failed:
         state, label, tone = 'attention', 'Needs attention', 'orange'
     elif indexing:

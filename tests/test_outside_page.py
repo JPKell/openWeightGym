@@ -1,5 +1,7 @@
 """Checks of Cloud APIs: an outside service registered, its models chosen and priced, from the site."""
 
+import pytest
+
 from loadcoach.outside import Services
 from test_weightroom import desk, sign_in  # noqa: F401  (the first sets a check up)
 from test_outside import service  # noqa: F401
@@ -73,11 +75,33 @@ def test_an_overflowing_price_is_refused_beside_the_draft_not_a_server_error(des
     for way in ("in", "out"):
         prices = {"in": ["2"], "out": ["6.5"]} | {way: ["1e309"]}
         refused = browser.post("/cloud-apis", data={"do": "models", "name": "rented", "ours": ["big-out"], "theirs": ["vendor/big"], **prices})
-        assert refused.status_code == 400 and "ordinary numbers of dollars" in refused.text
+        field = "Price in" if way == "in" else "Price out"
+        assert refused.status_code == 400 and f"big-out: {field} must be a number of dollars per million tokens" in refused.text
         assert 'value="1e309"' in refused.text and 'value="big-out"' in refused.text  # the draft is kept
         assert kept.get("rented")["models"] == {}
     ceiling = browser.post("/cloud-apis", data={"do": "save", "name": "rented", "url": service, "ceiling": "1e309"})
     assert ceiling.status_code == 400 and "ceiling" not in kept.get("rented")
+
+
+@pytest.mark.parametrize('way,typed', [('in', '-1'), ('out', 'abc'), ('in', 'true'), ('out', 'NaN')])
+def test_an_invalid_price_names_its_model_and_field_and_keeps_the_draft(desk, service, tmp_path, way, typed):
+    """Improvement: a refused price says which model row and which price box to correct, not the internal schema."""
+    browser, _, _ = desk
+    kept = Services(str(tmp_path / "data" / "accounts.db"), str(tmp_path))
+    sign_in(browser, "sam")
+    browser.post("/cloud-apis", data={"do": "add", "name": "rented", "url": service})
+    prices = {"in": ["2"], "out": ["6.5"]} | {way: [typed]}
+    refused = browser.post("/cloud-apis", data={"do": "models", "name": "rented", "ours": ["big-out"], "theirs": ["vendor/big"], **prices})
+    field = "Price in" if way == "in" else "Price out"
+    assert refused.status_code == 400 and f"big-out: {field} must be a number of dollars per million tokens, 0 or more, or left empty. You entered {typed}." in refused.text
+    assert "models is a list" not in refused.text and kept.get("rented")["models"] == {}
+    assert f'value="{typed}"' in refused.text and 'value="big-out"' in refused.text  # the draft is kept
+
+
+def test_loadcoach_names_the_model_and_price_it_refuses():
+    from loadcoach.outside import check_service
+    with pytest.raises(ValueError, match=r"model 'big': Price out \(out\) must be a number of dollars per million tokens"):
+        check_service("rented", {"url": "https://example.invalid/v1", "models": {"big": {"theirs": "vendor/big", "out": -1}}}, set())
 
 
 def test_loadcoach_refuses_an_infinite_price_sent_to_it_directly():

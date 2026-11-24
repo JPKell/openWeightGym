@@ -80,6 +80,25 @@ def test_collection_failure_links_to_exact_request_and_scoped_events(desk):
     assert events.status_code==200 and 'HTTP 409' in events.text and f'href="/requests/{request}"' in events.text
 
 
+def test_a_stopped_source_is_shown_apart_from_a_failed_one(desk):
+    """A requested stop reads as Stopped, in a neutral badge; a real failure keeps its orange Failed badge."""
+    browser,_,users=desk
+    number,doc,_=seed(browser,users)
+    service=browser.app.state.conversations.state.knowledge
+    owner=users.identity('jordan')
+    other=browser.portal.call(lambda:service.store.add(owner,number,'other.txt','text/plain',base64.b64encode(b'other').decode(),'digest2'))
+    browser.portal.call(lambda:service.store.stop(owner,number,doc,'Indexing cancelled at your request. Select Index / retry to index it.',state='stopped'))
+    browser.portal.call(lambda:service.store.stop(owner,number,other,'Inference was refused (HTTP 409): model changed'))
+    sign_in(browser,'jordan')
+    page=browser.get('/collections/'+number).text
+    row=lambda name:page.split(f'download="{name}"')[1].split('</tr>')[0]  # noqa: E731
+    assert '<span class="badge bg-secondary-lt">Stopped</span>' in row('notes.txt') and 'at your request' in row('notes.txt')
+    assert 'Index / retry' in row('notes.txt') and 'Failed' not in row('notes.txt')
+    assert '<span class="badge bg-orange-lt">Failed</span>' in row('other.txt')
+    listing=browser.get('/collections').text  # a stopped source needs indexing; only the failure needs attention
+    assert 'Needs attention' in listing
+
+
 def test_collection_upload_and_source_pages_in_chromium(desk):
     from playwright.sync_api import sync_playwright,expect
     server,_,users=desk

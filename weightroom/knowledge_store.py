@@ -173,7 +173,7 @@ class Collections:
     def interrupted(self):
         """Invalidate unfinished indexing after restart without automatically replaying it."""
         with self.db:
-            self.db.execute("UPDATE documents SET generation=generation+1,state='failed',status='WeightRoom stopped during indexing; retry explicitly.' WHERE state='indexing'")
+            self.db.execute("UPDATE documents SET generation=generation+1,state='stopped',status='Indexing stopped when WeightRoom restarted. Select Index / retry to index it.' WHERE state='indexing'")
 
     def forget(self, owner):
         """Remove every collection and source belonging to the deleted owner."""

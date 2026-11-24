@@ -3,7 +3,7 @@
 {% from 'chat_parts.html' import rename_form, model_choice, prompt_input %}
 {% from 'tool_parts.html' import argument_editor, tool_result, tool_templates %}
 {% block title %}{{ talk.title if talk else 'Tool chat' }} · openWeightGym{% endblock %}
-{% block scripts %}<script src="/static/tool-controls.js?v=2" defer></script><script src="/static/tool-chat.js" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/tool-controls.js?v=3" defer></script><script src="/static/tool-chat.js" defer></script>{% endblock %}
 {% block conversation_main %}
 {% if talk %}{% set heading %}<span data-conversation-heading tabindex="0" aria-keyshortcuts="F2" title="Double-click or press F2 to rename">{{ talk.title }}</span>{% endset %}{{ page_header(heading, 'Tools run only after your approval.') }}{{ rename_form(talk, 'mb-3', '/chat/tools') }}<p data-chat-rename-error class="text-danger" role="status"></p>
 {% else %}{{ page_header('Tool chat', 'Call a tool directly, or review each call proposed by a model.') }}{% endif %}

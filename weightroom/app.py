@@ -2839,6 +2839,11 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 capabilities = form.get('extraction_capability', ['text'] * len(form.get('ours', [])))
                 for ours, theirs, cost_in, cost_out, capability in zip(form.get("ours", []), form.get("theirs", []), form.get("in", []), form.get("out", []), capabilities):
                     if ours.strip() and theirs.strip():
+                        for field, text in (("Price in", cost_in), ("Price out", cost_out)):
+                            price = read(text.strip()) if text.strip() else 0
+                            if type(price) not in (int, float) or not (0 <= price < math.inf):
+                                return await cloud_apis_page(request, person, f"{ours.strip()}: {field} must be a number of dollars per million tokens, 0 or more, or left empty. You entered {text.strip()}.",
+                                                             failed=True, selected_name=name)
                         models[ours.strip()] = {"theirs": theirs.strip()} | {way: read(text.strip()) for way, text in (("in", cost_in), ("out", cost_out)) if text.strip()}
                         if capability == 'classifier':
                             models[ours.strip()]['systemone'] = True

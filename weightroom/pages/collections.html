@@ -4,7 +4,7 @@
 {% from 'evaluation_parts.html' import stepper, request_links %}
 {% from 'collection_parts.html' import collection_choice, collection_create, documents_panel, query_panel, result_panel %}
 {% block title %}{{ collection.title if collection else 'Collections' }} · Benchmark · openWeightGym{% endblock %}
-{% block scripts %}<link rel="stylesheet" href="/static/evaluation-studio.css?v=1"><script src="/static/evaluation-studio.js?v=1" defer></script><script src="/static/collections.js?v=6" defer></script>{% endblock %}
+{% block scripts %}<link rel="stylesheet" href="/static/evaluation-studio.css?v=1"><script src="/static/evaluation-studio.js?v=1" defer></script><script src="/static/collections.js?v=7" defer></script>{% endblock %}
 {% block main %}
 <div class="evaluation-studio collections-guide" data-evaluation-studio="collections">
 {% call page_header(collection.title if collection else 'Collections', help='/docs/web-app/collections') %}<a class="btn btn-outline-secondary btn-sm" href="{{ '/collections/' ~ collection.id if collection else '/collections' }}">Refresh status</a>{% if not collection %}<a class="btn btn-primary btn-sm" href="/collections?new=1#new-collection" data-evaluation-open="new-collection">+ New collection</a>{% else %}<a class="btn btn-primary btn-sm" href="/workflows?new=1&collection={{ collection.id }}">Create workflow</a>{% endif %}{% endcall %}

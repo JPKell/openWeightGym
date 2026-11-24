@@ -158,6 +158,7 @@ def test_live_desk_filters_selection_mobile_and_history(activity_desk, tmp_path,
         page.wait_for_function("!document.querySelector('.htmx-settling')")
         page.locator('#plugin-search').fill('pat-request-27')
         expect(page.locator('#total-count')).to_have_text('1')
+        page.wait_for_url('**q=pat-request-27**')  # htmx records the search in history after the swap settles
         page.locator('#plugin-log-rows [data-open]').click()
         expect(page.locator('[data-fact="request"]')).to_have_text('pat-request-27')
         if width < 1200:

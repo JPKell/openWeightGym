@@ -99,7 +99,7 @@ def test_workflow_navigation_retains_unsent_plan_and_filters_without_inference(d
         expect(page.locator('#workflow-question')).to_have_value('Which fact should be checked?')
         expect(page.locator('#workflow-search')).to_have_value('Cedar')
         expect(page.locator('#new-workflow')).to_have_attribute('open', '')
-        assert page.url.endswith(second + '?q=Cedar')
+        page.wait_for_url('**' + second + '?q=Cedar')  # htmx records the address after the swap settles
         # Filtering does not remove the selected run or any accepted output from its inspector.
         page.locator('#workflow-search').fill('does not exist')
         expect(page.locator('[data-evaluation-empty]')).to_be_visible()

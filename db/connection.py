@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any, Iterable, Iterator
 
 
@@ -110,13 +111,18 @@ def split_script(script: str) -> list[str]:
 class Cursor:
     """Cursor proxy retaining the ordinary tuple-row behavior openWeightGym repositories expect."""
 
-    def __init__(self, cursor) -> None:
-        """Wrap an engine cursor without changing its tuple-row behavior."""
-        self._cursor = cursor
+    def __init__(self, cursor, lock=None) -> None:
+        """Wrap an engine cursor without changing its tuple-row behavior; `lock` is its connection's."""
+        self._cursor, self._lock = cursor, lock or threading.RLock()
 
     def __iter__(self) -> Iterator[tuple]:
-        """Iterate over the underlying records in their defined order."""
-        return iter(self._cursor)
+        """Iterate over the underlying records in their defined order, one locked step at a time."""
+        while True:
+            with self._lock:
+                row = self._cursor.fetchone()
+            if row is None:
+                return
+            yield row
 
     def __getattr__(self, name: str) -> Any:
         """Delegate unsupported attributes to the wrapped object."""
@@ -124,20 +130,28 @@ class Cursor:
 
     def fetchone(self):
         """Return the next result row, or None after the cursor is exhausted."""
-        return self._cursor.fetchone()
+        with self._lock:
+            return self._cursor.fetchone()
 
     def fetchall(self):
         """Return all remaining result rows."""
-        return self._cursor.fetchall()
+        with self._lock:
+            return self._cursor.fetchall()
 
 
 class Connection:
-    """A narrow DB-API connection proxy shared by SQLite and PostgreSQL repositories."""
+    """A narrow DB-API connection proxy shared by SQLite and PostgreSQL repositories.
+
+    Several stores share one connection between the event loop and worker threads. Python's
+    sqlite3 releases the GIL inside each call, so two threads could otherwise step the same cached
+    statement at once and read each other's rows. Every call into the raw connection or one of its
+    cursors therefore holds this connection's re-entrant lock. Transactions are unchanged."""
 
     def __init__(self, database, raw) -> None:
         """Bind a raw DB-API connection to its portable database definition."""
         object.__setattr__(self, "database", database)
         object.__setattr__(self, "raw", raw)
+        object.__setattr__(self, "lock", threading.RLock())
 
     @property
     def engine(self) -> str:
@@ -158,21 +172,25 @@ class Connection:
         """Execute one parameterized statement and wrap its result cursor."""
         parameters = tuple(int(value) if isinstance(value, bool) else value for value in parameters) if self.engine == "postgresql" else parameters
         sql = self.sql(statement, parameters=bool(parameters))
-        return Cursor(self.raw.execute(sql) if not parameters else self.raw.execute(sql, parameters))
+        with self.lock:
+            return Cursor(self.raw.execute(sql) if not parameters else self.raw.execute(sql, parameters), self.lock)
 
     def executemany(self, statement: str, parameters: Iterable) -> Cursor:
         """Execute one statement for each parameter row on the active engine."""
         if self.engine == "postgresql":
             parameters = [tuple(int(value) if isinstance(value, bool) else value for value in row) for row in parameters]
-            cursor = self.raw.cursor()
-            cursor.executemany(self.sql(statement, parameters=True), parameters)
-            return Cursor(cursor)
-        return Cursor(self.raw.executemany(statement, parameters))
+            with self.lock:
+                cursor = self.raw.cursor()
+                cursor.executemany(self.sql(statement, parameters=True), parameters)
+                return Cursor(cursor, self.lock)
+        with self.lock:
+            return Cursor(self.raw.executemany(statement, parameters), self.lock)
 
     def executescript(self, script: str) -> None:
         """Execute a migration script using the active engine's statement rules."""
         if self.engine == "sqlite":
-            self.raw.executescript(script)
+            with self.lock:
+                self.raw.executescript(script)
             return
         for statement in split_script(script):
             self.execute(statement)
@@ -193,7 +211,8 @@ class Connection:
 
     def backup(self, target, *args, **kwargs):
         """Run SQLite's online backup API while accepting another openWeightGym connection proxy."""
-        return self.raw.backup(getattr(target, "raw", target), *args, **kwargs)
+        with self.lock:
+            return self.raw.backup(getattr(target, "raw", target), *args, **kwargs)
 
     def __enter__(self):
         """Enter the connection transaction context."""
@@ -201,15 +220,31 @@ class Connection:
 
     def __exit__(self, kind, value, traceback):
         """Commit a successful transaction or roll it back after an exception."""
-        if kind is None:
-            try:
-                self.raw.commit()
-            except BaseException:
+        with self.lock:
+            if kind is None:
+                try:
+                    self.raw.commit()
+                except BaseException:
+                    self.raw.rollback()
+                    raise
+            else:
                 self.raw.rollback()
-                raise
-        else:
-            self.raw.rollback()
         return False
+
+    def commit(self) -> None:
+        """Commit the open transaction."""
+        with self.lock:
+            self.raw.commit()
+
+    def rollback(self) -> None:
+        """Roll back the open transaction."""
+        with self.lock:
+            self.raw.rollback()
+
+    def close(self) -> None:
+        """Close the connection once no other thread is inside a call on it."""
+        with self.lock:
+            self.raw.close()
 
     def __getattr__(self, name: str) -> Any:
         """Delegate unsupported attributes to the wrapped object."""
@@ -217,7 +252,7 @@ class Connection:
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Keep wrapper state locally and delegate other attribute assignments."""
-        if name in {"database", "raw"}:
+        if name in {"database", "raw", "lock"}:
             object.__setattr__(self, name, value)
         else:
             setattr(self.raw, name, value)

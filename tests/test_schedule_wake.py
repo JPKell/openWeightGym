@@ -181,10 +181,11 @@ def test_wake_respects_due_grant_owner_node_and_request_policy(sleeping_nodes, c
     elif case == 'future': payload['due_at'] += 86400; expected = 400
     elif case == 'not-due': payload['due_at'] -= 1; expected = 400
     elif case == 'paused':
-        nodes.app.state.task_records.grants.enable(identifier, False); expected = 403
+        nodes.client.portal.call(nodes.app.state.task_records.grants.enable, identifier, False); expected = 403
     elif case == 'disabled-owner': nodes.users.change('owner', enabled=False); expected = 403
     elif case == 'no-wake-permission': nodes.users.change('owner', own={'remove':['front-wake']}); expected = 403
-    elif case == 'disabled-node': nodes.app.state.machines.change_state('compute','disabled','owner'); expected = 409
+    elif case == 'disabled-node':  # on the app's own loop, which shares this connection with the node poller
+        nodes.client.portal.call(nodes.app.state.machines.change_state, 'compute', 'disabled', 'owner'); expected = 409
     elif case == 'no-mac':
         nodes.settings.machines['rig']['wake_mac'] = ''
         nodes.online['rig'] = False

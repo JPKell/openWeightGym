@@ -16,7 +16,7 @@ Use an account with [provider management](/docs/system/abilities#ability-manage-
 
 1. Open **Cloud APIs** and add a **Unique account name** with its **API endpoint**. Select **Add account & continue to key**.
 2. Install the account's key under **02 · API key**. The saved credential is never displayed; replacement applies to new requests.
-3. Under **03 · Models**, use **Discover models** or fill **Our name**, **Service model ID**, **Price in** and **Price out**, then **Save models**.
+3. Under **03 · Models**, use **Discover models** or fill **Our name**, **Service model ID**, **Price in** and **Price out**, then **Save models**. Prices are dollars per million tokens, 0 or more; leave a price empty for none. A refused price names its model row and box, and your table is kept to correct.
 
 ## Options
 

@@ -268,7 +268,8 @@ def test_index_cancellation_deletion_and_shutdown_do_not_replay_credentials(tmp_
         assert caller.post(doc+'/index').status_code==202
         assert caller.post(doc+'/index').status_code==409
         assert caller.post(doc+'/cancel').status_code==200
-        assert caller.get(path).json()['documents'][0]['state']=='failed'
+        stopped=caller.get(path).json()['documents'][0]
+        assert stopped['state']=='stopped' and 'at your request' in stopped['status']  # a requested stop is not a failure
         assert caller.post(doc+'/index').status_code==202
         assert caller.delete(doc).status_code==200
         assert caller.get(path).json()['documents']==[]
@@ -276,7 +277,7 @@ def test_index_cancellation_deletion_and_shutdown_do_not_replay_credentials(tmp_
     with knowledge(tmp_path) as (caller,state,service):
         assert not state['calls']
         found=caller.get(path).json()['documents'][0]
-        assert found['state']=='failed' and 'retry' in found['status']
+        assert found['state']=='stopped' and 'Index / retry' in found['status']  # stopped by the shutdown, not failed
         ready(caller,path,doc)
         assert caller.post(doc+'/cancel').status_code==409
         assert caller.get(path).json()['documents'][0]['chunks']==1
@@ -435,4 +436,4 @@ def test_native_index_cancellation_releases_normal_admission(fake_llama_server,t
             if not caller.get('/loadcoach/status').json()['running']:break
             time.sleep(.01)
         assert not caller.get('/loadcoach/status').json()['running']
-        assert caller.get(path).json()['documents'][0]['state']=='failed'
+        assert caller.get(path).json()['documents'][0]['state']=='stopped'

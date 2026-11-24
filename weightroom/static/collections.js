@@ -62,10 +62,11 @@ if (documents) {
     const active = states.filter(state => state === 'indexing').length;
     const ready = states.filter(state => state === 'ready').length;
     const failed = states.filter(state => state === 'failed').length;
-    const pending = states.length - active - ready - failed;
+    const stopped = states.filter(state => state === 'stopped').length;
+    const pending = states.length - active - ready - failed - stopped;
     status.textContent = active ? `Indexing ${active} source(s)… Status updates automatically.` :
       !states.length ? 'Upload a source to begin.' :
-      `${ready} ready` + (failed ? ` · ${failed} failed; see the reason below` : '') +
+      `${ready} ready` + (failed ? ` · ${failed} failed; see the reason below` : '') + (stopped ? ` · ${stopped} stopped` : '') +
       (pending ? ` · ${pending} awaiting indexing or retry` : '') + '.';
     const current = document.querySelector('#collection-result')?.dataset.hasResult === 'yes' ? 2 : ready ? 1 : 0;
     document.querySelectorAll('#collection-steps li').forEach((step, index) => {

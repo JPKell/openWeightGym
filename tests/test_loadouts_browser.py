@@ -80,6 +80,7 @@ def test_dry_fit_saves_cpu_selection_reviews_loads_holds_and_undoes(loadout_desk
         playwright.expect(page.get_by_role('table', name='Your load-out holds')).to_have_count(0)
         playwright.expect(page.get_by_label('Select cpu', exact=True)).to_be_checked()  # CPU readiness uses loaded state, not GPU cards
         page.get_by_role('button', name='Preview undo', exact=True).click()
+        page.wait_for_load_state('load')  # the reloaded page's deferred scripts arm two-click confirmation
         page.get_by_role('button', name='Restore settings', exact=True).click()
         assert library.get('cpu')['flags']['ctx-size'] == 2048
         page.get_by_role('button', name='Are you sure? Restore settings', exact=True).click()

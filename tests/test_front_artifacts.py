@@ -254,15 +254,17 @@ def test_a_former_folders_file_copies_into_model_storage_without_overwriting_and
     promoted = browser.post('/file', data={'do': 'copy', 'path': str(source), 'to': 'llm', 'return': 'storage'})
     assert promoted.status_code == 200
     target = storage / 'llm' / source.name
+    store = compute.front.state.front_files
     deadline = time.monotonic() + 5
-    while not target.exists() and time.monotonic() < deadline:
+    # The copy is finished when its job lets go of the file, a moment after the target appears.
+    while (not target.exists() or str(source) in store.moving) and time.monotonic() < deadline:
         time.sleep(.01)
-    assert source.read_bytes() == target.read_bytes() == original
+    assert source.read_bytes() == target.read_bytes() == original and str(source) not in store.moving
     repeated = browser.post('/file', data={'do': 'copy', 'path': str(source), 'to': 'llm', 'return': 'storage'})
     assert 'already exists' in repeated.text and target.read_bytes() == original
     outside = tmp_path / 'private.gguf'
     outside.write_bytes(b'private')
-    store, owner = compute.front.state.front_files, compute.front.state.users.by_name('jordan')
+    owner = compute.front.state.users.by_name('jordan')
     escaped = browser.portal.call(store.request, owner, 'GET', '/loadcoach/file?path=' + str(outside))
     assert escaped.status_code == 400
     disabled = browser.post('/settings/model-files', data={'file_machine': 'front', 'models_folder': '', 'models_storage_folder': ''})

@@ -76,7 +76,7 @@ def test_benchmark_shares_presets_and_saves_are_scoped_to_one_role(desk, tmp_pat
         assert pills.get_by_role('link').evaluate_all('(links) => links.map(link => link.dataset.roleChoice)') == ['code', 'chat']
         pills.get_by_role('link', name='code', exact=True).click()
         playwright.expect(page.locator('#role-name')).to_have_value('code')
-        assert page.url.endswith('/roles?role=code')
+        page.wait_for_url('**/roles?role=code')  # the address follows once the swap settles
         playwright.expect(page.locator('#bench-chat-code_retrieval')).to_have_count(0)
         page.locator('#role-tuning > summary').click()
         code = page.locator('form').filter(has=page.locator('#bench-code-code_retrieval'))

@@ -233,7 +233,7 @@ def test_a_move_copies_verifies_and_only_then_removes_the_source(fleet, removal)
 
 def test_a_retired_node_is_not_looked_for_when_saving_shared_settings(fleet):
     front, headers, two = fleet
-    front.app.state.machines.change_state('rig', 'retired', 'manager')
+    front.portal.call(front.app.state.machines.change_state, 'rig', 'retired', 'manager')  # on the app's loop, beside the poller
     before = deepcopy(two.models['rig'])
     changed = {**two.models['compute']['qwen'], 'order': 4}
     answer = front.post('/turnstile/machines/compute/model-api/models/qwen', headers=headers, json=changed)

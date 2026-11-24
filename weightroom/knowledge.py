@@ -323,7 +323,7 @@ class Knowledge:
                 if not self.store.finish(user.name, number, doc, token, collection['revision'], parts, self.limits.for_user(user)):
                     self.store.stop(user.name, number, doc, 'The source or embedding space changed; index again.', token=token)
         except asyncio.CancelledError:
-            self.store.stop(user.name, number, doc, 'Indexing stopped; retry explicitly.', token=token)
+            self.store.stop(user.name, number, doc, 'Indexing stopped. Select Index / retry to index it.', state='stopped', token=token)
             raise
         except (ValueError, OSError, httpx.HTTPError, TimeoutError) as why:
             message = str(why) if isinstance(why, ValueError) else 'Indexing timed out or compute was unavailable; retry explicitly.'
@@ -418,7 +418,8 @@ class Knowledge:
             if document['state'] != 'indexing':
                 raise Problem('This document is not indexing.',409)
             await self.cancel(user.name, number, doc)
-            self.store.stop(user.name, number, doc, 'Indexing cancelled; retry explicitly.')
+            # A requested stop is its own state, not a failure: nothing went wrong, and nothing is retried by itself.
+            self.store.stop(user.name, number, doc, 'Indexing cancelled at your request. Select Index / retry to index it.', state='stopped')
             return JSONResponse({'stopped': True})
         if doc in self.jobs:
             raise Problem('This document is already indexing.', 409)

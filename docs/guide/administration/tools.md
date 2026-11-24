@@ -14,6 +14,8 @@ Inspect tool servers, access levels, sets and real connection checks.
 2. Use **Tool levels** and **Tool sets** to narrow access. Save the intended section.
 3. Under **Try a tool**, select a set/tool, inspect its schema, supply arguments and run it. Results use the signed-in caller.
 
+Typed fields show and check the schema's numeric range, text length and pattern before a call, so an out-of-range value is named without a round trip. The tool server still validates every argument; other schema rules, and anything sent as raw JSON, are checked only there. The same fields are used in Tool chat.
+
 ## Options
 
 A superuser can manage remote MCP servers through the shared remote-server editor. Machine-file servers remain authoritative for their names. [ToolLocker setup](/docs/modules/toollocker) is the installation and authoring home; [Documentation tools](/docs/api/docs-tools) covers `docs__*`.

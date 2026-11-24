@@ -252,11 +252,31 @@ async function close(){
   if($('record'))$('record').disabled=false;
   $('mode').disabled=false;lockControls(false);
 }
+/** What went wrong at a stage of starting a call, and what to do about it, keeping the browser's own detail. */
+function startupFailure(stage,error){
+  if(!(error instanceof DOMException)&&error?.name==='Error')return error.message;  // already written for people
+  const detail=' (Browser detail: '+(error?.name||'Error')+(error?.message?': '+error.message:'')+'.)';
+  const stages={
+    audio:'This browser could not start audio processing for the call. Use a current Chrome, Edge, Firefox or Safari, close other tabs that use audio, and Start again.',
+    server:'The voice service could not be reached, or its answer could not be read. Check your connection, reload this page and Start again; if it persists, an administrator can check Voice status.',
+    playback:'This browser could not prepare call playback. Check that sound is allowed for this site and your output device is connected, then Start again.',
+  };
+  const microphone={
+    NotAllowedError:'Microphone access was denied. Allow the microphone for this site from the browser\'s address bar or site settings, then Start again.',
+    SecurityError:'The browser blocked the microphone for this page. Allow the microphone for this site, then Start again.',
+    NotFoundError:'No microphone was found. Connect one, or choose another in Microphone, then Start again.',
+    OverconstrainedError:'The chosen microphone cannot provide the requested settings. Choose another microphone, or switch echo cancellation off and use headphones.',
+    NotReadableError:'The microphone could not be opened. Another application may be using it; close that application or choose another microphone.',
+    NotSupportedError:'This browser does not support the microphone settings the call needs. Try another browser, or switch echo cancellation off and use headphones.',
+  };
+  return (stage==='microphone'?microphone[error?.name]||'The microphone could not be started. Check it is connected and allowed for this site, then Start again.':stages[stage]||'The call could not start. Please try again.')+detail;
+}
 $('login').onsubmit=async event=>{
   event.preventDefault();if(callLocked||disposed)return;
   const attempt=++startAttempt;startRequest=new AbortController();
   $('connect').disabled=true;$('hangup').disabled=false;failure='';status('Connecting');$('notice').textContent='Preparing microphone…';
   const current=()=>{if(attempt!==startAttempt||disposed)throw new DOMException('Call canceled','AbortError');};
+  let stage='audio';
   try{
     const selected=sessionChoices();
     partialMessage=assistantMessage=null;activeTurn=null;segments.clear();completedTurns.clear();stoppedTurns.clear();
@@ -267,7 +287,8 @@ $('login').onsubmit=async event=>{
     current();
     node=new AudioWorkletNode(context,'voice-audio',{outputChannelCount:[1]});
     node.port.postMessage({type:'input.gain',value:Number($('call-gain')?.value||1)});
-    const cancelEcho=$('echo').checked;
+    const cancelEcho=$('echo').checked;stage='microphone';
+    if(!navigator.mediaDevices?.getUserMedia)throw Error('This browser offers no microphone access to web pages. Use a current Chrome, Edge, Firefox or Safari.');
     if(cancelEcho && !navigator.mediaDevices.getSupportedConstraints().echoCancellation)throw Error('This browser does not support echo cancellation. Use a supported browser, or headphones with echo cancellation switched off.');
     const captured=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:{exact:cancelEcho},noiseSuppression:cancelEcho,autoGainControl:false,
       ...($('call-microphone')?.value?{deviceId:{exact:$('call-microphone').value}}:{})}});
@@ -278,7 +299,7 @@ $('login').onsubmit=async event=>{
     $('audio-status').textContent=cancelEcho ? (actual ? 'Echo cancellation active · voice interruption enabled' : 'Echo cancellation requested; browser does not report its status · voice interruption enabled') : 'Echo cancellation off · use headphones';
     $('echo').disabled=true;if($('voice'))$('voice').disabled=true;
     if($('record'))$('record').disabled=true;
-    playback=await echoPlayback(context,node);
+    stage='playback';playback=await echoPlayback(context,node);
     current();
     playback.setVolume?.(Number($('call-volume')?.value??1));
     $('mode').disabled=true;lockControls(true);
@@ -291,10 +312,11 @@ $('login').onsubmit=async event=>{
       }else if(m.type==='playback.progress' || (m.type==='playback.cleared' && queueClearAck)){send(m);if(m.type==='playback.progress')playbackProgress(m);}
       else if(m.type==='overload'){$('notice').textContent='Playback could not keep up. Please reconnect.';close();}
     };
+    stage='server';
     const response=await fetch(base+'/browser/sessions',{method:'POST',signal:startRequest.signal,headers:{'content-type':'application/json'},body:JSON.stringify({conversation_mode:$('mode').value,...selected})});
     const result=await response.json();
     current();
-    if(!response.ok)throw Error(result.error?.message||result.error||'Voice could not start');
+    if(!response.ok)throw Error('The voice service could not start the call: '+(result.error?.message||result.error||'no reason was given')+'. An administrator can check Voice status.');
     const connection=new WebSocket(`${location.protocol==='https:'?'wss:':'ws:'}//${location.host}${base}/browser/sessions/${result.session_id}/stream`);socket=connection;socket.binaryType='arraybuffer';
     muted=false;$('mute').textContent='Mute';$('mute').setAttribute('aria-pressed','false');
     socket.onmessage=({data})=>{
@@ -314,7 +336,8 @@ $('login').onsubmit=async event=>{
     socket.onclose=async event=>{if(socket!==connection)return;const reason=failure||(event.code===1008?'The call was refused or its sign-in expired. Reload this page and try again.':'The voice connection ended. You can reconnect.');await close();$('notice').textContent=reason;};
     socket.onerror=()=>{if(socket===connection)$('notice').textContent='The voice connection could not be opened. Please reconnect.';};
     $('hangup').disabled=false;
-  }catch(error){if(attempt!==startAttempt||disposed)return;await close();$('notice').textContent=error.message;}
+    stage='connection';
+  }catch(error){if(attempt!==startAttempt||disposed)return;await close();$('notice').textContent=startupFailure(stage,error);}
 };
 $('hangup').onclick=close;
 $('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'Unmute':'Mute';$('mute').setAttribute('aria-pressed',String(muted));if(studio)$('notice').textContent=muted?'Microphone muted. Replies can still play.':'Microphone unmuted. Speak naturally.';};

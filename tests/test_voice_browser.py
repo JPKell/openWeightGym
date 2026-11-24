@@ -154,3 +154,54 @@ def test_muted_browser_sends_silence_with_the_same_frame_size(backpressure):
         else:
             assert result['frames'][3] == [23] * 640 and not result['closed']
         browser.close()
+
+
+@pytest.mark.parametrize('fault,said', [
+    ("window.AudioContext = class {constructor() {throw new DOMException('Not supported', 'NotSupportedError');}};",
+     'could not start audio processing for the call. Use a current Chrome'),
+    ("navigator.mediaDevices.getUserMedia = async () => {throw new DOMException('Permission denied', 'NotAllowedError');};",
+     'Microphone access was denied. Allow the microphone for this site'),
+    ("navigator.mediaDevices.getUserMedia = async () => {throw new DOMException('Requested device not found', 'NotFoundError');};",
+     'No microphone was found.'),
+    ("navigator.mediaDevices.getUserMedia = async () => {throw new DOMException('Not supported', 'NotSupportedError');};",
+     'does not support the microphone settings the call needs'),
+    ("window.echoPlayback = async () => {throw new DOMException('Not supported', 'NotSupportedError');};",
+     'could not prepare call playback'),
+    ("window.fetch = async () => ({ok: false, json: async () => ({error: {message: 'No recognition model is configured'}})});",
+     'The voice service could not start the call: No recognition model is configured.'),
+    ("window.fetch = async () => {throw new TypeError('Failed to fetch');};",
+     'The voice service could not be reached'),
+])
+def test_startup_failures_say_which_stage_failed_and_what_to_do(fault, said):
+    """A failed Start names the stage (audio, microphone, playback or the service), with the browser's own detail kept."""
+    with playwright.sync_playwright() as engine:
+        browser = engine.chromium.launch(headless=True, args=['--disable-gpu'])
+        page = browser.new_page()
+        page.set_content('''<form id="login"></form><select id="mode"><option value="direct">Direct</option></select>
+            <input id="echo" type="checkbox"><button id="connect"></button><button id="mute"></button>
+            <button id="hangup"></button><button id="finish"></button><button id="interrupt"></button>
+            <div id="status"></div><div id="notice"></div><div id="audio-status"></div><div id="transcript"></div>''')
+        page.evaluate('''() => {
+            Object.defineProperty(window, 'isSecureContext', {value: true});
+            Object.defineProperty(navigator, 'mediaDevices', {value: {
+                getUserMedia: async () => ({getTracks: () => [], getAudioTracks: () => [{getSettings: () => ({})}]})
+            }, writable: true});
+            window.AudioContext = class {
+                audioWorklet = {addModule: async () => {}};
+                resume = async () => {}; close = async () => {};
+                createMediaStreamSource = () => ({connect() {}, disconnect() {}});
+            };
+            window.AudioWorkletNode = class {constructor() {this.port = {postMessage() {}};} disconnect() {}};
+            window.echoPlayback = async () => ({close() {}});
+            window.fetch = async () => ({ok: true, json: async () => ({session_id: 'fixture', modes: ['direct']})});
+            window.WebSocket = class {constructor() {this.readyState = 1;} send() {} close() {this.readyState = 3;}};
+        }''')
+        page.add_script_tag(content=(ROOT / 'voice/static/voice.js').read_text())
+        page.evaluate('() => {' + fault + '}')
+        page.evaluate("async () => await document.getElementById('login').onsubmit({preventDefault() {}})")
+        notice = page.locator('#notice').inner_text()
+        assert said in notice, notice
+        if 'Browser detail' in notice:  # the browser's own words are kept for anyone diagnosing it
+            assert notice.endswith('.)') and ('Error' in notice)
+        assert not page.locator('#connect').is_disabled()  # Start can be tried again
+        browser.close()
