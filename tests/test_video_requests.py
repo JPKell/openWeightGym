@@ -118,3 +118,35 @@ def test_the_runtime_admits_conditioning_before_it_has_loaded_its_capabilities()
     caps={'supported_modes':['vid_gen'],'output_formats_by_mode':{'vid_gen':['webm']},'features_by_mode':{'vid_gen':{'init_image':False}}}
     with pytest.raises(ValueError,match='init_image'):
         video.checked_request(asked,selected,capabilities=caps,deferred=True)  # the loaded runtime still decides
+
+
+def test_the_runtime_child_generates_from_a_start_image_with_an_unqualified_saved_profile():
+    """Live QA-108: the child also checked the request again, undeferred, to decide qualification."""
+    from starlette.testclient import TestClient
+    from mirrorwall.runtime import create_app
+    selected=profile()
+    caps=selected['sdcpp'].pop('runtime_capabilities')  # a saved profile holds none; the loaded runtime reports them
+
+    class Answer:
+        def raise_for_status(self): pass
+        def json(self): return caps
+
+    class Client:
+        async def get(self,path): return Answer()
+
+    class Native:
+        client=Client(); payloads=[]
+        async def start(self): pass
+        async def stop(self): pass
+        async def generate(self,payload):
+            self.payloads.append(payload)
+            yield {'type':'native.completed','native_seconds':1.0,'data':{'mime_type':'video/webm','output_format':'webm',
+                   'frame_count':payload['video_frames'],'fps':payload['fps'],'b64_json':base64.b64encode(b'\x1aE\xdf\xa3'+bytes(64)).decode()}}
+
+    native=Native()
+    job={'settings':selected,'token':'test-private-credential','installation':{'executable':'/native/sd-server','cli':'/native/sd-cli'},'cards':['CUDA0']}
+    with TestClient(create_app(job,native)) as client:
+        answer=client.post('/v1/videos/generations',headers={'authorization':'Bearer '+job['token']},
+                           json={'model':'wan','prompt':'Rain','seconds':1,'init_image':image(),'stream':True})
+    assert answer.status_code==200 and 'event: error' not in answer.text, answer.text[-400:]
+    assert 'video_generation.completed' in answer.text and native.payloads and native.payloads[0].get('init_image')

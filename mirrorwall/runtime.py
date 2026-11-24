@@ -770,7 +770,7 @@ def create_app(job,native=None):
                     return JSONResponse({"error":{"message":"Image request exceeds 60 MiB."}},413)
             asked=json.loads(body)
             # A video is checked against the loaded runtime's capabilities in video_workflow.
-            check(asked,job["settings"],deferred=True) if video else check(asked,job["settings"])
+            resolved=check(asked,job["settings"],deferred=True) if video else check(asked,job["settings"])
         except (ValueError,TypeError,Image.DecompressionBombError) as problem:
             return JSONResponse({"error":{"message":str(problem)}},400)
         busy=True
@@ -782,7 +782,7 @@ def create_app(job,native=None):
             meter=Meter(job.get('monitor_cards', job['cards']))
             sampling=asyncio.create_task(meter.run())
             upscale_only='upscale_with' in asked and not video  # runs no model, so it never measures or qualifies the profile
-            qualifying=not upscale_only and envelope(check(asked,job['settings']),job['settings']) and not (profile and profile.get('qualified'))
+            qualifying=not upscale_only and envelope(resolved,job['settings']) and not (profile and profile.get('qualified'))
             sequence=(video_workflow(job,asked,native,None if qualifying else cache,request.headers.get('x-loadcoach-image-owner')) if video else
                       workflow(job,asked,native,None if qualifying else cache,request.headers.get('x-loadcoach-image-owner'),request.headers.get('x-loadcoach-upscaler-path')))
             try:
@@ -800,7 +800,7 @@ def create_app(job,native=None):
                     meter.stopping.set()
                     await sampling
                     measured=meter.result()
-                    qualified=not upscale_only and completed and measured['complete'] and envelope(check(asked,job['settings']),job['settings'])
+                    qualified=not upscale_only and completed and measured['complete'] and envelope(resolved,job['settings'])
                     if profile and profile.get('qualified'):
                         measured['gpu_peak_mib']=[max(a,b) for a,b in zip(profile['gpu_peak_mib'],measured['gpu_peak_mib'])]
                         measured['rss_peak_mib']=max(profile['rss_peak_mib'],measured['rss_peak_mib'])
