@@ -770,8 +770,9 @@ provision_postgresql() {
   fi
   password=$("$PY" -c 'import secrets; print(secrets.token_urlsafe(32))')
   # Stored as SCRAM even where the server's default is still md5 (PostgreSQL 13 and older):
-  # a SCRAM password signs in through both scram-sha-256 and md5 rules.
-  printf 'SET password_encryption = '\''scram-sha-256'\'';\nCREATE ROLE "%s" LOGIN PASSWORD '\''%s'\'';\n' "$role" "$password" |
+  # a SCRAM password signs in through both scram-sha-256 and md5 rules. CREATEDB (and nothing
+  # more) lets verified backups restore each dump into a temporary suite_verify_* database.
+  printf 'SET password_encryption = '\''scram-sha-256'\'';\nCREATE ROLE "%s" LOGIN NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS CREATEDB PASSWORD '\''%s'\'';\n' "$role" "$password" |
     as_postgres psql -v ON_ERROR_STOP=1 -q postgres ||
     die "PostgreSQL would not make the account $role for openWeightGym." \
       "Its message is just above; check the postgres account can make accounts: sudo -u postgres psql -c 'SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user'" \

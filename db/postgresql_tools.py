@@ -285,7 +285,12 @@ def verify_custom_restore(database: Database, archive: Path, expected: dict) -> 
     created = False
     try:
         admin = psycopg.connect(safe_admin, password=password or None, autocommit=True, connect_timeout=10)
-        admin.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(sql.Identifier(temporary)))
+        try:
+            admin.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(sql.Identifier(temporary)))
+        except psycopg.errors.InsufficientPrivilege:
+            raise PostgreSQLToolError(
+                f"PostgreSQL login {parameters.get('user', '')} may not create the temporary database that verifies "
+                "this backup. Give it CREATEDB (owg repair does this for installer-made logins).") from None
         created = True
         _run(
             database,

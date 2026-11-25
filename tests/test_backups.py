@@ -466,3 +466,23 @@ def test_corrupt_sidecar_is_reported_as_failed_without_exposing_contents(tmp_pat
     rows = manifests(archive.parent.parent)
     assert rows[0]['verification']['state'] == 'failed'
     assert 'sidecar-secret-canary' not in json.dumps(rows)
+
+
+def test_a_login_without_createdb_gets_a_readable_verification_failure(monkeypatch, tmp_path):
+    """The backup page shows this message; an uncaught driver error was a 500 (2026-11-25)."""
+    psycopg = pytest.importorskip("psycopg")
+    from db import postgresql_tools
+
+    class Refusing:
+        def execute(self, statement):
+            raise psycopg.errors.InsufficientPrivilege("permission denied to create database")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(postgresql_tools, "_parameters",
+                        lambda database: ({"user": "suite_fixture", "host": "127.0.0.1", "dbname": "store"}, "hidden-password"))
+    monkeypatch.setattr(psycopg, "connect", lambda *args, **kwargs: Refusing())
+    with pytest.raises(postgresql_tools.PostgreSQLToolError, match="suite_fixture may not create.*CREATEDB") as failure:
+        postgresql_tools.verify_custom_restore(object(), tmp_path / "store.pgdump", {})
+    assert "hidden-password" not in str(failure.value)

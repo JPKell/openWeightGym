@@ -641,7 +641,7 @@ alter those objects, and event-chain writers also acquire a table lock. Keep nor
 sequences owned by the store login. Do not revoke CREATEDB while expecting the current native
 restore-verification workflow to work. Bound its access using host authentication and database
 grants, and ensure `suite_verify_*` temporary databases can be reached during verification.
-The installer can provision a store login; review that login against this operational contract.
+The installer can provision a store login with exactly `CREATEDB` beyond login, and `owg repair` grants `CREATEDB` to a login an earlier installer made without it; review that login against this operational contract.
 See PostgreSQL's [role attributes](https://www.postgresql.org/docs/16/role-attributes.html) and
 [privileges](https://www.postgresql.org/docs/16/ddl-priv.html).
 

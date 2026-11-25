@@ -18,7 +18,7 @@ Follow [Where recipients.txt goes](/docs/data/backup-encryption#recipient-locati
 
 ## Create and retain backups {#recovery-sets}
 
-[System → Backups](/backups) creates a shared set ID for the control node and compute. Scheduled backups use the same encrypted path. Each host snapshots every configured store: SQLite uses its online backup API; PostgreSQL uses `pg_dump`, a disposable restore, and content/schema comparisons. Missing or unreachable required stores fail that host's backup.
+[System → Backups](/backups) creates a shared set ID for the control node and compute. Scheduled backups use the same encrypted path. Each host snapshots every configured store: SQLite uses its online backup API; PostgreSQL uses `pg_dump`, a disposable restore into a temporary `suite_verify_*` database, and content/schema comparisons, so the store login needs `CREATEDB`: the installer grants it, and `owg repair` adds it to logins made by earlier installers. Without it the backup fails and names the login. Missing or unreachable required stores fail that host's backup.
 
 Compressed archive bytes stream directly into age. Before publication, the host decrypts the actual ciphertext with a disposable verification key, safely extracts it, and checks the embedded inventory, file hashes, SQLite integrity and counts. The temporary private key stays in memory and is discarded; only the encrypted archive and an owner-only sidecar manifest are published under `data/backups/ID/`. Creation and rotation are serialized locally.
 

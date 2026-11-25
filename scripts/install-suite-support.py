@@ -136,7 +136,7 @@ def repair_postgresql(root: Path) -> int:
         if owner and owner != role:
             raise ValueError(f"Refusing to change database {database}: its owner differs from the retained connection file")
         privilege = admin(
-            "SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls FROM pg_roles WHERE rolname=" + literal(role),
+            "SELECT rolsuper OR rolcreaterole OR rolreplication OR rolbypassrls FROM pg_roles WHERE rolname=" + literal(role),
             f"checking role {role}",
         )
         if privilege == "t":
@@ -163,6 +163,9 @@ def repair_postgresql(root: Path) -> int:
         if working is None:
             verb = "ALTER" if group[0]["role_exists"] else "CREATE"
             admin(f"{verb} ROLE {identifier(role)} LOGIN PASSWORD {literal(password)}", f"restoring role {role}")
+        # Verified backups restore into a temporary database; older installers made the role without CREATEDB.
+        if admin("SELECT rolcreatedb FROM pg_roles WHERE rolname=" + literal(role), f"checking role {role}") != "t":
+            admin(f"ALTER ROLE {identifier(role)} CREATEDB", f"letting role {role} verify backups")
         for entry in group:
             database, path = entry["database"], entry["path"]
             if not entry["exists"]:

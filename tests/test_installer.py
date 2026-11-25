@@ -161,6 +161,19 @@ def test_real_postgres_password_recovery_preserves_existing_data(tmp_path, local
     assert password not in (root / "install.log").read_text()
 
 
+def test_real_postgres_login_can_verify_backups_and_repair_grants_it_to_older_installs(tmp_path, local_postgres):
+    from urllib.parse import urlsplit
+    root = tmp_path / "install"
+    provision_live_postgres(root, local_postgres, "fixture_createdb")
+    role = urlsplit((root / "keys/postgresql/accounts.dsn").read_text().strip()).username
+    rights = f"SELECT rolcreatedb, rolsuper OR rolcreaterole OR rolreplication OR rolbypassrls FROM pg_roles WHERE rolname='{role}';"
+    assert local_postgres["admin"](rights) == "t|f"
+    local_postgres["admin"](f'ALTER ROLE "{role}" NOCREATEDB;')  # as installers before 0.3.2 made it
+    provision_live_postgres(root, local_postgres, "fixture_createdb")
+    assert local_postgres["admin"](rights) == "t|f"
+    assert_postgres_connections(root)
+
+
 @pytest.mark.parametrize("problem", ["foreign-owner", "foreign-port", "privileged-role"])
 def test_real_postgres_repair_refuses_unmanaged_database_changes(tmp_path, local_postgres, problem):
     from urllib.parse import urlsplit, urlunsplit
