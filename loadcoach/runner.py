@@ -1046,7 +1046,7 @@ class Runner:
                 asked.add(engine.id)
                 try:
                     identity = await self.version(settings)
-                except (OSError, ValueError):  # an unusable installation is refused, with its reason, when a job asks for it
+                except Exception:  # a failed git, manifest or interpreter check must not stop startup; jobs report the reason
                     continue
                 if identity:
                     self.carry_evidence(settings, identity)
