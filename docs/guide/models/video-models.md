@@ -90,7 +90,7 @@ when the programs have not changed since it was recorded.
 After the programs are rebuilt, or an update raises the contract version, each model keeps
 offering what the earlier build proved. The model studio says the runtime changed, and Video
 generation notes that earlier evidence is in use until the model is re-qualified. While
-**Re-qualify image and video models when idle** is on (Compute nodes → Power and idle, on by
+**Re-qualify image and video models when idle** is on (Compute nodes → the node → Telemetry, power and idle, on by
 default), the node re-qualifies each such model once per build. It runs at the lowest priority
 and only when nothing is queued or running. It may unload idle models, as any load does, and
 never wakes a node. Only the output's SHA-256 and three small frames are kept; the studio shows
