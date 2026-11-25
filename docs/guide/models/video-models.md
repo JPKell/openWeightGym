@@ -59,8 +59,7 @@ Layer splitting must be confirmed on both cards; silent single-card fallback fai
 **Run qualification clip** submits a short real clip through the existing batch executor.
 Inspect it under Video generation; successful runs publish observed runtime capabilities for
 the current build and file revisions. The first clip is evidence for that size, not larger bounds.
-A compute node works out its runtime build when LoadCoach starts, so a restart without a runtime
-change keeps the recorded capabilities; rebuilding the runtime requires a new qualification clip.
+
 Each session stages its components in `engine-scratch` inside the compute node's data folder.
 They are hard-linked when that folder shares a filesystem with the weights, and otherwise copied,
 which needs free disk space for the whole bundle. The system temporary folder is not used,
@@ -75,6 +74,29 @@ empty benchmark queue, takes the existing external-work lease, caps host memory,
 component hashes and records smoke, cancellation, crash and Chrome/Firefox playback evidence
 under the requested `data/qualification/video-*` directory. It does not deploy the application.
 Owner visual acceptance is recorded separately.
+
+After a deployment, `scripts/smoke-video.py --url CONSOLE --key-file KEY` checks every video
+model the key may use. It fails a model whose qualification failed on the current build, makes a
+short text clip and a start-image clip through `POST /v1/videos`, checks each WebM and deletes
+it. It changes no settings and wakes no node.
+
+### When the runtime changes {#when-the-runtime-changes}
+
+Evidence belongs to the runtime build: the `sd-server` and `sd-cli` programs plus the workflow
+contract version of the application. An application update that leaves both unchanged keeps
+every model's capabilities and memory evidence. Evidence recorded before this rule carries over
+when the programs have not changed since it was recorded.
+
+After the programs are rebuilt, or an update raises the contract version, each model keeps
+offering what the earlier build proved. The model studio says the runtime changed, and Video
+generation notes that earlier evidence is in use until the model is re-qualified. While
+**Re-qualify image and video models when idle** is on (Compute nodes → Power and idle, on by
+default), the node re-qualifies each such model once per build. It runs at the lowest priority
+and only when nothing is queued or running. It may unload idle models, as any load does, and
+never wakes a node. Only the output's SHA-256 and three small frames are kept; the studio shows
+them with the run's time. A failed run marks the model unqualified on that build and opens an
+operational alert in Alerts. It is not retried by itself; **Run qualification clip** still
+re-qualifies the model.
 
 The optional runtime is rebuilt through `scripts/install-sdcpp.sh`; application deployment keeps
 the established `owg update; owg restart` route. See [Installation](/docs/operations/installation).

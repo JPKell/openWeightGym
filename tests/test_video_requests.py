@@ -150,3 +150,16 @@ def test_the_runtime_child_generates_from_a_start_image_with_an_unqualified_save
                            json={'model':'wan','prompt':'Rain','seconds':1,'init_image':image(),'stream':True})
     assert answer.status_code==200 and 'event: error' not in answer.text, answer.text[-400:]
     assert 'video_generation.completed' in answer.text and native.payloads and native.payloads[0].get('init_image')
+
+
+@pytest.mark.parametrize('native,logged,expected',[
+    ({'step':3,'total':8,'unit':'steps','pass':1},{},{'step':3,'total_steps':8}),
+    ({'step':2,'total_steps':20},{},{'step':2,'total_steps':20}),
+    # Live: a progress object without step counts hid the counts read from the native log.
+    ({'pass':1,'stage_elapsed_ms':400},{'step':5,'total_steps':8},{'step':5,'total_steps':8}),
+    ({'step':4,'total':13,'unit':'frames'},{'step':8,'total_steps':8},{'step':8,'total_steps':8}),
+    (None,{},{}),({'step':9,'total':8},{},{}),
+])
+def test_video_progress_reads_native_and_logged_step_counts(native,logged,expected):
+    from mirrorwall.runtime import step_counts
+    assert step_counts(native,logged)==expected

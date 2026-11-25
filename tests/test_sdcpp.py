@@ -79,7 +79,7 @@ def test_image_limits_and_component_changes_are_in_the_measurement_identity(imag
     assert image_settings["sdcpp"]["components"]["text_encoder"]!="sha-text_encoder"
 
 
-def test_component_placement_shares_only_a_current_qualified_workflow(image_settings,monkeypatch):
+def test_component_placement_shares_only_a_qualified_workflow_of_this_or_an_earlier_build(image_settings,monkeypatch):
     from types import SimpleNamespace
     import time
     from loadcoach.config import Config
@@ -96,7 +96,8 @@ def test_component_placement_shares_only_a_current_qualified_workflow(image_sett
     library.measured('flux',settings,[12000,7000])
     assert runner.place('flux',settings,set()) is None
     library.measured('flux',settings,[12000,7000],image_profile={'qualified':True,'build':'sdcpp:old'})
-    assert runner.place('flux',settings,set()) is None
+    assert runner.place('flux',settings,set())==(('CUDA0','CUDA1'),[])  # an earlier build's envelope counts until re-qualified
+    assert runner.image_evidence('flux',settings)==({'qualified':True,'build':'sdcpp:old'},True)
     library.measured('flux',settings,[12000,7000],image_profile={'qualified':True,'build':'sdcpp:current'})
     assert runner.place('flux',settings,set())==(('CUDA0','CUDA1'),[])
     library.measured('flux',settings,None,image_profile={'qualified':False,'build':'sdcpp:current'})
@@ -804,6 +805,10 @@ def test_an_unobservable_final_measurement_keeps_the_qualified_profile(image_set
     library.measured('flux', image_settings, None, image_profile={'qualified': False, 'build': 'sdcpp:current', 'runtime_capabilities': {'supported_modes': ['vid_gen']}})
     asyncio.run(runner.measure(server))
     assert library.measurements('flux', image_settings)[0]['image_profile']['runtime_capabilities']
-    server.build = 'sdcpp:rebuilt'  # another build has no evidence yet, so the failure is still recorded
+    server.build = 'sdcpp:rebuilt'  # an earlier build's evidence, pending re-qualification, is kept as well
     asyncio.run(runner.measure(server))
-    assert library.measurements('flux', image_settings)[0]['image_profile'] == {'qualified': False, 'build': 'sdcpp:rebuilt', 'problem': 'Workflow observation unavailable'}
+    assert library.measurements('flux', image_settings)[0]['image_profile']['build'] == 'sdcpp:current'
+    library.measured('flux', image_settings, None, image_profile={'qualified': False, 'build': 'sdcpp:current', 'successful': False})
+    asyncio.run(runner.measure(server))  # with nothing proven, the failure is recorded
+    from mirrorwall.engine import WORKFLOW_CONTRACT
+    assert library.measurements('flux', image_settings)[0]['image_profile'] == {'qualified': False, 'build': 'sdcpp:rebuilt', 'contract': WORKFLOW_CONTRACT, 'problem': 'Workflow observation unavailable'}

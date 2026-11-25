@@ -976,6 +976,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                 notification_targets = delivery_feed.get('targets',[]) if delivery_feed is not None else None
                 for source in ('model failures', 'spending'):
                     alerts.observe(source, coach.get(source) if coach else None, now)
+                # Each node reports its own models; a node that did not answer proves no recovery.
+                alerts.observe('qualification', coach.get('qualification') if coach else None, now, missing_recovers=False)
                 # Turnstile combines every node's spotter; one that did not answer has no evidence, not an empty one.
                 silent = set(machine.get('unavailable_nodes') or ()) if machine else set()
                 if machine and silent and not set(machine.get('nodes') or ()) - silent:
@@ -5307,6 +5309,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if isinstance(found, Response):
             return found
         path = path or request.query_params.get("path", "")
+        found = files_view(found)  # a storage original is used through its node copies, as the Files list counts it
         file = next((one for one in found["files"] if one["path"] == path), None)
         if file is None:
             return page(request, "refused.html", person, status=404, why=f"There is no model file at {path} in any of the places.")

@@ -66,6 +66,7 @@ class Config:
     nvidia_smi: str = "nvidia-smi"  # the program that says what each card holds and what each process uses of it
     card_margin: int = 1024  # MiB of each card that are kept free, on top of what the models on it measured
     model_idle_minutes: float = 0  # optional minimum idle time before making room; 0 replaces idle models immediately
+    auto_qualify: bool = True  # re-qualify image/video models left stale by a runtime change, only while idle
     host_ram_headroom_mib: int = 512  # reserve host RAM; systemd memory ceilings still apply
     host_ram_limit_mib: int = 0  # optional CPU-model RAM budget; 0 uses host/service limits
     disable_ram_offload: bool = True  # disable CUDA unified-memory spill for GPU model servers

@@ -796,8 +796,8 @@ class Runner:
         need = self.needs(settings)
         count = len(need) if isinstance(need, list) else need
         measured = self.models.measure(model, settings)
-        if engine_for(settings).id=='sdcpp' and (not measured or not measured.get('image_profile',{}).get('qualified') or measured['image_profile'].get('build')!=self.known_version(settings)):
-            measured=None
+        if engine_for(settings).id=='sdcpp' and (not measured or not measured.get('image_profile',{}).get('qualified')):
+            measured=None  # a previous build's qualified envelope still counts until this build re-qualifies
         leave = self.replacements(model, configured or self.models.get(model) or settings)
         fixed_split = engine_for(settings).model.fixed_split(settings, count)
         # An automatic multi-card split changes with free memory. It must load on empty cards.
@@ -931,8 +931,8 @@ class Runner:
             del self.servers[old.model]
         measured = self.models.measure(model, settings)
         server = self.servers[model] = Server(model, cards, settings, configured=configured, identity=self.models.identity(model))
-        if engine_for(settings).id=='sdcpp' and (not measured or not measured.get('image_profile',{}).get('qualified') or measured['image_profile'].get('build')!=self.known_version(settings)):
-            measured=None
+        if engine_for(settings).id=='sdcpp' and (not measured or not measured.get('image_profile',{}).get('qualified')):
+            measured=None  # a previous build's qualified envelope still counts until this build re-qualifies
         server.mib = measured["mib"] if measured and len(measured["mib"]) == len(cards) else None
         server.calibrating = bool(cards and len(contexts(settings)) > 1 and not self.models.calibrated(model, settings))
         server.packed = any(set(other.cards) & set(cards) for other in self.servers.values() if other is not server)
@@ -992,6 +992,46 @@ class Runner:
             await self.start(server)
             await self.measure(server)
 
+    def image_evidence(self, model: str, settings: dict) -> tuple[dict, bool]:
+        """The workflow evidence an image or video model is offered on, and whether it is from an earlier build.
+
+        One point is kept per context: a successful run, a failed one or a failed automatic
+        qualification replaces it. Evidence from an earlier build stays usable, flagged, until
+        this build has its own (see `qualify_idle` in app.py).
+        """
+        context = settings.get('flags', {}).get('ctx-size')
+        point = next((one for one in self.models.measurements(model, settings) if one['context'] == context), None)
+        profile = (point or {}).get('image_profile') or {}
+        current = self.known_version(settings)
+        proven = bool(profile.get('qualified') or profile.get('runtime_capabilities'))
+        return profile, bool(proven and current and profile.get('build') != current)
+
+    def carry_evidence(self, settings: dict, identity: str) -> None:
+        """Move evidence recorded under the earlier identity, which also hashed Python files, to this one.
+
+        It carries over only when it was recorded after the configured native programs last
+        changed and no later release could have been running; anything else stays stale.
+        """
+        from mirrorwall.engine import native_installed_at, node_options
+        try:
+            changed, newer = native_installed_at(node_options(self.config))
+        except (OSError, KeyError, ValueError):
+            return
+        if newer:
+            return
+        engine = engine_for(settings)
+        for name in self.models.names():
+            own = self.models.get(name)
+            if not own or engine_for(own).id != engine.id:
+                continue
+            for point in self.models.measurements(name, own):
+                profile = point.get('image_profile') or {}
+                proven = profile.get('qualified') or profile.get('runtime_capabilities')
+                if (proven and profile.get('build') not in (None, identity) and 'carried_from' not in profile
+                        and 'contract' not in profile and (profile.get('at') or point['at']) >= changed):
+                    self.models.measured(name, at_context(own, point['context']), point['mib'],
+                                         image_profile={**profile, 'build': identity, 'carried_from': profile['build']})
+
     async def runtime_versions(self) -> None:
         """Resolve each configured engine that fingerprints its whole runtime, as llama.cpp is at startup.
 
@@ -1005,9 +1045,11 @@ class Runner:
             if engine and hasattr(engine, "build_version") and engine.id not in asked:
                 asked.add(engine.id)
                 try:
-                    await self.version(settings)
+                    identity = await self.version(settings)
                 except (OSError, ValueError):  # an unusable installation is refused, with its reason, when a job asks for it
-                    pass
+                    continue
+                if identity:
+                    self.carry_evidence(settings, identity)
 
     async def version(self, settings: dict | None = None) -> str:
         """Cache the selected engine build by installation, leaving legacy build access intact."""
@@ -1049,18 +1091,18 @@ class Runner:
         """See what a loaded model uses on each of its cards, and keep that with the model. Nothing changes if it cannot be seen."""
         self.sample_resident(server)
         if engine_for(server.settings).id=='sdcpp':
+            from mirrorwall.engine import WORKFLOW_CONTRACT  # evidence names its contract, so a later bump is never carried over
             try:
                 response=await self.client.get(server.url+'/health',headers=server.headers,timeout=3)
                 profile=response.json().get('image_profile') if response.is_success else None
             except (httpx.HTTPError,ValueError):
                 # An observation that cannot be made, such as the final look at a child that has
-                # already stopped, is no evidence against this build's qualified or video profile.
-                # Video evidence is kept without a memory figure, so look at every point, not measure().
-                context=server.settings['flags'].get('ctx-size')
-                prior=next((point.get('image_profile',{}) for point in self.models.measurements(server.model,server.settings) if point['context']==context),{})
-                kept=prior.get('build')==server.build and (prior.get('qualified') or prior.get('runtime_capabilities'))
+                # already stopped, is no evidence against a qualified or video profile, of this
+                # build or, still pending re-qualification, an earlier one.
+                prior,_=self.image_evidence(server.model,server.settings)
+                kept=bool(prior.get('qualified') or prior.get('runtime_capabilities'))
                 if self.models.stored(server.model) and not kept:
-                    self.models.measured(server.model,server.settings,None,image_profile={'qualified':False,'build':server.build,'problem':'Workflow observation unavailable'})
+                    self.models.measured(server.model,server.settings,None,image_profile={'qualified':False,'build':server.build,'contract':WORKFLOW_CONTRACT,'problem':'Workflow observation unavailable'})
                     server.mib=None
                 return
             if profile:
@@ -1074,9 +1116,12 @@ class Runner:
                 server.image_profile=profile
                 if profile.get('qualified') and len(profile.get('gpu_peak_mib',[]))==len(server.cards) and self.models.stored(server.model):
                     reserved=[math.ceil(value)+256 for value in profile['gpu_peak_mib']]
-                    server.mib=self.models.measured(server.model,server.settings,reserved,image_profile={**profile,'build':server.build})
+                    server.mib=self.models.measured(server.model,server.settings,reserved,image_profile={**profile,'build':server.build,'contract':WORKFLOW_CONTRACT})
                 elif self.models.stored(server.model):
-                    self.models.measured(server.model,server.settings,None,image_profile={**profile,'qualified':False,'build':server.build})
+                    evidence,stale=self.image_evidence(server.model,server.settings)
+                    if stale and profile.get('successful') and not profile.get('runtime_capabilities'):
+                        return  # an ordinary image run proves no envelope; the earlier build's stays until re-qualified
+                    self.models.measured(server.model,server.settings,None,image_profile={**profile,'qualified':False,'build':server.build,'contract':WORKFLOW_CONTRACT})
                     server.mib=None
             return
         if not server.cards:

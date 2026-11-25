@@ -16,11 +16,12 @@
 <div class="file-path"><span class="badge bg-azure-lt">{{ facts.what|default('model', true)|replace('_', ' ')|title }}</span><code id="file-path">{{ file.path }}</code></div>
 {{ said_box(said, failed) }}
 {% if file.transfer_failure %}{% call alert('danger', role='alert') %}Transfer failed: {{ file.transfer_failure }}{% endcall %}{% endif %}
+{% set direct = file.used_by|default([]) %}{% set through = (file.used_by_all|default([]))|reject('in', direct)|list %}{% set using = direct + through %}
 {% call kpi_row('File summary', class_='file-summary mb-3') %}
   {{ kpi('File size', file.size|size, name.rsplit('.', 1)[-1]|upper) }}
   {{ kpi('Parameters', facts.size_label or 'Not stated', (facts.layers|string ~ ' layers') if facts.layers else 'Layer count not stated') }}
   {{ kpi('Trained context', '{:,}'.format(facts.trained_context) if facts.trained_context else 'Not stated', 'tokens' if facts.trained_context else 'Not available in metadata') }}
-  {{ kpi('Used by', file.used_by|length, 'Configured models · protected' if file.used_by else 'No configured models') }}
+  {{ kpi('Used by', using|length, 'Configured models · protected' if direct else ('Through node copies' if through else 'No configured models')) }}
 {% endcall %}
 <div class="file-layout">
   <div class="file-identity">
@@ -33,8 +34,9 @@
       ]) }}
     {% endcall %}
     {% call card('Models using this file') %}
-      <div class="d-flex flex-wrap gap-2">{% for model in file.used_by %}<a class="btn btn-outline-primary btn-sm text-break" href="{{ address(model) }}">{{ model }}</a>{% endfor %}</div>
-      {% if file.used_by %}<p class="small text-secondary mt-2 mb-0">Each model keeps its own settings.</p>
+      <div class="d-flex flex-wrap gap-2">{% for model in using %}<a class="btn btn-outline-primary btn-sm text-break" href="{{ address(model) }}">{{ model }}</a>{% endfor %}</div>
+      {% if through %}<p class="small text-secondary mt-2 mb-0" data-file-copies-used>{{ 'These models use' if direct|length + through|length > 1 else 'This model uses' }} copies of this file on {{ file.used_nodes|default([])|join(', ') }}. Each model keeps its own settings.</p>
+      {% elif direct %}<p class="small text-secondary mt-2 mb-0">Each model keeps its own settings.</p>
       {% else %}<p class="small text-secondary mb-2">No model references this file.</p>{% if facts.kind != 'conversion source' %}<a class="btn btn-outline-primary btn-sm" href="/models?file={{ file.path|urlencode }}&trained={{ facts.trained_context or '' }}">Add a model</a>{% endif %}{% endif %}
     {% endcall %}
   </div>
@@ -92,9 +94,9 @@
         {% else %}<p class="small text-secondary mb-0">There is no other configured place. A second is named under [places] in loadcoach.toml.</p>{% endif %}
       {% endif %}
       {% call more('How moving and distribution work') %}Copy keeps the original and existing model paths. Move checks the copy, updates model paths, then removes the original. Loaded models keep answering and use the new path on their next load. Distribution sends the file straight from storage into each node's model storage, and checks each copy's SHA-256.{% endcall %}
-      <details class="file-delete border-top mt-2 pt-2"><summary class="text-danger">Delete file <span class="small text-secondary">· {{ 'protected' if file.used_by else 'unused' }}</span></summary>
+      <details class="file-delete border-top mt-2 pt-2"><summary class="text-danger">Delete file <span class="small text-secondary">· {{ 'protected' if direct else ('copies in use' if through else 'unused') }}</span></summary>
         {% if file.used_by %}<p class="small mt-2 mb-0">It is used by {% for model in file.used_by %}<a href="{{ address(model) }}">{{ model }}</a>{{ ', ' if not loop.last }}{% endfor %}. Remove {{ 'that model' if file.used_by|length == 1 else 'those models' }} first, and then the file can be deleted.</p>
-        {% else %}<p class="small text-secondary mt-2 mb-2">Deleting permanently removes this file and frees {{ file.size|size }}. It can only come back by downloading it again. To confirm, type the file's name.</p>
+        {% else %}{% if through %}<p class="small mt-2 mb-0" data-file-delete-copies>Models on {{ file.used_nodes|default([])|join(', ') }} use their own copies of this file. Deleting this original leaves those copies and models working, but a new copy can then only come from downloading it again.</p>{% endif %}<p class="small text-secondary mt-2 mb-2">Deleting permanently removes this file and frees {{ file.size|size }}. It can only come back by downloading it again. To confirm, type the file's name.</p>
         <form method="post" action="/file" data-hold-refresh>
           <input type="hidden" name="path" value="{{ file.path }}">
           <label for="name" class="form-label">The file's name <small class="text-secondary text-break">{{ name }}</small></label>

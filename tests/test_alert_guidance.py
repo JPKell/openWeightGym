@@ -105,6 +105,7 @@ def test_active_episode_message_refresh_preserves_identity_and_acknowledgement(t
     ('memory kills','compute:oom:kernel:cursor','/output?source=kernel'),
     ('model failures','model:["id","fingerprint","chat"]','/reliability'),
     ('spending','spend:service:provider','/cloud-apis'),
+    ('qualification','qualification:compute:wan','/models/video'),
 ])
 def test_each_alert_family_has_detection_services_and_investigation_links(source, condition, target):
     guide = investigation(dict(source=source, condition=condition))

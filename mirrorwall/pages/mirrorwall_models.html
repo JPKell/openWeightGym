@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/mirrorwall-static/images.css?v=4"><link rel="stylesheet" href="/static/image-studio.css?v=1">
 <script src="/mirrorwall-static/image-profiles.js?v=2" defer></script>{% if video %}<script src="/mirrorwall-static/video-profiles.js?v=1" defer></script>{% endif %}
 {% if studio_manage %}<script src="/static/model-settings.js?v=6" defer></script><script src="/static/model-fields.js?v=1" defer></script><script src="/mirrorwall-static/models.js?v=21" defer></script>{% endif %}
-<script src="/mirrorwall-static/workflows.js?v=8" defer></script>
+<script src="/mirrorwall-static/workflows.js?v=9" defer></script>
 {% endblock %}
 {% block main %}
 <div id="image-studio" data-media-kind="{{ media_kind|default('image') }}" data-video-profiles='{{ video_profiles|default({})|tojson }}' data-manage="{{ 'true' if studio_manage else 'false' }}">
@@ -28,7 +28,7 @@
 </aside>
 <div id="selected-panel">
 {% call card(class_='selected-model', body_class='d-flex flex-wrap justify-content-between align-items-center gap-3') %}
-<div class="min-w-0"><div class="eyebrow mb-2">MODEL SETUP</div><strong id="studio-model-name" class="model-title">Choose a {{ 'video' if video else 'image' }} model</strong><span id="studio-family" class="badge bg-blue-lt ms-2"></span><p id="studio-model-detail" class="small text-secondary mt-2 mb-0"></p></div>
+<div class="min-w-0"><div class="eyebrow mb-2">MODEL SETUP</div><strong id="studio-model-name" class="model-title">Choose a {{ 'video' if video else 'image' }} model</strong><span id="studio-family" class="badge bg-blue-lt ms-2"></span><p id="studio-model-detail" class="small text-secondary mt-2 mb-0"></p><p id="studio-qualification" class="small mt-2 mb-0" role="status" hidden></p><div id="studio-qualification-frames" class="d-flex flex-wrap gap-2 mt-2" hidden></div></div>
 {% if studio_manage %}<div class="d-flex flex-wrap gap-2"><button id="studio-edit-model" class="btn btn-outline-secondary btn-sm" disabled>Edit model setup</button>{% if video %}<button id="studio-qualify" class="btn btn-outline-primary btn-sm" disabled>Run qualification clip</button>{% endif %}</div>{% endif %}
 {% endcall %}
 <p id="studio-unavailable" class="small text-secondary" hidden></p>

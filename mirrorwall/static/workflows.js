@@ -159,6 +159,21 @@
     });
     mark(); showHistory();
   }
+  function showQualification() {
+    const q=available()?.image_workflow?.qualification, box=$('qualification'), frames=$('qualification-frames'), last=q?.last;
+    frames.replaceChildren();
+    const when=last?.at?new Date(last.at*1000).toLocaleString():'';
+    box.textContent=!q?'':q.running?'Re-qualifying on this node now, after a runtime change.':
+      q.failed?q.failed+' Fix the cause, then run a qualification again.':
+      q.pending?'The runtime changed. The previous build’s evidence is used until this node re-qualifies the model while idle.':
+      q.stale?'The runtime changed. The previous build’s evidence is used; automatic re-qualification is off on this node.':
+      last?.ok?`Qualified automatically ${when} in ${last.seconds} s.`:q.carried?'Evidence carried over unchanged from the earlier runtime identity.':'';
+    box.classList.toggle('text-danger',Boolean(q?.failed)); box.classList.toggle('text-secondary',!q?.failed); box.hidden=!box.textContent;
+    for(const frame of last?.ok && !q.stale?last.frames || []:[]) {
+      const image=new Image(); image.src='data:image/jpeg;base64,'+frame; image.alt='Frame from the automatic qualification run'; image.className='rounded border'; image.width=120; frames.append(image);
+    }
+    frames.hidden=!frames.children.length;
+  }
   function select(m) {
     if(saving) return; remember(); if(selected) selections.set(selected.model_id || selected.id,workflowID); selected=m;
     const remembered=selections.get(m.model_id || m.id);
@@ -169,7 +184,7 @@
     $('model-name').textContent=m.id; $('family').textContent=Profiles.spec(profile().family).label;
     $('model-detail').textContent=m.node?`${m.node} · ${m.flags?.model?.split('/').pop() || ''}`:'Image model';
     $('unavailable').hidden=Boolean(available()); $('unavailable').textContent='This model is unavailable in your current image catalogue. Saved drafts are kept; workflow saves need a reachable, permitted model.';
-    $('new-workflow').disabled=!available();
+    $('new-workflow').disabled=!available(); showQualification();
     if(manage) { $('edit-model').disabled=false; document.dispatchEvent(new CustomEvent('weightroom:image-select',{detail:{name:m.id,node:m.node}})); }
     showModels(); showWorkflows(); showEditor();
   }
@@ -186,7 +201,7 @@
       (!params.get('model_node') || m.node===params.get('model_node'))) || models[0];
     if(asked) select(asked); else {
       $('model-name').textContent='Choose an image model'; $('family').textContent=''; $('model-detail').textContent='';
-      $('new-workflow').disabled=true; $('unavailable').hidden=true;
+      $('new-workflow').disabled=true; $('unavailable').hidden=true; $('qualification').hidden=true; $('qualification-frames').hidden=true;
       if(manage) { $('edit-model').disabled=true; document.dispatchEvent(new CustomEvent('weightroom:image-select',{detail:{name:null}})); }
       showModels(); showWorkflows(); showEditor();
     }

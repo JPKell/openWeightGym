@@ -55,7 +55,8 @@
     $('soundtrack-row').hidden=!p.components?.audio_vae;$('soundtrack').disabled=!p.components?.audio_vae;
     $('fps').disabled=p.family==='minimax-h3';if(p.family==='minimax-h3')$('fps').value=24;
     const caps=p.runtime_capabilities, ready=caps?.supported_modes?.includes('vid_gen') && caps?.output_formats_by_mode?.vid_gen?.includes('webm');
-    $('model-note').textContent=ready?'Exclusive GPU · batch priority':'Runtime capabilities are unqualified or WebM is unavailable. Open Video models to qualify this profile.';
+    const pending=p.qualification?.stale?' · runtime changed; previous evidence in use until re-qualified':'';
+    $('model-note').textContent=ready?'Exclusive GPU · batch priority'+pending:(p.qualification?.failed || 'Runtime capabilities are unqualified or WebM is unavailable.')+' Open Video models to qualify this profile.';
     $('generate').disabled=!ready || submitting;
     $('loras').replaceChildren();
     for(const [name,entry] of Object.entries(p.loras || {})) {
@@ -129,7 +130,7 @@
       const active=jobs.find(j=>['queued','in_progress'].includes(j.status));running=active?.id || null;
       const latest=active || jobs[0];$('stop').disabled=!active;
       const rate=profile().envelope?.seconds_per_output_second;
-      $('jobs').textContent=latest?[latest.model,latest.stage,latest.total_steps?`Step ${latest.step} / ${latest.total_steps}`:'',latest.error?.message,latest.queue_position!=null?'Queue position '+latest.queue_position:'',rate?'Estimated '+Math.ceil(rate*Number(latest.seconds))+' s':''].filter(Boolean).join(' · '):'Your next run will appear here.';
+      $('jobs').textContent=latest?[latest.model,latest.stage,latest.total_steps&&!latest.error?`Step ${latest.step} / ${latest.total_steps}`:'',latest.error?.code==='cancelled'?'Stopped':latest.error?.message,latest.queue_position!=null?'Queue position '+latest.queue_position:'',rate?'Estimated '+Math.ceil(rate*Number(latest.seconds))+' s':''].filter(Boolean).join(' · '):'Your next run will appear here.';
       $('preview').hidden=!latest?.preview_b64;if(latest?.preview_b64)$('preview').src='data:image/png;base64,'+latest.preview_b64;
       $('progress').value=latest?.progress || 0;
       gallery();if(!selection && jobs.some(j=>j.asset_id))select(jobs.find(j=>j.asset_id).id);

@@ -81,6 +81,16 @@ depth one for depth maps.
 
 Parts from different model families are not interchangeable. Read the checklist's reason when a component is missing or incompatible. An upscaler is needed when a workflow must enlarge a reference. The editor's drafts remain in page memory across switches; reloading loses unsaved edits. Saving configuration does not establish image quality or memory fit on a node.
 
+## After a runtime change {#runtime-change}
+
+Shared placement needs memory evidence from one run at the model's largest configured size,
+references and upscale. That evidence belongs to the `sd-server`/`sd-cli` build and the
+workflow contract version, not to the application's Python files, so an ordinary update keeps it.
+After a runtime rebuild the model keeps the earlier evidence, flagged in the model studio, and an
+idle node re-qualifies it once with one image at that largest size. The image itself is not kept.
+A failure opens an alert; the rules are those of
+[video models](/docs/model-guides/video-models#when-the-runtime-changes).
+
 ## Related
 
 [Image generation](/docs/web-app/image-generation) · [Files](/docs/model-guides/files)

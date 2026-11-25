@@ -75,6 +75,14 @@ def investigation(row):
         steps = [step('Reliability', '/reliability', 'Find this model, fingerprint and role; inspect issue requests and the recorded exclusion reason.', 'see-log'),
                  step('Model requests', '/requests', 'Open the failed requests and their diagnostics; compare the exact model revision and node.', 'see-log'),
                  step('System logs', '/output', 'Inspect LoadCoach and the relevant model runtime on the affected node.', 'restart-services')]
+    elif source == 'qualification':
+        detection = ('After its image/video runtime changes (new native programs or a new workflow contract), an idle compute node runs one qualification for each image and video model '
+                     'that was qualified before. LoadCoach reports each model through /loadcoach/alert-evidence, and WeightRoom checks it every 30 seconds. '
+                     'A failed run marks that build unqualified and opens this episode; it is not retried by itself on this build. Run qualification clip, or an image at the largest configured size, re-qualifies the model.')
+        services = 'LoadCoach on the named node runs the qualification through the model’s image/video runtime (sd-server); WeightRoom on the control node records the episode.'
+        steps = [step('Video models', '/models/video', 'Select the model; inspect its evidence and the last automatic run, then use Run qualification clip once the cause is fixed.', 'manage-models'),
+                 step('Image models', '/models/images', 'For an image model, inspect its profile and largest configured size, then generate at that size to re-qualify it.', 'manage-models'),
+                 step('System logs → LoadCoach', '/output?source=loadcoach', 'Select the node; inspect the model runtime’s output around the failure.', 'restart-services')]
     elif source == 'spending':
         detection = 'Turnstile compares retained, recorded 24-hour provider/account costs with configured ceilings through /loadcoach/alert-evidence. In-flight requests and unknown costs are excluded; no future-cost reservation is inferred.'
         services = 'Turnstile on the control node owns the provider accounts, user/group ceilings and retained cost totals; WeightRoom records the alert.'

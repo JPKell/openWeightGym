@@ -85,6 +85,7 @@ from loadcoach.models import request_context, Models, check_model, check_order, 
 from loadcoach import waiting as waits
 from loadcoach.loadouts import Conflict as LoadoutConflict, Loadouts
 from loadcoach.media_setup import profile_key as loadouts_profile_key
+from loadcoach.qualification import Qualifier
 from loadcoach.runner import Lock, Refusal, Runner, Ticket
 from loadcoach.groups import ABILITIES, LEVELS
 from loadcoach.front import Accounts
@@ -385,11 +386,13 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         if marks['capabilities'].get('video_generation'):
             from mirrorwall.video import defaults as video_defaults, limits as video_limits
             options=library.get(name)['sdcpp']
-            evidence=next((one.get('image_profile',{}) for one in library.measurements(name,library.get(name)) if one.get('image_profile',{}).get('build')==runner.known_version(library.get(name))),{})
+            evidence,_=runner.image_evidence(name,library.get(name))
+            evidence=evidence if evidence.get('runtime_capabilities') or evidence.get('qualified') else {}
             marks['video_workflow']={'exclusive':True,'family':options['family'],'mode':'vid_gen',
                 'vae_tiling':options.get('vae_tiling',False),'temporal_tiling':options.get('temporal_tiling',False),
                 'defaults':video_defaults(library.get(name)),'limits':video_limits(library.get(name)),
                 'runtime_capabilities':evidence.get('runtime_capabilities',options.get('runtime_capabilities',{})),
+                'qualification':qualifier.state(name,library.get(name)),
                 'envelope':evidence,
                 'split_mode':options.get('split_mode','single'),
                 'components':{key:True for key in options.get('components',{})},
@@ -403,7 +406,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                                      'upscaling':bool(options.get('upscaler')),
                                      'control':bool(options.get('components',{}).get('control_net')),
                                      'references':'image-to-image' if options['family']=='sdxl' else 'conditioning',
-                                     'loras':{key:{'scale':entry.get('scale',1)} for key,entry in options.get('loras',{}).items()}}
+                                     'loras':{key:{'scale':entry.get('scale',1)} for key,entry in options.get('loras',{}).items()},
+                                     'qualification':qualifier.state(name,library.get(name))}
         if marks['capabilities'].get('audio'):
             from soundroom.model import profile as audio_profile
             if marks["engine_id"] == "whispercpp":
@@ -1302,7 +1306,8 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
         """
         if not user.can('manage-settings') and not user.can('mirror-users'):
             return error(403, 'Operational alert evidence requires manage-settings or mirror-users.')
-        return JSONResponse({'spending': []})  # what may be spent is the control node's: the outside services and their keys are there
+        # What may be spent is the control node's: the outside services and their keys are there.
+        return JSONResponse({'spending': [], 'qualification': qualifier.alerts()})
 
     async def lock(request: Request, user: User) -> Response:
         """Take the GPUs for this caller alone, or with a token, extend the lock it already holds.
@@ -2314,6 +2319,16 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 library.run_ended()
             log.add("model", "measured-all", by, caller, done=measuring["done"], failed=sorted(measuring["failed"]), left=measuring["left"], why=measuring["ended"] or "LoadCoach stopped.")
 
+    # ---- re-qualifying image and video profiles that a runtime change left stale ---------------
+    # See loadcoach/qualification.py: once per model and build, only while this node is idle.
+
+    def idle() -> bool:
+        """Nothing queued, running, loading, locked or being measured, and requests are being taken."""
+        measuring_now = "task" in measuring and not measuring["task"].done()
+        return not (draining or runner.running or runner.waiting or runner.loads or runner.holder() or measuring_now)
+
+    qualifier = Qualifier(runner, library, client, config, log, lambda: compute_data_folder() / "qualification", idle)
+
     async def model_measure_all(request: Request, user: User) -> Response:
         """Start measuring every model that has no measure. With `on` false, stop the run that is under way.
         With `names`, only those of the listed models that still need measuring are measured.
@@ -2614,6 +2629,9 @@ def build_app(config: Config, web: httpx.AsyncClient | None = None, front: httpx
                 task = measuring["task"] = asyncio.create_task(measure_all(run["by"], run["caller"]))
                 carrying.add(task)
                 task.add_done_callback(carrying.discard)
+        requalifying = asyncio.create_task(qualifier.run(gate))
+        carrying.add(requalifying)
+        requalifying.add_done_callback(carrying.discard)
         recovery_task = asyncio.create_task(recover_work())
         carrying.add(recovery_task)
         recovery_task.add_done_callback(carrying.discard)

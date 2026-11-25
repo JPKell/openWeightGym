@@ -36,6 +36,8 @@ The matrix has a **Storage** column for the control node's model storage, when i
 
 A node that still has the retired second model folder (`models_storage_folder`) set keeps it working: its folders appear as extra locations named `storage_llm`, `storage_image` and so on. Move their files into model storage from each file's page, then clear the setting.
 
+A file's **Used by** counts the models that load it directly and those that load a node copy of it, as the **in use** mark in the list does; for a Storage original the record names the nodes whose copies are used. A file a model loads directly is protected from deletion. Deleting a Storage original whose copies are in use is allowed, labelled **copies in use**: the copies and their models keep working, but a new copy can then only come from downloading the file again.
+
 Deletion is permanent and requires the current unused-file checks. Check the selected copy and all node usage before confirming it. Metadata is evidence read from the file, not a guarantee that its configuration will load.
 
 ## Related

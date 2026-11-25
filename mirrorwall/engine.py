@@ -17,21 +17,50 @@ from loadcoach.engine_memory import delegated_parent
 from loadcoach.devices import cuda_environment, identity
 
 
+# What qualification evidence proves is bound to the native programs and to this number, not to
+# every Python file: a code-only deploy keeps a model's measured memory and runtime capabilities.
+# Bump it when a change alters what a qualification run measures or the runtime offers: how
+# components are staged or tiled, the native payload or command, a memory-relevant default or
+# limit, the qualifying envelope, or how peaks are metered. Every model then re-qualifies, by
+# itself when its node is idle. tests/test_qualification.py pins the code this covers and fails
+# until this is bumped or the pin is renewed for a change that alters none of those.
+WORKFLOW_CONTRACT = 1
+
+
 @lru_cache(maxsize=16)
-def stamped_build(stamps):
-    """Bind qualification to native programs and the workflow/resource implementation."""
+def stamped_build(stamps, contract=WORKFLOW_CONTRACT):
+    """Content identity of the native programs, with the workflow contract they are run under."""
     value=hashlib.sha256()
     for path,*_ in stamps:
         with open(path,'rb') as stream:
             value.update(hashlib.file_digest(stream,'sha256').digest())
+    value.update(b'workflow-contract:'+str(contract).encode())
     return 'sdcpp:'+value.hexdigest()
 
 
+def native_files(options):
+    """The native server and CLI a session runs, resolved as the configuration names them."""
+    return [Path(shutil.which(options[key]) or options[key]).resolve() for key in ('executable','cli')]
+
+
 def build_identity(options):
-    """Fingerprint both native programs and the workflow/resource implementation."""
-    files=[Path(shutil.which(options[key]) or options[key]).resolve() for key in ('executable','cli')]
-    files += [Path(__file__).with_name(name) for name in ('runtime.py','model.py','requests.py','video.py','telemetry.py')]
+    """Fingerprint both native programs and the workflow contract (see WORKFLOW_CONTRACT)."""
+    files=native_files(options)
     return stamped_build(tuple((str(path),path.stat().st_size,path.stat().st_mtime_ns,path.stat().st_ino) for path in files))
+
+
+def native_installed_at(options):
+    """When the configured native programs last changed, and whether a newer release sits beside them.
+
+    Evidence recorded under the earlier identity, which also hashed Python files, carries over only
+    when it postdates these programs and no later release could have been running instead.
+    """
+    files=native_files(options)
+    changed=max(path.stat().st_mtime for path in files)
+    release=files[0].parent.parent
+    newer=[one for one in release.parent.iterdir() if one!=release and one.is_dir() and (one/'bin').is_dir()
+           and max((child.stat().st_mtime for child in (one/'bin').iterdir()),default=0)>changed] if release.parent.is_dir() else []
+    return changed,bool(newer)
 
 
 def scratch_folder(config):

@@ -145,6 +145,22 @@ async def native_lines(stream):
         yield pending
 
 
+def step_counts(native,logged):
+    """Sampling step and total in the one shape the Videos API reads.
+
+    sd-server reports `{step, total, unit, pass, ...}` (older builds `step`/`total_steps`); a
+    non-step unit, such as decoded frames, or a missing count falls back to the counts parsed from
+    its log, so progress never reads 0 merely because the native object has other names.
+    """
+    native=native if isinstance(native,dict) else {}
+    step=native.get('step',native.get('current'))
+    total=native.get('total_steps',native.get('total'))
+    unit=str(native.get('unit') or 'steps').lower()
+    if (type(step) is int and type(total) is int and 0<=step<=total and total>0 and unit.rstrip('s') in ('step','it','sampling step')):
+        return {'step':step,'total_steps':total}
+    return dict(logged or {})
+
+
 class Native:
     """A subordinate native server whose full lifetime belongs to the admitted wrapper."""
     def __init__(self,job):
@@ -387,9 +403,8 @@ class Native:
                 response.raise_for_status()
                 value=response.json()
                 if video:
-                    progress=value.get('progress') or {}
                     yield {'type':'video_generation.progress','stage':value.get('stage',self.stage),
-                           'progress':progress or self.step_progress,'queue_position':value.get('queue_position',0)}
+                           'progress':step_counts(value.get('progress'),self.step_progress),'queue_position':value.get('queue_position',0)}
                 preview=value.get("preview")
                 if preview and preview.get("b64_json") and preview.get("step")!=previous:
                     previous=preview["step"]

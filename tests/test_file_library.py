@@ -207,6 +207,12 @@ def test_bulk_change_copies_to_a_node_keeps_a_node_file_in_storage_and_removes_a
     assert shown["d.gguf in compute"] == {**shown["d.gguf in compute"], "ticked": True, "locked": False}
     assert shown["own.gguf in compute"]["locked"] and not shown["own.gguf in Storage"]["locked"]
     assert page.count("not in storage</span>") == 1 and "in use</small>" in page
+    # QA-104: the storage original's own record agrees with the list, through the node copy's model.
+    record = browser.get("/file", params={"path": str(used)}).text
+    assert "No model references this file" not in record and "Through node copies" in record
+    assert 'data-file-copies-used' in record and "copies of this file on compute" in record and ">mine</a>" in record
+    assert "copies in use" in record and 'data-file-delete-copies' in record
+    assert "No model references this file" in browser.get("/file", params={"path": str(a)}).text
 
     started = send(browser, page, tick=["a.gguf in compute", "own.gguf in Storage"], clear=["d.gguf in compute"])
     assert started.status_code == 200 and "Started 2 copies and 1 removal." in started.text, started.text[started.text.find("said-box"):][:400]

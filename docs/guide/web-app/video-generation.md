@@ -21,7 +21,7 @@ support disables generation; saving a model alone does not qualify it.
 2. Choose the length, resolution and an offered mode. The effective frame count, frame rate and
    length appear below the controls; frame grids can change the requested length.
 3. Select **Generate**. Runs use the existing batch executor and exclusive GPU admission.
-   **Stop** cancels the active run; it waits for the owned runtime to stop before releasing its GPU.
+   **Stop** cancels the active run; it waits for the owned runtime to stop before releasing its GPU. The queue line then reads **Stopped**; the API reports the job as `failed` with `error.code` `cancelled`.
 4. Select a completed clip in **Your clips**. Use the player, frame arrows, **Download** or
    **Reuse settings**. Unsent per-model drafts, including the chosen resolution, stay in this tab while switching models and as runs finish.
    **Load earlier clips** pages through retained history; model, mode, date and sort controls
