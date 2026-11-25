@@ -75,6 +75,8 @@ def may_use(person: dict, model: str) -> bool:
 # The pieces of one answer that may wait to be spoken. A model's answer arrives a few words at a
 # time, much faster than it is spoken, and its length is bounded by the profile's max_output_tokens.
 ANSWER_PIECES = 4096
+REASONING_ALLOWANCE = 1024  # tokens a direct answer may spend reasoning before it speaks; never spoken
+THOUGHT_TOO_LONG = "Sorry, I ran out of time thinking about that. Could you ask it more simply?"
 
 
 @dataclass
@@ -108,6 +110,7 @@ class Session:
     playback_changed: asyncio.Event = field(default_factory=asyncio.Event)
     last_count: int = 0
     agent_done: bool = False
+    agent_reason: str = ""
     timings: dict = field(default_factory=dict)
     observation: dict = field(default_factory=dict)
     voice: dict | None = None  # a SoundRoom voice the caller chose: its reference recording (base64 WAV) and words
@@ -611,8 +614,11 @@ def build_app(settings: dict, speech=None, client=None, following=None) -> Starl
                     messages = [{"role": "system", "content": call_options.instructions(p)
                                  + "\n" + protocol.PLAYBACK_INSTRUCTIONS}]
                     messages += heard_history(session)
-                    await session.send(dict(type="model.request", turn=turn, observation=observation.wire(), body={
-                        "model": p["model"], "messages": messages, "stream": True, "max_tokens": p.get("max_output_tokens", 128),
+                    answer = p.get("max_output_tokens", 128)
+                    # Some models reason despite enable_thinking=false. Reasoning gets its own
+                    # allowance; the gateway still stops the spoken answer at the output limit.
+                    await session.send(dict(type="model.request", turn=turn, observation=observation.wire(), answer_tokens=answer, body={
+                        "model": p["model"], "messages": messages, "stream": True, "max_tokens": answer + REASONING_ALLOWANCE,
                         "chat_template_kwargs": {"enable_thinking": False}}))
                     await spoken(120)
                 finally:
@@ -623,7 +629,7 @@ def build_app(settings: dict, speech=None, client=None, following=None) -> Starl
                 await speak(session, turn, phrase)
             if turn == session.turn and turn not in session.interrupted:
                 if not any(s["turn"] == turn for s in session.segments.values()):
-                    await speak(session, turn, "Sorry, could you say that again?")
+                    await speak(session, turn, THOUGHT_TOO_LONG if session.agent_reason == "thinking" else "Sorry, could you say that again?")
                 measured = session.timings[turn].event("completed")
                 await session.send(dict(type="turn.completed", turn=turn, latency=measured))
                 print(json.dumps(dict(event="voice.latency", session=session.id, turn=turn, **measured)), flush=True)
@@ -692,6 +698,7 @@ def build_app(settings: dict, speech=None, client=None, following=None) -> Starl
                 session.agent = asyncio.Queue(maxsize=ANSWER_PIECES)
                 session.last_count = 0
                 session.agent_done = False
+                session.agent_reason = ""
                 session.history.append({"turn": turn, "user": final})
                 # Limit even a long call's in-memory history and playback ledger.
                 session.history[:] = session.history[-32:]
@@ -784,6 +791,7 @@ def build_app(settings: dict, speech=None, client=None, following=None) -> Starl
                             if event.get("count") != session.last_count or session.agent_done:
                                 raise ValueError("Invalid agent completion")
                             session.agent_done = True
+                            session.agent_reason = event.get("reason") if event.get("reason") in ("thinking",) else ""
                             session.agent.put_nowait(None)
                         elif kind == "agent.error":
                             await cancel(session, "agent_failed")

@@ -31,6 +31,8 @@ Use HTTPS or localhost and allow microphone access. Your account needs [Voice ac
 
 Model choices are made before a call. Voice discovery checks configured active nodes without waking them, including nodes whose service telemetry omits Voice; an explicit “not installed” report excludes a node. A missing permission, unavailable profile or occupied voice capacity can refuse a start. If settings fail, the notice distinguishes refused access, missing endpoints, timeouts and unavailable Voice compute. Administrators can open **Components** or **Voice settings** from the notice, restore the dependency, then select **Retry settings**. Export a transcript you need to keep; the visible transcript is tab-local.
 
+In a Direct conversation, **reply length** bounds only the spoken answer. A model that reasons before answering, even when asked not to, has a separate 1,024-token thinking allowance that is never spoken. If its reasoning uses all of that and no answer follows, the assistant says “Sorry, I ran out of time thinking about that. Could you ask it more simply?” instead of asking you to repeat yourself; a model that answers without reasoning avoids the delay.
+
 If **Start** fails, the notice says which step failed and what to do: the browser could not start audio processing, microphone access was denied or no matching microphone was found, call playback could not be prepared, or the voice service refused or could not be reached. The browser's own error name follows in brackets for diagnosis. Nothing is recorded and no session is left open, so you can correct the cause and select **Start** again.
 
 ## Related

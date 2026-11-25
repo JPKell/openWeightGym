@@ -568,3 +568,23 @@ def test_long_speech_remains_bounded_without_losing_text():
     phrases.extend(splitter.add("", done=True))
     assert " ".join(phrases) == text
     assert all(len(phrase) <= splitter.limit for phrase in phrases)
+
+
+@pytest.mark.parametrize("voice", ["unused"], indirect=True)
+def test_reasoning_only_reply_says_why_and_has_its_own_allowance(voice):
+    """QA-110: Muse spent a 128-token answer on reasoning, and the caller was asked to repeat themselves."""
+    from voice import service
+    client, _ = voice
+    started(client)
+    with socket(client) as ws:
+        ws.send_json(protocol.start("one", "direct")); ws.receive_json()
+        ws.send_bytes(b"\x10\x27" * 320); ws.send_json({"type": "input.end"})
+        assert ws.receive_json()["type"] == "turn.started"
+        assert ws.receive_json()["type"] == "transcript.final"
+        asked = ws.receive_json()
+        assert asked["type"] == "model.request"
+        assert asked["body"]["max_tokens"] == asked["answer_tokens"] + service.REASONING_ALLOWANCE
+        ws.send_json({"type": "agent.text.done", "turn": asked["turn"], "count": 0, "reason": "thinking"})
+        segment = ws.receive_json()
+        assert segment["type"] == "playback.segment" and segment["text"] == service.THOUGHT_TOO_LONG
+        ws.send_json({"type": "session.cancel"})

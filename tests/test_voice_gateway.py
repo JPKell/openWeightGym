@@ -86,7 +86,21 @@ def test_browser_page_is_refused_until_its_account_is_set(tmp_path):
         assert refused.status_code == 503 and not app.state.browser_sessions
 
 
-def test_desktop_key_goes_only_to_turnstile_which_answers_each_turn(tmp_path):
+HI = [{"choices": [{"delta": {"reasoning_content": "secret reasoning", "content": "Hi there."}}]}]
+THOUGHT_ONLY = [{"choices": [{"delta": {"reasoning_content": "We need to answer briefly."}}]},
+                {"choices": [{"delta": {}, "finish_reason": "length"}]}]
+LONG = [{"choices": [{"delta": {"content": piece}}]} for piece in ("One.", " Two.", " Three.")]
+
+
+@pytest.mark.parametrize("said,answer_tokens,expected", [
+    (HI, None, [{"type": "agent.text.delta", "turn": 1, "count": 1, "text": "Hi there."}, {"type": "agent.text.done", "turn": 1, "count": 1}]),
+    # QA-110: a model that reasons despite enable_thinking=false and never reaches its answer.
+    (THOUGHT_ONLY, 128, [{"type": "agent.text.done", "turn": 1, "count": 0, "reason": "thinking"}]),
+    # The model's limit includes the reasoning allowance; the spoken answer stops at its own.
+    (LONG, 2, [{"type": "agent.text.delta", "turn": 1, "count": 1, "text": "One."}, {"type": "agent.text.delta", "turn": 1, "count": 2, "text": " Two."},
+               {"type": "agent.text.done", "turn": 1, "count": 2}]),
+])
+def test_desktop_key_goes_only_to_turnstile_which_answers_each_turn(tmp_path, said, answer_tokens, expected):
     """A native caller owns its API key; neither cookies nor the app's key replace it. Compute's voice is given only a session token."""
     import asyncio
     import time
@@ -108,8 +122,8 @@ def test_desktop_key_goes_only_to_turnstile_which_answers_each_turn(tmp_path):
         if request.url.path == "/voice/sessions":
             return httpx.Response(200, json={"session_id": "s", "conversation_mode": "direct", "model": "small", "token": "session-token"})
         if request.url.path == "/v1/chat/completions" and json.loads(request.content).get("stream"):
-            said = {"choices": [{"delta": {"reasoning_content": "secret reasoning", "content": "Hi there."}}]}
-            return httpx.Response(200, content="data: " + json.dumps(said) + "\n\ndata: [DONE]\n\n", headers={"content-type": "text/event-stream"})
+            stream = "".join("data: " + json.dumps(one) + "\n\n" for one in said) + "data: [DONE]\n\n"
+            return httpx.Response(200, content=stream, headers={"content-type": "text/event-stream"})
         return httpx.Response(200, json={})
 
     class Compute:
@@ -122,7 +136,7 @@ def test_desktop_key_goes_only_to_turnstile_which_answers_each_turn(tmp_path):
             if isinstance(value, bytes):
                 await self.events.put(json.dumps({"type": "transcript.final", "turn": 1, "text": "Hello"}))
                 body = {"model": "small", "stream": True, "messages": [{"role": "user", "content": "Hello"}]}
-                await self.events.put(json.dumps({"type": "model.request", "turn": 1, "body": body}))
+                await self.events.put(json.dumps({"type": "model.request", "turn": 1, "body": body, **({"answer_tokens": answer_tokens} if answer_tokens else {})}))
         async def __aiter__(self):
             while True:
                 yield await self.events.get()
@@ -155,7 +169,7 @@ def test_desktop_key_goes_only_to_turnstile_which_answers_each_turn(tmp_path):
                 socket.receive_json()
     assert bytes(640) in frames
     words = [json.loads(frame) for frame in frames if isinstance(frame, str) and "agent.text" in frame]
-    assert words == [{"type": "agent.text.delta", "turn": 1, "count": 1, "text": "Hi there."}, {"type": "agent.text.done", "turn": 1, "count": 1}]
+    assert words == expected
     asked = [r for r in requests if r.url.path == "/v1/chat/completions" and json.loads(r.content).get("stream")]
     assert len(asked) == 1 and str(asked[0].url).startswith("http://turnstile:8442/") and asked[0].headers["x-loadcoach-trace"]
     assert any(r.method == "DELETE" and r.url.path.startswith("/voice/sessions/") for r in requests)

@@ -657,7 +657,10 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
 
         async def model_answer_turn(event):
             """Ask the model for one turn of a direct conversation, through turnstile with the caller's key, and hand voice its words as they come."""
-            count, words = 0, []
+            count, words, reasoned, ended = 0, [], False, ""
+            # The model's token limit includes a reasoning allowance; the spoken answer stops at
+            # the voice profile's own output limit, counted in streamed content pieces.
+            answer_tokens = event.get("answer_tokens") if type(event.get("answer_tokens")) is int else None
             try:
                 async with http.stream("POST", turnstile + "/v1/chat/completions", json=event["body"], timeout=120,
                                        headers={"authorization": "Bearer " + key, "X-LoadCoach-Trace": sid}) as response:
@@ -667,11 +670,18 @@ def build_app(settings, client=None, connector=connect, following=None, prompt_c
                         if not line.startswith("data: ") or line[6:] == "[DONE]":
                             continue
                         for choice in json.loads(line[6:]).get("choices", []):
-                            if text := choice.get("delta", {}).get("content"):
+                            delta = choice.get("delta", {})
+                            reasoned = reasoned or bool(delta.get("reasoning_content") or delta.get("reasoning"))
+                            ended = choice.get("finish_reason") or ended
+                            if text := delta.get("content"):
                                 count += 1
                                 words.append(text[:2000])
                                 await upstream.send(json.dumps(dict(type="agent.text.delta", turn=event["turn"], count=count, text=text[:2000])))
-                await upstream.send(json.dumps(dict(type="agent.text.done", turn=event["turn"], count=count)))
+                        if answer_tokens and count >= answer_tokens:
+                            break  # closing the stream ends the request
+                # Reasoning that used the whole allowance leaves nothing to say; voice says why.
+                thinking = not count and reasoned and ended == "length"
+                await upstream.send(json.dumps(dict(type="agent.text.done", turn=event["turn"], count=count, **({"reason": "thinking"} if thinking else {}))))
                 if voice_id:
                     await keep_exchange(event["body"], "".join(words))
             except asyncio.CancelledError:
