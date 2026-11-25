@@ -10294,8 +10294,9 @@ deletes spans control node has acknowledged after an hour instead of keeping its
 
 Routine polls are not kept. `observation_quiet_routes` (default: LoadCoach status, models, facts,
 me, send-log, plugin mirror, observation metrics, alert evidence and downloads, plus
-`/spotter/now`, `/spotter/alert-evidence`, `/voice/ready`, `/turnstile/ready` and every program's
-`/loadcoach/settings/{program}/changes`; `[]` keeps them) names them. A listed route may name a
+`/spotter/now`, `/spotter/alert-evidence`, `/voice/ready`, `/turnstile/ready`, voice-gateway's
+`/voice/prompts`, the console's `/turnstile/machines` and `/turnstile/notification-feed`, compute's
+`/turnstile/log` forwarding and every program's `/loadcoach/settings/{program}/changes`; `[]` keeps them) names them. A listed route may name a
 bounded `{name}` segment, as that template does. Each service
 starts its own ingress span, so the prune sweep (control node, hourly, LOG migration 9) removes a trace
 only when every span succeeded and every service it entered through has a quiet route, once

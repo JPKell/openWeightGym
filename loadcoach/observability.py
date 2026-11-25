@@ -485,6 +485,7 @@ POLL_TEMPLATES = (("/loadcoach/settings/{program}/changes", re.compile(r"/loadco
 POLLS = ("/loadcoach/status", "/v1/models", "/loadcoach/facts", "/loadcoach/me", "/loadcoach/send-log",
          "/loadcoach/plugins/mirror", "/loadcoach/observation-metrics", "/loadcoach/alert-evidence",
          "/loadcoach/downloads", "/spotter/now", "/spotter/alert-evidence", "/voice/ready", "/turnstile/ready",
+         "/voice/prompts", "/turnstile/machines", "/turnstile/notification-feed", "/turnstile/log",
          *(template for template, _ in POLL_TEMPLATES))
 AUDIO_TRANSCRIPTS = ('/v1/audio/transcriptions', '/v1/audio/translations')
 

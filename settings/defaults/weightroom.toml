@@ -101,8 +101,8 @@ audio_transcription_model = ""
 observation_quiet_routes = ["/loadcoach/status", "/v1/models", "/loadcoach/facts", "/loadcoach/me", "/loadcoach/send-log",
                             "/loadcoach/plugins/mirror", "/loadcoach/observation-metrics", "/loadcoach/alert-evidence",
                             "/loadcoach/downloads", "/spotter/now", "/spotter/alert-evidence",
-                            "/voice/ready", "/turnstile/ready",
-                            "/loadcoach/settings/{program}/changes"]
+                            "/voice/ready", "/turnstile/ready", "/voice/prompts", "/turnstile/machines",
+                            "/turnstile/notification-feed", "/turnstile/log", "/loadcoach/settings/{program}/changes"]
 
 # Notification channels are live. Endpoints stay empty until the owner configures them.
 # Webhook JSON uses an HMAC signing secret saved through Settings → Alerts and notifications.

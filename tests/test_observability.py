@@ -1192,6 +1192,7 @@ def test_routine_polls_are_swept_but_polls_inside_real_work_and_failures_are_kep
         assert obs.route_of({"route": other_ports, "path": f"/loadcoach/settings/{program}/changes"}) == changes
     assert obs.route_of({"route": SimpleNamespace(path=changes), "path": "/loadcoach/settings/voice/changes"}) == changes
     assert obs.route_of({"route": other_ports, "path": "/loadcoach/settings/voice/seen"}) == "/{path:path}"
+    assert obs.route_of({"route": other_ports, "path": "/voice/prompts"}) == "/voice/prompts"  # voice-gateway, ~12 a minute
     assert obs.route_of({"route": other_ports, "path": "/loadcoach/settings/Voice%2F../changes"}) == "/{path:path}"
     from loadcoach.observation_store import check_policy
     check_policy(7, 100, 0, [changes])
