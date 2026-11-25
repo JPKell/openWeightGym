@@ -1176,7 +1176,7 @@ def test_a_forwarding_node_lets_go_of_acknowledged_spans_after_an_hour(tmp_path)
 def test_routine_polls_are_swept_but_polls_inside_real_work_and_failures_are_kept(tmp_path):
     from types import SimpleNamespace
     from loadcoach.log import Log
-    from loadcoach.observation_store import ingest, metrics, prune, SETTLE
+    from loadcoach.observation_store import ingest, metrics, policy, prune, SETTLE
     import time
 
     catch_all = SimpleNamespace(path="/loadcoach/{path}")
@@ -1185,6 +1185,19 @@ def test_routine_polls_are_swept_but_polls_inside_real_work_and_failures_are_kep
     other_ports = SimpleNamespace(path="/{path:path}")  # turnstile's Spotter and Voice ports
     assert obs.route_of({"route": other_ports, "path": "/spotter/now"}) == "/spotter/now"
     assert obs.route_of({"route": other_ports, "path": "/spotter/history"}) == "/{path:path}"
+    # Every running program polls its settings changes; through the catch-all that was ~26,000 kept traces a day.
+    changes = "/loadcoach/settings/{program}/changes"
+    assert changes in obs.POLLS and changes in policy(Log(str(tmp_path / "policy.db")).db)["quiet_routes"]
+    for program in ("voice", "voice-gateway", "weightroom", "turnstile"):
+        assert obs.route_of({"route": other_ports, "path": f"/loadcoach/settings/{program}/changes"}) == changes
+    assert obs.route_of({"route": SimpleNamespace(path=changes), "path": "/loadcoach/settings/voice/changes"}) == changes
+    assert obs.route_of({"route": other_ports, "path": "/loadcoach/settings/voice/seen"}) == "/{path:path}"
+    assert obs.route_of({"route": other_ports, "path": "/loadcoach/settings/Voice%2F../changes"}) == "/{path:path}"
+    from loadcoach.observation_store import check_policy
+    check_policy(7, 100, 0, [changes])
+    for unbounded in ("/loadcoach/{path:path}", "/a/{x}y", "/a/{}"):
+        with pytest.raises(ValueError, match="observation_quiet_routes"):
+            check_policy(7, 100, 0, [unbounded])
 
     now = time.time()
     log = Log(str(tmp_path / "log.db"))

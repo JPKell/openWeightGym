@@ -10294,15 +10294,20 @@ deletes spans control node has acknowledged after an hour instead of keeping its
 
 Routine polls are not kept. `observation_quiet_routes` (default: LoadCoach status, models, facts,
 me, send-log, plugin mirror, observation metrics, alert evidence and downloads, plus
-`/spotter/now`, `/spotter/alert-evidence`, `/voice/ready` and `/turnstile/ready`; `[]` keeps them)
-names them. Each service
+`/spotter/now`, `/spotter/alert-evidence`, `/voice/ready`, `/turnstile/ready` and every program's
+`/loadcoach/settings/{program}/changes`; `[]` keeps them) names them. A listed route may name a
+bounded `{name}` segment, as that template does. Each service
 starts its own ingress span, so the prune sweep (control node, hourly, LOG migration 9) removes a trace
 only when every span succeeded and every service it entered through has a quiet route, once
 nothing in it has arrived for ten minutes; its ID goes into `observation_quiet` for a day so late
 spans from compute are not stored. A chat request whose routing looks up `/loadcoach/facts` also
 entered turnstile on `/v1/...`, so it is kept. Swept spans still count in the minute metrics.
-Turnstile's catch-all routes record these exact paths instead of their template; other paths
-keep the template, so no IDs are recorded. On a copy of two days of the control node's spans (2026-10-22),
+Turnstile's catch-all routes record these exact paths instead of their template, and a program's
+settings-changes poll as `/loadcoach/settings/{program}/changes`; other paths keep the template, so
+no IDs are recorded. The span writer runs its hourly expiry and sweep with a 60 s statement timeout
+(writes stay at 250 ms). Before 2026-11-25 the 250 ms bound cancelled it every hour on PostgreSQL
+(`observation_retention_failed`, `QueryCanceled`), so only Turnstile's daily pass ran, and the
+settings-changes polls (about 26,000 traces a day, 2026-11-25) were never recognised. On a copy of two days of the control node's spans (2026-10-22),
 the sweep removed 139,470 polls (200,000 of 791,941 spans, 130 MB of 519 MB) and kept all 573
 chat/completion traces; 103,393 more traces (419,000 spans), mostly Spotter and Voice readiness
 polls through turnstile's other ports, carried only the template and are recognised once the new

@@ -264,6 +264,7 @@ def source_metadata(database: Database) -> dict:
 
 
 def _source_metadata(connection) -> dict:
+    """Read the evidence a restore is checked against, inside the caller's transaction."""
     from .health import postgresql_identity
 
     return {

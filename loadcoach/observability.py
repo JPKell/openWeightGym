@@ -479,9 +479,13 @@ def event_context() -> dict:
 
 # Routine polls. A catch-all route records these exact paths instead of its template, so a trace
 # can be recognised as a poll wherever it enters; they hold no IDs, so nothing private is kept.
+# Polls whose path names a program: a catch-all route records the template, never the path, so
+# every program's poll shares one bounded label (each running program asks every 10-20 s).
+POLL_TEMPLATES = (("/loadcoach/settings/{program}/changes", re.compile(r"/loadcoach/settings/[a-z][a-z0-9-]{0,39}/changes")),)
 POLLS = ("/loadcoach/status", "/v1/models", "/loadcoach/facts", "/loadcoach/me", "/loadcoach/send-log",
          "/loadcoach/plugins/mirror", "/loadcoach/observation-metrics", "/loadcoach/alert-evidence",
-         "/loadcoach/downloads", "/spotter/now", "/spotter/alert-evidence", "/voice/ready", "/turnstile/ready")
+         "/loadcoach/downloads", "/spotter/now", "/spotter/alert-evidence", "/voice/ready", "/turnstile/ready",
+         *(template for template, _ in POLL_TEMPLATES))
 AUDIO_TRANSCRIPTS = ('/v1/audio/transcriptions', '/v1/audio/translations')
 
 
@@ -490,7 +494,13 @@ def route_of(scope) -> str:
     route = scope.get("route")
     path = scope.get("path", "")
     if route and getattr(route, "path", None):
-        return path if "{path" in route.path and path in (*POLLS, *AUDIO_TRANSCRIPTS, '/v1/rerank') else route.path[:128]
+        if "{path" in route.path:
+            if path in (*POLLS, *AUDIO_TRANSCRIPTS, '/v1/rerank'):
+                return path
+            for template, pattern in POLL_TEMPLATES:
+                if pattern.fullmatch(path):
+                    return template
+        return route.path[:128]
     if path in AUDIO_TRANSCRIPTS:
         return path
     if path in (

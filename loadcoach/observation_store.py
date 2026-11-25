@@ -6,6 +6,7 @@ slow/full disks can lose optional data but cannot block the ASGI request loop.
 
 from __future__ import annotations
 
+import re
 import json
 import math
 import threading
@@ -40,6 +41,7 @@ MAX_RECORDS = 4096
 MAX_BYTES = 8 * 1024 * 1024
 # What control node keeps, set from weightroom.toml and stored beside the spans so every writer and pruner
 # of that store follows it. A store without a policy row (compute's spool) keeps everything.
+PRUNE_TIMEOUT_MS = 60000  # the writer's hourly expiry and sweep; ordinary writes stay at 250 ms
 POLICY = {"keep_days": 7, "success_percent": 100, "max_spans": 0, "quiet_routes": list(POLLS)}
 SPOOL_SECONDS = 3600  # how long a node keeps spans control node has acknowledged
 
@@ -65,7 +67,7 @@ def set_policy(connection, keep_days: int, success_percent: int, max_spans: int,
 def check_policy(keep_days, success_percent, max_spans, quiet_routes=tuple(POLLS)) -> None:
     """Refuse a span policy outside its ranges, naming the setting."""
     if (not isinstance(quiet_routes, (list, tuple)) or len(quiet_routes) > 64
-            or any(not isinstance(one, str) or not LABEL.fullmatch(one.replace("/", ".") or "x") or not one.startswith("/")
+            or any(not isinstance(one, str) or not LABEL.fullmatch(re.sub(r"(?<=/)\{[a-z_]{1,32}\}(?=/|$)", "x", one).replace("/", ".") or "x") or not one.startswith("/")
                    for one in quiet_routes)):
         raise ValueError("observation_quiet_routes must be a list of at most 64 routes, each starting with /")
     if type(keep_days) is not int or not 1 <= keep_days <= 30:
@@ -594,7 +596,13 @@ class Store:
                                 )
                         if time.monotonic() - self.last_prune >= 3600:
                             self.last_prune = time.monotonic()
+                            postgresql = self.source.engine == "postgresql"
                             try:
+                                if postgresql:
+                                    # Writes keep their 250 ms bound; an hour of expiry and the poll
+                                    # sweep on a large table cannot, and were cancelled every hour.
+                                    connection.execute(f"SET statement_timeout = {PRUNE_TIMEOUT_MS}")
+                                    connection.commit()
                                 prune(connection, forwarded=self.forwarded)
                             except Exception as problem:
                                 from loadcoach.observability import diagnostic
@@ -603,6 +611,11 @@ class Store:
                                     "observation_retention_failed",
                                     type(problem).__name__,
                                 )
+                            finally:
+                                if postgresql:
+                                    connection.rollback()
+                                    connection.execute("SET statement_timeout = 250")
+                                    connection.commit()
                     except Exception as problem:
                         with self.lock:
                             self.dropped[

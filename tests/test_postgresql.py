@@ -791,3 +791,37 @@ def test_writes_during_a_live_backup_do_not_fail_its_restore_check(postgres, tmp
     assert verified["counts"]["public.busy_spans"] == 1
     with postgres.connection() as connection:
         assert connection.execute("SELECT COUNT(*) FROM busy_spans").fetchone()[0] == 2
+
+
+def test_the_span_writers_hourly_retention_is_not_held_to_its_write_timeout(postgres, monkeypatch):
+    """Writes stay bounded at 250 ms; expiry and the poll sweep get longer (cancelled hourly on the control node)."""
+    import time
+    from loadcoach import observability as obs
+    from loadcoach.log import Log
+    from loadcoach.observation_store import Store
+
+    seen = []
+
+    def slow_prune(connection, **_):
+        seen.append(connection.execute("SHOW statement_timeout").fetchone()[0])
+        connection.execute("SELECT pg_sleep(0.4)")  # longer than a write may take
+
+    failures = []
+    monkeypatch.setattr("loadcoach.observation_store.prune", slow_prune)
+    monkeypatch.setattr("loadcoach.observability.diagnostic", lambda *args, **_: failures.append(args))
+    log = Log(postgres)
+    store = Store(postgres)
+    store.last_prune = time.monotonic() - 3601
+    span = {"request_id": "a" * 32, "trace_id": "b" * 32, "service": "fixture", "operation": "http",
+            "owner_id": "alice", "at": time.time(), "seconds": 0.01, "outcome": "success"}
+    try:
+        store.submit({**span, "id": "c" * 16})
+        assert store.flush()
+        store.submit({**span, "id": "d" * 16})  # the writer's next batch still runs under 250 ms
+        assert store.flush()
+    finally:
+        store.close()
+    assert seen == ["1min"] and failures == []
+    with postgres.connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM observation_spans").fetchone()[0] == 2
+    log.db.close()
