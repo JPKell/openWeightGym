@@ -764,3 +764,30 @@ def test_postgresql_request_endings_use_existing_parent_index(postgres, monkeypa
         return (node.get('Index Name') == 'events_request_parent' and "'of'" in node.get('Index Cond', '')) or any(indexed(child) for child in node.get('Plans', []))
     assert indexed(plan[0]['Plan']), json.dumps(plan, indent=2)
     log.db.close()
+
+
+def test_writes_during_a_live_backup_do_not_fail_its_restore_check(postgres, tmp_path, monkeypatch):
+    """Counts and dump share one snapshot; counted first and dumped later, busy stores never verified."""
+    from db import postgresql_tools
+
+    with postgres.connection() as connection:
+        connection.execute("CREATE TABLE busy_spans (n INTEGER)")
+        connection.execute("INSERT INTO busy_spans VALUES (1)")
+        connection.commit()
+    real = postgresql_tools._run
+
+    def written_meanwhile(database, name, arguments, **options):
+        if name == "pg_dump":
+            with postgres.connection() as writer:
+                writer.execute("INSERT INTO busy_spans VALUES (2)")
+                writer.commit()
+        return real(database, name, arguments, **options)
+
+    monkeypatch.setattr(postgresql_tools, "_run", written_meanwhile)
+    archive = tmp_path / "busy.pgdump"
+    metadata, dump = postgresql_tools.snapshot_dump(postgres, archive)
+    assert metadata["counts"]["public.busy_spans"] == 1 and dump["restore_list_entries"]
+    verified = postgresql_tools.verify_custom_restore(postgres, archive, metadata)
+    assert verified["counts"]["public.busy_spans"] == 1
+    with postgres.connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM busy_spans").fetchone()[0] == 2

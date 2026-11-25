@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .database import Database
-from .postgresql_tools import dump_custom, redacted_error, source_metadata, verify_custom_restore
+from .postgresql_tools import redacted_error, snapshot_dump, source_metadata, verify_custom_restore
 
 
 @dataclass(frozen=True)
@@ -170,8 +170,7 @@ def backup_store(store: RecoveryStore, payload: Path) -> dict:
         verification = restored
         server_version = sqlite3.sqlite_version
     else:
-        source_meta = source_metadata(database)
-        dump = dump_custom(database, target)
+        source_meta, dump = snapshot_dump(database, target)
         verification = verify_custom_restore(database, target, source_meta)
         tools = dump["tools"]
         method = dump["method"]

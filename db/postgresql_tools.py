@@ -164,11 +164,12 @@ def tool_version(name: str) -> str:
     return answer.stdout.strip().splitlines()[0][:200]
 
 
-def dump_custom(database: Database, output: Path) -> dict:
+def dump_custom(database: Database, output: Path, *, snapshot: str | None = None) -> dict:
     """Write a custom-format logical backup and return non-secret tool metadata."""
     output.parent.mkdir(parents=True, exist_ok=True)
     output.chmod(0o600) if output.exists() else None
-    _run(database, "pg_dump", ["--format=custom", "--no-owner", "--no-privileges", f"--file={output}"])
+    pinned = [f"--snapshot={snapshot}"] if snapshot else []
+    _run(database, "pg_dump", ["--format=custom", "--no-owner", "--no-privileges", *pinned, f"--file={output}"])
     output.chmod(0o600)
     listing = restore_list(database, output)
     return {
@@ -258,15 +259,41 @@ def _versions(connection) -> dict[str, int]:
 
 def source_metadata(database: Database) -> dict:
     """Read server, schema-version and exact-count evidence from the source store."""
+    with database.connection(connect_timeout=10) as connection:
+        return _source_metadata(connection)
+
+
+def _source_metadata(connection) -> dict:
     from .health import postgresql_identity
 
+    return {
+        "source_identity": postgresql_identity(connection),
+        "server_version": str(connection.execute("SHOW server_version").fetchone()[0]),
+        "schema_versions": _versions(connection),
+        "counts": _counts(connection),
+    }
+
+
+def snapshot_dump(database: Database, output: Path) -> tuple[dict, dict]:
+    """Count and dump one exported snapshot, so writes during a live backup cannot fail verification.
+
+    Counting first and dumping afterwards read two moments: on a busy store (request spans arrive
+    every second) the restored counts never matched. pg_dump --snapshot reads the counting
+    transaction's snapshot, which stays open until the dump ends.
+    """
+    import psycopg
+
     with database.connection(connect_timeout=10) as connection:
-        return {
-            "source_identity": postgresql_identity(connection),
-            "server_version": str(connection.execute("SHOW server_version").fetchone()[0]),
-            "schema_versions": _versions(connection),
-            "counts": _counts(connection),
-        }
+        raw = connection.raw
+        raw.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
+        raw.read_only = True
+        try:
+            snapshot = str(connection.execute("SELECT pg_export_snapshot()").fetchone()[0])
+            metadata = _source_metadata(connection)
+            dump = dump_custom(database, output, snapshot=snapshot)
+        finally:
+            raw.rollback()
+    return metadata, dump
 
 
 def verify_custom_restore(database: Database, archive: Path, expected: dict) -> dict:
