@@ -242,7 +242,8 @@ def test_alert_store_is_backed_up_and_exported(desk, tmp_path, backup_keys):
     browser, _, _ = desk
     sign_in(browser, 'jordan')
     browser.app.state.alerts.observe('GPU temperature', [condition(key='gpu:0')])
-    assert browser.post('/backups/create', data={'node': 'front'}).status_code == 200
+    from test_weightroom import finished_backup
+    finished_backup(browser, browser.post('/backups/create', data={'node': 'front'}))
     assert 'weightroom.alerts' in browser.get('/backups').text
     exported = browser.get('/databases/front/alerts.db/dump?table=operational_alerts')
     assert exported.status_code == 200 and 'GPU hot' in exported.text

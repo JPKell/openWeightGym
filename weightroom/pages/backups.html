@@ -1,7 +1,7 @@
 {% extends "frame.html" %}
 {% from "parts.html" import card, said_box, page_header, alert, empty_row %}
 {% from "navigation_parts.html" import pills, pill_link %}
-{% from "backup_parts.html" import inventory %}
+{% from "backup_parts.html" import inventory, jobs as backup_jobs %}
 {% block title %}Backups · openWeightGym{% endblock %}
 {% block main %}
 {{ page_header("Backup and restore", lead="Each node keeps its own encrypted backups. Choose the nodes to protect and inspect their recovery archives.") }}
@@ -10,13 +10,14 @@
 {{ pill_link('All nodes', '/backups', not selected_node) }}
 {% for node in backup_nodes %}{{ pill_link(node.label, '/backups?node=' ~ (node.name|urlencode), selected_node == node.name) }}{% endfor %}
 {% endcall %}
+{{ backup_jobs(jobs, selected_node) }}
 {% call card('Create backups') %}
 <form method="post" action="/backups/create" data-hold-refresh>
 <fieldset><legend class="form-label small">Nodes to back up</legend><div class="d-flex flex-wrap gap-3 mb-3">
 {% for node in backup_nodes %}<label class="form-check"><input class="form-check-input" type="checkbox" name="node" value="{{ node.name }}"{% if node.protection.ready %} checked{% else %} disabled{% endif %}><span class="form-check-label">{{ node.label }}{% if not node.protection.ready %} · needs setup{% endif %}</span></label>{% endfor %}
 </div></fieldset>
 <button class="btn btn-primary"{% if not backup_nodes|selectattr('protection.ready')|list %} disabled{% endif %}>Back up selected nodes</button>
-<p class="form-hint mt-2 mb-0">Each selected node is checked independently. Successful backups are kept if another node fails.</p>
+<p class="form-hint mt-2 mb-0">Each selected node is checked independently, in the background: a large store takes minutes. Successful backups are kept if another node fails.</p>
 </form>
 <form method="post" action="/backups/retention" class="row g-2 align-items-end mt-3" data-hold-refresh>
 <div class="col-sm"><label for="retention" class="form-label">Backups to keep per node</label><input id="retention" name="retention" type="number" min="0" max="100" step="1" value="{{ retention }}" class="form-control"></div><div class="col-sm-auto"><button class="btn btn-outline-primary">Save retention</button></div>

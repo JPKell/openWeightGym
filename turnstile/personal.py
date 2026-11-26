@@ -26,6 +26,11 @@ def notices(users, log, user, spending=None):
                               "OR (kind='soundroom' AND what='completed')) ORDER BY at DESC,id DESC LIMIT 25", (user.name, since))
         items += [dict(id='job-' + str(number), at=at, title=('Audio generation' if kind == 'soundroom' else 'Batch') + ' ' + what,
                        category='Work', href='/account/logs', unread=at > seen) for number, at, kind, what in rows]
+    # A manual backup's outcome reaches whoever started it, whatever alert_jobs says: they asked for it then.
+    rows = log.db.execute("SELECT id,at,what FROM events WHERE \"user\"=? AND at>=? AND kind='backup' "
+                          "AND what IN ('completed','failed') ORDER BY at DESC,id DESC LIMIT 25", (user.name, since))
+    items += [dict(id='backup-' + str(number), at=at, title='Backup ' + what, category='Work', href='/backups',
+                   unread=at > seen) for number, at, what in rows]
     # Avoid a full accounting report when this account has no applicable advisory policy.
     from loadcoach.users import key_identity
     owned_keys = {key_identity(verifier) for (verifier,) in users.db.execute(

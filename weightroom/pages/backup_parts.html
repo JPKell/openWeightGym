@@ -1,4 +1,4 @@
-{% from "parts.html" import empty_row, more %}
+{% from "parts.html" import card, empty_row, more %}
 
 {% macro inventory(rows, root='') %}
 {% call more('Recovery inventory') %}
@@ -9,4 +9,21 @@
 {% else %}{% call empty_row(4) %}Inventory unavailable.{% endcall %}{% endfor %}
 </tbody></table></div>
 {% endcall %}
+{% endmacro %}
+
+{# Manual backups run in the background. While one runs, this panel polls ?part=jobs; when the
+   watched jobs end, that answer reloads the page with their result (see backup_jobs_fragment). #}
+{% macro jobs(jobs, selected_node='') %}
+{% set running = jobs|selectattr('finished', 'none')|list %}
+<div id="backup-jobs"{% if running %} hx-get="/backups?part=jobs{% for job in running %}&amp;watch={{ job.id|urlencode }}{% endfor %}{% if selected_node %}&amp;node={{ selected_node|urlencode }}{% endif %}" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+{% if jobs %}{% call card('Backup jobs', hint='Running now and finished since the console last started.') %}
+{% if running %}<p class="small text-secondary" role="status">{{ running|length }} running. This page updates when {{ 'it finishes' if running|length == 1 else 'they finish' }}, and a notice is sent. Without JavaScript, reload to check.</p>{% endif %}
+<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Started</th><th>Nodes</th><th>Started by</th><th>Result</th></tr></thead><tbody>
+{% for job in jobs %}<tr><td><code>{{ job.id }}</code><div class="small text-secondary">{{ job.started|timestamp }}</div></td>
+<td>{% for node in job.nodes %}<div>{{ 'Control node' if node.name == 'front' else node.name }} <span class="badge {{ 'bg-green-lt' if node.state == 'verified' else 'bg-red-lt' if node.state == 'failed' else 'bg-blue-lt' }}">{{ node.state }}</span>{% if node.why %}<div class="small text-secondary">{{ node.why }}</div>{% endif %}</div>{% endfor %}</td>
+<td>{{ job.by }}</td>
+<td>{% if job.finished is none %}Running…{% else %}{{ 'Failed' if job.failed else 'Verified' }}<div class="small text-secondary">{{ job.finished|timestamp }}</div>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endcall %}{% endif %}
+</div>
 {% endmacro %}

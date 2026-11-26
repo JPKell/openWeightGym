@@ -2980,10 +2980,33 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         result.extend(await asyncio.gather(*(read(name) for name in person.me.get('machines', []))))
         return result
 
+    # Manual backups run after the request returns: a large store takes minutes, longer than a proxy
+    # waits. Jobs live in this process; a restart while one runs leaves no archive (the writer stops).
+    backup_jobs: dict[str, dict] = {}
+    backup_tasks: set = set()
+
+    def backup_job_list() -> list[dict]:
+        """Newest first: running jobs, then the last ten finished in this process."""
+        return sorted(backup_jobs.values(), key=lambda job: job['started'], reverse=True)
+
+    def backup_jobs_fragment(request: Request, person: Person) -> Response:
+        """Poll running manual backups; once the watched jobs end, reload the page with their results."""
+        watched = [backup_jobs[one] for one in request.query_params.getlist('watch') if one in backup_jobs]
+        if watched and not any(job['finished'] is None for job in watched):
+            failed = any(job['failed'] for job in watched)
+            query = {'said': ' '.join(job['message'] for job in watched), **({'failed': '1'} if failed else {})}
+            if request.query_params.get('node'):
+                query['node'] = request.query_params['node']
+            return Response(status_code=204, headers={'HX-Redirect': '/backups?' + urlencode(query), 'Cache-Control': 'no-store'})
+        return page(request, 'backup_jobs.html', person, jobs=backup_job_list(),
+                    selected_node=request.query_params.get('node', ''))
+
     async def backups_page(request: Request, person: Person, said: str = "", failed: bool = False) -> Response:
         """Show every node's independent recovery archive and verification status."""
         if 'manage-settings' not in person.can:
             return page(request, 'refused.html', person, status=403, why='You may not manage backups.')
+        if request.query_params.get('part') == 'jobs':
+            return backup_jobs_fragment(request, person)
         nodes = await backup_nodes(person)
         selected = request.query_params.get('node', '')
         backups = [{**row, 'node': node['name'], 'node_label': node['label']}
@@ -2991,8 +3014,10 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
                    if not selected or selected == node['name']]
         backups.sort(key=lambda row: (row.get('created_at', 0), row['id']), reverse=True)
         return page(request, 'backups.html', person, status=400 if failed else 200,
-                    said=said or request.query_params.get('said', ''), failed=failed,
-                    retention=settings.backup_retention, backup_nodes=nodes, backups=backups, selected_node=selected)
+                    said=said or request.query_params.get('said', ''),
+                    failed=failed or (not said and request.query_params.get('failed') == '1'),
+                    retention=settings.backup_retention, backup_nodes=nodes, backups=backups, selected_node=selected,
+                    jobs=backup_job_list())
 
     async def backup_create(request: Request, person: Person) -> Response:
         """Back up selected peers independently; a failed node never discards successes."""
@@ -3005,27 +3030,55 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             return await backups_page(request, person, 'Choose at least one node to back up.', failed=True)
         if any(name not in configured for name in selected):
             return await backups_page(request, person, 'Choose configured nodes for backup.', failed=True)
+        busy = sorted({node['name'] for job in backup_jobs.values() if job['finished'] is None
+                       for node in job['nodes']} & set(selected))
+        if busy:
+            return await backups_page(request, person, 'A backup is already running on ' + ', '.join(busy) + '.', failed=True)
         identifier = new_backup_id()
-        async def create(name):
+        job = {'id': identifier, 'by': person.name, 'started': time.time(), 'finished': None, 'failed': False,
+               'message': '', 'nodes': [{'name': name, 'state': 'running', 'why': ''} for name in selected]}
+        for old in [one for one in backup_job_list() if one['finished'] is not None][9:]:
+            backup_jobs.pop(old['id'], None)
+        backup_jobs[identifier] = job
+        task = asyncio.create_task(run_backup_job(job, person.key))
+        backup_tasks.add(task)
+        task.add_done_callback(backup_tasks.discard)
+        where = {'said': 'Backup started. This page updates when it finishes, and you get a notice.'}
+        if request.query_params.get('node'):
+            where['node'] = request.query_params['node']
+        return go('/backups?' + urlencode(where))
+
+    async def run_backup_job(job: dict, key: str) -> None:
+        """Back up each selected node independently, then record the outcome for notices and the page."""
+        identifier = job['id']
+        async def create(node):
             """Create the selected node's backup through its existing owning-node operation."""
+            name = node['name']
             try:
                 if name == 'front':
                     await scheduled_front_backup(identifier, settings.backup_retention)
                 else:
                     answer = await ask('POST', '/turnstile/machines/' + quote(name, safe='') + '/databases/backups',
-                                       person.key, json={'id': identifier, 'retention': settings.backup_retention})
+                                       key, json={'id': identifier, 'retention': settings.backup_retention})
                     if not answer.is_success:
-                        return name, answer.json().get('error', {}).get('message', 'Backup failed.')
-                return name, ''
+                        raise RuntimeError(answer.json().get('error', {}).get('message', 'Backup failed.'))
+                node['state'] = 'verified'
             except (OSError, ValueError, RuntimeError, sqlite3.Error, subprocess.SubprocessError, MachineOff, httpx.HTTPError) as problem:
-                return name, str(problem)
-        outcomes = await asyncio.gather(*(create(name) for name in selected))
-        completed = [name for name, why in outcomes if not why]
-        errors = [name + ': ' + why for name, why in outcomes if why]
-        message = ('Verified backups: ' + ', '.join(completed) + '. ' if completed else '') + '; '.join(errors)
-        if errors:
-            return await backups_page(request, person, message, failed=True)
-        return go('/backups?said=' + quote(message))
+                node['state'], node['why'] = 'failed', str(problem)
+            except Exception as problem:  # never leave the page polling a job that cannot finish
+                node['state'], node['why'] = 'failed', 'Backup stopped unexpectedly (' + type(problem).__name__ + ').'
+        await asyncio.gather(*(create(node) for node in job['nodes']))
+        completed = [node['name'] for node in job['nodes'] if node['state'] == 'verified']
+        errors = [node['name'] + ': ' + node['why'] for node in job['nodes'] if node['state'] == 'failed']
+        job['message'] = ('Verified backups: ' + ', '.join(completed) + '. ' if completed else '') + '; '.join(errors)
+        job['failed'], job['finished'] = bool(errors), time.time()
+        try:
+            observation_log.add('backup', 'failed' if errors else 'completed', job['by'], backup=identifier,
+                                nodes=[node['name'] for node in job['nodes']],
+                                failed=[node['name'] for node in job['nodes'] if node['state'] == 'failed'])
+        except Exception as problem:
+            from loadcoach.observability import diagnostic
+            diagnostic('backup_notice_not_recorded', type(problem).__name__)
 
     async def backup_retention(request: Request, person: Person) -> Response:
         """Validate and save the configured recovery-set retention limit."""

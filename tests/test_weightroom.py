@@ -1800,6 +1800,20 @@ def test_the_batches_page_shows_how_far_each_has_got_and_gives_its_answers(live_
     assert "No batches." in browser.get("/batches").text
 
 
+def finished_backup(browser, started):
+    """Follow a manual backup from its start until its polling answer reloads the page with the result."""
+    import html, time
+    assert started.status_code == 200 and "Backup started." in started.text, started.text
+    identifier = re.search(r'<div id="backup-jobs".*?<code>([^<]+)</code>', started.text, re.S).group(1)
+    for _ in range(600):
+        polled = browser.get("/backups?part=jobs&watch=" + identifier, headers={"HX-Request": "true"})
+        if polled.status_code == 204:
+            return browser.get(polled.headers["HX-Redirect"])
+        assert polled.status_code == 200 and 'hx-trigger="every 3s"' in polled.text
+        time.sleep(0.05)
+    raise AssertionError("the backup never finished")
+
+
 def test_backup_page_creates_a_verified_backup_on_each_selected_node(desk, tmp_path, backup_keys):
     backup_keys.configure(tmp_path / 'backups')
     backup_keys.configure(tmp_path / 'data/backups')
@@ -1811,8 +1825,12 @@ def test_backup_page_creates_a_verified_backup_on_each_selected_node(desk, tmp_p
     assert "No backups on the selected nodes." in page.text and "No verified backup yet" in page.text
 
     # Each node backs up its own data; the control node and compute each get a verified archive with the same identifier.
-    created = browser.post("/backups/create", data={"node": ["front", "compute"]})
+    created = finished_backup(browser, browser.post("/backups/create", data={"node": ["front", "compute"]}))
     assert created.status_code == 200 and "Verified backups: front, compute." in created.text
+    assert "alert-success" in created.text and 'hx-trigger="every 3s"' not in created.text  # nothing left to poll
+    # Whoever started it gets a Work notice, whatever their long-running-work preference says.
+    notices = browser.get("/account/notices").json()["items"]
+    assert any(item["title"] == "Backup completed" and item["href"] == "/backups" for item in notices), notices
     assert created.text.count("verified") >= 2 and "before compression" in created.text
     previews = list(dict.fromkeys(re.findall(r'href="(/backups/[^"]+)"[^>]*>Restore preview</a>', created.text)))
     assert sorted(link.rsplit("=", 1)[1] for link in previews) == ["compute", "front"]
@@ -1830,14 +1848,15 @@ def test_backup_post_cannot_bypass_permissions_or_encryption_setup(desk, tmp_pat
     sign_in(browser, 'jordan')
     assert 'Choose at least one node' in browser.post('/backups/create').text
     assert browser.post('/backups/create', data={'node': 'elsewhere'}).status_code == 400
-    refused = browser.post('/backups/create', data={'node': ['front', 'compute']})
-    assert refused.status_code == 400 and 'front: Backup encryption is not configured' in refused.text
+    refused = finished_backup(browser, browser.post('/backups/create', data={'node': ['front', 'compute']}))
+    assert 'alert-danger' in refused.text and 'front: Backup encryption is not configured' in refused.text
     assert 'compute: Compute backup failed: Backup encryption is not configured' in refused.text
     assert not list((tmp_path / 'backups').glob('*/archive*')) and not list((tmp_path / 'data/backups').glob('*/archive*'))
     # Nodes are independent: the control node's key lets its backup succeed while compute's is still refused.
     backup_keys.configure(tmp_path / 'data/backups')
-    partial = browser.post('/backups/create', data={'node': ['front', 'compute']})
-    assert partial.status_code == 400 and 'Verified backups: front.' in partial.text and 'compute: Compute backup failed' in partial.text
+    partial = finished_backup(browser, browser.post('/backups/create', data={'node': ['front', 'compute']}))
+    assert 'alert-danger' in partial.text and 'Verified backups: front.' in partial.text and 'compute: Compute backup failed' in partial.text
+    assert any(item["title"] == "Backup failed" for item in browser.get("/account/notices").json()["items"])
     assert list((tmp_path / 'data/backups').glob('*/archive*')) and not list((tmp_path / 'backups').glob('*/archive*'))
 
 def test_database_page_lists_front_tables_and_exports_restorable_sql(desk, tmp_path):
@@ -1872,7 +1891,7 @@ def test_store_health_permissions_backup_age_and_compute_outage(desk, tmp_path, 
     page = browser.get("/databases")
     assert "Store health and backup age" in page.text and "No matching verified archive" in page.text
     assert "default_weightroom_chat" in page.text and "weightroom.chat" in page.text
-    assert browser.post("/backups/create", data={"node": ["front", "compute"]}).status_code == 200
+    finished_backup(browser, browser.post("/backups/create", data={"node": ["front", "compute"]}))
     page = browser.get("/databases")
     assert '>fresh</span>' in page.text and "hours old" in page.text
     compute.off = True
