@@ -265,8 +265,11 @@ you have added a model, choose it as the conversation model under **Settings →
 
 ## Behind a reverse proxy
 
-When a web server such as nginx on the console machine serves the console over HTTPS, install or
-repair the console with `--behind-proxy` (`owg repair --behind-proxy` for one already installed).
+When a web server such as nginx on the console machine serves the console over HTTPS, answer
+**yes** when the installer asks whether a reverse proxy will serve the console (it asks for
+**Everything on this machine** and **Console only**, and again under **Customize**), or pass
+`--behind-proxy` (`owg repair --behind-proxy` for one already installed). Unattended `--yes`
+installs assume no proxy unless the option is given.
 It sets three values at the top of `settings/weightroom.toml`:
 
 | Setting | Value | Why |

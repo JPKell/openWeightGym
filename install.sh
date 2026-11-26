@@ -963,6 +963,7 @@ game_plan() {
       ui_die 'Model engines need a model runner on this machine.' 'Choose everything on this machine or install the engine on your GPU node'
   else choose_runtimes; fi
   choose_platform_services
+  choose_proxy
   choose_wake
 
   while true; do
@@ -1027,6 +1028,24 @@ detect_wake() {
   if ! valid_wake_mac "$DETECTED_WAKE_MAC" || [[ $DETECTED_WAKE_MAC == 00:00:00:00:00:00 ]]; then DETECTED_WAKE_MAC=''; fi
   line=$(ip -o -4 addr show dev "$interface" 2>/dev/null | awk '{for (i=1;i<NF;i++) if ($i=="brd") {print $(i+1); exit}}') || true
   if valid_wake_address "$line"; then DETECTED_WAKE_ADDRESS=$line; fi
+}
+
+# Whether a reverse proxy on this machine serves the console over HTTPS (--behind-proxy).
+# choose_proxy again asks even when it was given, for Customize.
+choose_proxy() {
+  if [[ $TOPOLOGY == compute ]]; then BEHIND_PROXY=0; return 0; fi
+  if [[ ${1:-} != again ]]; then
+    [[ -z ${PLAN_GIVEN[BEHIND_PROXY]:-} ]] || return 0
+    ((ASSUME_YES)) && return 0
+  fi
+  local default=n
+  ((BEHIND_PROXY)) && default=y
+  ui_info "Behind a proxy, the console listens only on 127.0.0.1 and its sign-in cookie travels only over HTTPS."
+  if ui_confirm 'Will a reverse proxy on this machine (such as nginx) serve the console over HTTPS?' "$default"; then
+    BEHIND_PROXY=1
+  else
+    BEHIND_PROXY=0
+  fi
 }
 
 choose_wake() {
@@ -1221,6 +1240,7 @@ customize() {
     DIR=$(realpath -m -- "${answer/#\~/$HOME}")
   fi
   ui_confirm "Install speech recognition and voices too? (large; for the Voice pages)" n && VOICE=1 || VOICE=0
+  choose_proxy again
   if ((SYSTEM)); then
     DATABASE=sqlite
   else

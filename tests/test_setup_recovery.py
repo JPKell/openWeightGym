@@ -1363,3 +1363,37 @@ def test_a_console_behind_its_proxy_listens_on_loopback_new_or_existing(tmp_path
     told = tomllib.loads(existing.read_text())
     assert (told['host'], told['secure'], told['trusted_proxies']) == ('127.0.0.1', True, ['127.0.0.1'])
     assert told['port'] == 8440 and told['turnstile']['host'] == '0.0.0.0'
+
+
+@pytest.mark.parametrize('topology,flags,reply,expected', [
+    ('front', '', 'yes', '1'), ('all', '', 'no', '0'), ('compute', '', 'yes', '0'),
+    ('front', '--behind-proxy', 'no', '1'),  # given on the command line: not asked
+    ('front', '--yes', 'yes', '0'),          # unattended: the default, no proxy
+])
+def test_console_installs_ask_whether_a_proxy_serves_them(tmp_path, topology, flags, reply, expected):
+    answer = shell(tmp_path, script_functions('install.sh') + f'''
+parse_arguments {flags}
+TOPOLOGY=$TEST_TOPOLOGY
+source "$TEST_REPO/scripts/lib/ui.sh"
+ui_init
+ui_confirm() {{ printf 'asked\\n'; [[ $REPLY_PROXY == yes ]]; }}
+choose_proxy
+printf 'proxy=%s' "$BEHIND_PROXY"
+''', env={'TEST_TOPOLOGY': topology, 'REPLY_PROXY': reply})
+    assert answer.returncode == 0, answer.stderr
+    assert answer.stdout.endswith('proxy=' + expected)
+    assert ('asked' in answer.stdout) is (topology != 'compute' and not flags)
+
+
+def test_customize_asks_about_the_proxy_again_with_the_current_answer_as_default(tmp_path):
+    answer = shell(tmp_path, script_functions('install.sh') + '''
+parse_arguments --behind-proxy
+TOPOLOGY=front
+source "$TEST_REPO/scripts/lib/ui.sh"
+ui_init
+ui_confirm() { printf 'default=%s\\n' "$2"; return 1; }
+choose_proxy again
+printf 'proxy=%s' "$BEHIND_PROXY"
+''')
+    assert answer.returncode == 0, answer.stderr
+    assert answer.stdout.splitlines()[-2:] == ['default=y', 'proxy=0']
