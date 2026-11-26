@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openWeightGym"
-version = "0.3.1"
+version = "0.3.2"
 description = "A self-hosted gym for open-weight models, chat, media, voice and benchmarks."
 readme = "docs/README.md"
 requires-python = ">=3.13"
