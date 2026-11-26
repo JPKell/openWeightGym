@@ -27,8 +27,10 @@ def notices(users, log, user, spending=None):
         items += [dict(id='job-' + str(number), at=at, title=('Audio generation' if kind == 'soundroom' else 'Batch') + ' ' + what,
                        category='Work', href='/account/logs', unread=at > seen) for number, at, kind, what in rows]
     # A manual backup's outcome reaches whoever started it, whatever alert_jobs says: they asked for it then.
+    # Only the console's job event lists its nodes; each node's own backup event would repeat the notice.
     rows = log.db.execute("SELECT id,at,what FROM events WHERE \"user\"=? AND at>=? AND kind='backup' "
-                          "AND what IN ('completed','failed') ORDER BY at DESC,id DESC LIMIT 25", (user.name, since))
+                          "AND what IN ('completed','failed') AND " + log.json_value('detail', 'nodes') +
+                          " IS NOT NULL ORDER BY at DESC,id DESC LIMIT 25", (user.name, since))
     items += [dict(id='backup-' + str(number), at=at, title='Backup ' + what, category='Work', href='/backups',
                    unread=at > seen) for number, at, what in rows]
     # Avoid a full accounting report when this account has no applicable advisory policy.

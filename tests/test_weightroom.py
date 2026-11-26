@@ -1856,7 +1856,9 @@ def test_backup_post_cannot_bypass_permissions_or_encryption_setup(desk, tmp_pat
     backup_keys.configure(tmp_path / 'data/backups')
     partial = finished_backup(browser, browser.post('/backups/create', data={'node': ['front', 'compute']}))
     assert 'alert-danger' in partial.text and 'Verified backups: front.' in partial.text and 'compute: Compute backup failed' in partial.text
-    assert any(item["title"] == "Backup failed" for item in browser.get("/account/notices").json()["items"])
+    # One notice per job: a node's own backup failure event does not add another.
+    failed = [item for item in browser.get("/account/notices").json()["items"] if item["title"] == "Backup failed"]
+    assert len(failed) == 2, failed
     assert list((tmp_path / 'data/backups').glob('*/archive*')) and not list((tmp_path / 'backups').glob('*/archive*'))
 
 def test_database_page_lists_front_tables_and_exports_restorable_sql(desk, tmp_path):

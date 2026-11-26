@@ -117,6 +117,19 @@ def test_notices_respect_owner_preferences_read_state_and_sensitivity(desk):
     assert server.get('/account/notices').json()['items'] == []
 
 
+def test_a_manual_backup_gives_one_notice_even_when_a_node_records_its_own_failure(desk):
+    server, switch, users = desk
+    sign_in(server, 'pat')
+    log = switch.front.state.log
+    # In production every node writes to the shared events table, so the compute node's own record lands here too.
+    log.add('backup', 'failed', 'pat', backup='set-1', machine='compute', why='Backup failed; inspect the owning node.')
+    log.add('backup', 'failed', 'pat', backup='set-1', nodes=['front', 'compute'], failed=['compute'])
+    log.add('backup', 'completed', 'jordan', backup='set-2', nodes=['front'], failed=[])
+    users.choose('pat', {'alert_security':False, 'alert_jobs':False, 'alert_spending':False})
+    items = server.get('/account/notices').json()['items']
+    assert [item['title'] for item in items] == ['Backup failed'], items
+
+
 def test_preference_export_and_audio_partial_updates_exclude_credentials(desk):
     server, _, users = desk
     sign_in(server, 'pat')
