@@ -160,8 +160,11 @@ status() {
   ui_section "Where to reach it"
   local port host
   if programs | grep -qx weightroom; then
-    port=$(setting weightroom port); port=${port:-8440}
-    ui_kv Console "http://localhost:$port  ·  http://$HOST_ADDRESS:$port"
+    port=$(setting weightroom port); port=${port:-8440} host=$(setting weightroom host)
+    case ${host:-0.0.0.0} in
+      127.0.0.1|::1|localhost) ui_kv Console "http://localhost:$port  ·  other devices through your proxy" ;;
+      *) ui_kv Console "http://localhost:$port  ·  http://$HOST_ADDRESS:$port" ;;
+    esac
   fi
   if programs | grep -qx turnstile; then
     ui_kv API "http://$HOST_ADDRESS:8442/v1"

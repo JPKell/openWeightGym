@@ -587,6 +587,24 @@ def configure(config: Path, service: str, engine: str, dsn_values: list[str]) ->
 
 # The examples are written for an account called `you` with the checkout in its home folder.
 # Older examples named the original author's folders; they are still understood.
+# A console served only through a reverse proxy on this machine, over HTTPS (install --behind-proxy):
+# it listens on loopback alone, its cookie travels only over HTTPS, and the proxy's forwarded client
+# address is believed.
+BEHIND_PROXY = {"host": "127.0.0.1", "secure": True, "trusted_proxies": ["127.0.0.1"]}
+
+
+def behind_proxy(config: Path) -> bool:
+    """Set an existing console's settings for a local HTTPS proxy, keeping a private copy; True when changed."""
+    text = config.read_text()
+    for key, value in BEHIND_PROXY.items():
+        text = set_toml_value(text, key, value)
+    made = tomllib.loads(text)
+    wrong = [key for key, value in BEHIND_PROXY.items() if made.get(key) != value]
+    if wrong:
+        raise ValueError(f"{config.name}: {', '.join(wrong)} could not be set")
+    return save_settings(config, text, "behind-proxy")
+
+
 TEMPLATE_PATHS = re.compile(r"/home/you/openWeightGym|/home/owgadmin/ai/openWeightGym|/home/owgadmin/ai/suite|/home/owgadmin/weightroom|/home/you|/home/owgadmin")
 
 # Turnstile keeps public ports 8442-8445. The control node ToolLocker always stays on loopback 9443;
@@ -774,6 +792,9 @@ def main() -> int:
     rendering.add_argument("--voice", action="store_true")
     rendering.add_argument("--voice-model", default="")
     rendering.add_argument("--platform-services", default="images,speech,audio,downloads,classifiers")
+    rendering.add_argument("--behind-proxy", action="store_true")
+    proxied = subparsers.add_parser("behind-proxy")
+    proxied.add_argument("--config", type=Path, required=True)
     voice = subparsers.add_parser("voice")
     voice.add_argument("--root", type=Path, required=True)
     voice.add_argument("--services", required=True)
@@ -798,6 +819,13 @@ def main() -> int:
         except (ValueError, OSError, subprocess.TimeoutExpired) as problem:
             print(f"PostgreSQL recovery failed: {problem}", file=sys.stderr)
             return 2
+    if args.command == "behind-proxy":
+        try:
+            print("changed" if behind_proxy(args.config) else "unchanged")
+            return 0
+        except (ValueError, OSError, tomllib.TOMLDecodeError) as problem:
+            print(f"Could not set the console behind its proxy: {problem}", file=sys.stderr)
+            return 2
     if args.command == "voice":
         return prepare_voice(args.root.resolve(), args.services.split(","))
     if args.command == "render":
@@ -811,6 +839,8 @@ def main() -> int:
             args.machine_name, args.voice, args.voice_model)
         if args.example.stem == 'weightroom':
             values.update({key: service in selected for key, service in SERVICE_SETTINGS.items()})
+            if args.behind_proxy:
+                values.update(BEHIND_PROXY)
             if args.wake_mac:
                 from weightroom.pairing import wake_values
                 wake = wake_values(args.wake_mac, args.wake_address)

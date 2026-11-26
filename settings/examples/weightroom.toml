@@ -91,10 +91,14 @@ alert_allowance_percent = 0
 #                            "/voice/ready", "/turnstile/ready"]
 
 # Address and port weightroom listens on. 0.0.0.0 means every address this machine has, which is
-# what lets it be reached on the home network and through Tailscale alike.
+# what lets it be reached on the home network and through Tailscale alike. Behind a reverse proxy on
+# this machine, use 127.0.0.1 so the console is reached only through it (install --behind-proxy).
 host = "0.0.0.0"
 
 port = 8440
+
+# Set this once weightroom is served over HTTPS. The browser then sends its cookie only that way.
+# secure = true
 
 # Optional web-chat model door. Defaults to local turnstile when [turnstile] is configured,
 # otherwise compute.
@@ -339,6 +343,3 @@ toollocker_url = "http://127.0.0.1:9443"
 # wake_address = "192.168.1.255"
 # With voice installed, include 8445 in ports above. Readiness probes never wake compute.
 # voice_port = 8445
-
-# Set this once weightroom is served over HTTPS. The browser then sends its cookie only that way.
-# secure = true

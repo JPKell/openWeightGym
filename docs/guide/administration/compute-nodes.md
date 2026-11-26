@@ -16,7 +16,7 @@ Inspect and configure the exact node that owns a model or service.
 
 ## Options
 
-A permitted superuser can use **+ Add compute node → Make a pairing code**. Follow the command shown by the existing installation workflow; [Installation](/docs/operations/installation) is its maintained operating guide.
+A permitted superuser can use **+ Add compute node → Make a pairing code**. Follow the command shown by the existing installation workflow; [Installation](/docs/operations/installation) is its maintained operating guide. When the console listens only on 127.0.0.1 behind its HTTPS proxy, the command joins at the HTTPS address you opened this page at, and the node is told to reach the gateway at the console's network address on port 8442.
 
 ## Limits and troubleshooting
 

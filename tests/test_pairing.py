@@ -125,7 +125,8 @@ def test_compute_nodes_generates_installer_command_and_old_deploy_routes_are_rem
     assert 'action="/compute-nodes/pair"' in page.text
     generated = browser.post('/compute-nodes/pair')
     assert generated.status_code == 200
-    assert 'id="pairing-command"' in generated.text and '--join http://testserver:8440 --code ' in generated.text
+    # This console listens on its 127.0.0.1 default, so a page opened at another name came through a proxy.
+    assert 'id="pairing-command"' in generated.text and '--join https://testserver --code ' in generated.text
 
 
 def test_pairing_over_http_gives_the_key_once_and_turns_away_guessing(console, monkeypatch):
@@ -133,7 +134,7 @@ def test_pairing_over_http_gives_the_key_once_and_turns_away_guessing(console, m
     monkeypatch.setattr(pairing, "restart_later", lambda *units, **kwargs: restarts.append(units) or True)
     compute_off = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(503, json={"error": {"message": "off"}})),
                                     base_url="http://front")
-    settings = Settings(compute="http://127.0.0.1:9442", key="lc_front", data=str(console.parent.parent / "data"), path=str(console))
+    settings = Settings(host="0.0.0.0", compute="http://127.0.0.1:9442", key="lc_front", data=str(console.parent.parent / "data"), path=str(console))
     code, _ = pairing.make_code(console.parent.parent / "data", "sam")
     with TestClient(build_app(settings, compute_off, tools_client=compute_off, voice_client=compute_off),
                     client=("10.0.0.5", 50000), base_url="http://console.lan:8440") as node:
@@ -197,3 +198,35 @@ def test_voice_pairing_supplies_a_scoped_front_key_and_updates_gateway_routing(c
     assert key != "the-machine-key" and 8445 in turnstile_settings(console).ports
     assert tomllib.loads(gateway.read_text())["voice"] == "http://10.0.0.5:8445"
     assert restarts == [(("turnstile.service", "voice-gateway.service", "weightroom.service"),)]
+
+
+def test_a_console_behind_its_proxy_pairs_through_https_and_hands_out_its_network_address(console, monkeypatch):
+    monkeypatch.setattr(pairing, "restart_later", lambda *units, **kwargs: True)
+    monkeypatch.setattr(pairing, "lan_address", lambda: "10.0.0.2")
+    # The join command names the HTTPS address the browser used; a console reachable directly keeps its own port.
+    assert pairing.proxied_console_url("127.0.0.1", "console.example", None) == "https://console.example"
+    assert pairing.proxied_console_url("127.0.0.1", "console.example", 8443) == "https://console.example:8443"
+    assert pairing.proxied_console_url("127.0.0.1", "127.0.0.1", 8440) == ""  # opened on the machine itself
+    assert pairing.proxied_console_url("0.0.0.0", "console.example", None) == ""
+    offline = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(503)), base_url="http://front")
+    settings = Settings(host="127.0.0.1", compute="http://127.0.0.1:9442", key="lc_front",
+                        data=str(console.parent.parent / "data"), path=str(console))
+    code, _ = pairing.make_code(console.parent.parent / "data", "sam")
+    # Through the proxy the node's request comes from loopback, so the address it offers is used; and
+    # the gateway it is told is on the network, not at the proxy's public name.
+    with TestClient(build_app(settings, offline, tools_client=offline, voice_client=offline),
+                    client=("127.0.0.1", 50000), base_url="https://console.example") as node:
+        answer = node.post("/pair", json={"code": code, "name": "gpu-box", "address": "10.0.0.5"})
+    assert answer.status_code == 200 and answer.json()["front"] == "http://10.0.0.2:8442"
+    assert tomllib.loads(console.read_text())["machines"]["gpu-box"]["compute"] == "http://10.0.0.5:8442"
+
+
+def test_pair_command_needs_the_proxy_address_for_a_loopback_console(console):
+    from typer.testing import CliRunner
+    from weightroom.app import cli
+    console.write_text('host = "127.0.0.1"\n' + FRONT_ONLY)
+    refused = CliRunner().invoke(cli, ["--config", str(console), "pair"])
+    assert refused.exit_code != 0 and "--url" in refused.output
+    made = CliRunner().invoke(cli, ["--config", str(console), "pair", "--url", "https://console.example/"])
+    assert made.exit_code == 0, made.output
+    assert "--join https://console.example --code" in made.output

@@ -66,6 +66,8 @@ Usage: install.sh [options]        (curl ... | bash -s -- [options])
   --power-control         let the console put this machine to sleep, restart or switch it off
   --wake-mac MAC          let the console wake this computer using this network MAC address
   --wake-address IP       Wake broadcast destination (default: 255.255.255.255)
+  --behind-proxy          console: served only through a reverse proxy on this machine, over
+                          HTTPS (listens on 127.0.0.1, HTTPS-only cookie, trusts the proxy)
   --no-linger             let the services stop when you log out
   --no-browser            do not open the console in a browser at the end
   --ref BRANCH            which branch of openWeightGym to fetch (default: main)
@@ -201,7 +203,7 @@ parse_arguments() {
   COMPUTE_URL='' LLAMA=auto DATABASE=sqlite VOICE=0 LINGER_WANTED=1 BROWSER=1 POWER_RULE=0
   ACTION='' PASSTHROUGH=() JOIN_URL='' PAIR_CODE='' PAIRED=0 MACHINE_NAME=''
   VOICE_KEY_FILE='' VOICE_KEY=''
-  WAKE_MAC='' WAKE_ADDRESS=255.255.255.255
+  WAKE_MAC='' WAKE_ADDRESS=255.255.255.255 BEHIND_PROXY=0
   PLATFORM_SERVICES=images,speech,audio,downloads,classifiers
   ADD_SERVICES='' STRATA_ACTION=keep STRATA_HOST_RAM_MIB=22528
   SDCPP_ACTION=keep SDCPP_BACKEND=cuda AUDIOCPP_ACTION=keep AUDIOCPP_BACKEND=cuda WHISPERCPP_ACTION=keep WHISPERCPP_BACKEND=cuda
@@ -250,6 +252,7 @@ parse_arguments() {
       --power-control) POWER_RULE=1; PLAN_GIVEN[POWER_RULE]=1; shift ;;
       --wake-mac) WAKE_MAC=$2; PLAN_GIVEN[WAKE_MAC]=1; shift 2 ;;
       --wake-address) WAKE_ADDRESS=$2; PLAN_GIVEN[WAKE_ADDRESS]=1; shift 2 ;;
+      --behind-proxy) BEHIND_PROXY=1; PLAN_GIVEN[BEHIND_PROXY]=1; shift ;;
       --no-model) shift ;;  # no model is downloaded any more; still accepted so older commands work
       --no-linger) LINGER_WANTED=0; PLAN_GIVEN[LINGER_WANTED]=1; shift ;;
       --no-browser) BROWSER=0; shift ;;
@@ -296,6 +299,7 @@ parse_arguments() {
   [[ -z $WAKE_MAC ]] || valid_wake_mac "$WAKE_MAC" || ARGUMENT_ERROR='--wake-mac needs a MAC address such as 00:11:22:33:44:55.'
   valid_wake_address "$WAKE_ADDRESS" || ARGUMENT_ERROR='--wake-address needs an IPv4 address.'
   [[ -z ${PLAN_GIVEN[WAKE_ADDRESS]:-} || -n $WAKE_MAC ]] || ARGUMENT_ERROR='--wake-address also needs --wake-mac.'
+  ((!BEHIND_PROXY)) || [[ $TOPOLOGY != compute && -z $JOIN_URL ]] || ARGUMENT_ERROR='--behind-proxy is for the console: a GPU node serves no web pages.'
   [[ $TOPOLOGY != front || -z $WAKE_MAC ]] || ARGUMENT_ERROR='Configure Wake on the GPU node when installing it, or in Compute nodes on the console.'
   if [[ $TOPOLOGY == front && ( $STRATA_ACTION == install || $SDCPP_ACTION == install || $AUDIOCPP_ACTION == install || $WHISPERCPP_ACTION == install || $CLASSIFIER_TOOLS_ACTION == install ) ]]; then
     ARGUMENT_ERROR='Engines need a model runner: choose --topology all or compute.'
@@ -305,11 +309,12 @@ parse_arguments() {
 }
 
 # The console's address as typed, made into its URL: 192.168.1.10 becomes http://192.168.1.10:8440.
+# An https:// address is a proxy in front of the console, on its own port (443 unless given).
 console_url() {
   local url=$1
   [[ $url == http://* || $url == https://* ]] || url=http://$url
   url=${url%/}
-  [[ ${url#*://} == *:* ]] || url=$url:8440
+  [[ $url == https://* || ${url#*://} == *:* ]] || url=$url:8440
   printf '%s' "$url"
 }
 
@@ -414,7 +419,7 @@ resume_settings() {
     MACHINE_NAME:machine_name JOIN_URL:join_url STRATA_ACTION:strata STRATA_HOST_RAM_MIB:strata_host_ram_mib \
     SDCPP_ACTION:sdcpp SDCPP_BACKEND:sdcpp_backend AUDIOCPP_ACTION:audiocpp AUDIOCPP_BACKEND:audiocpp_backend WHISPERCPP_ACTION:whispercpp WHISPERCPP_BACKEND:whispercpp_backend \
     CLASSIFIER_TOOLS_ACTION:classifier_tools \
-    PLATFORM_SERVICES:platform_services WAKE_MAC:wake_mac WAKE_ADDRESS:wake_address; do
+    PLATFORM_SERVICES:platform_services WAKE_MAC:wake_mac WAKE_ADDRESS:wake_address BEHIND_PROXY:behind_proxy; do
     variable=${pair%%:*} key=${pair#*:}
     value=$(receipt_get "$key")
     [[ -z $value || -n ${PLAN_GIVEN[$variable]:-} ]] || printf -v "$variable" '%s' "$value"
@@ -695,6 +700,7 @@ reinstall() {
   services_from_receipt
   local options=(--root "$DIR" --embedded --non-interactive --yes --database keep --uv "$UV")
   [[ -z $SERVICES ]] || options+=(--services "$SERVICES")
+  ((!BEHIND_PROXY)) || options+=(--behind-proxy)
   ui_section "Setting up" "Packages, settings and services"
   local rc=0
   as_owner "$DIR/scripts/install-suite.sh" "${options[@]}" || rc=$?
@@ -1186,6 +1192,7 @@ show_plan() {
   fi
   lines+=("${C_MUTED}Programs     ${C_RESET}$(plain_programs)")
   [[ $TOPOLOGY == compute ]] || lines+=("${C_MUTED}Platform     ${C_RESET}$PLATFORM_SERVICES")
+  ((!BEHIND_PROXY)) || [[ $TOPOLOGY == compute ]] || lines+=("${C_MUTED}Console      ${C_RESET}only through your HTTPS proxy on this machine (listens on 127.0.0.1)")
   lines+=("${C_MUTED}Data         ${C_RESET}$([[ $DATABASE == keep ]] && printf 'keep existing stores' || { [[ $DATABASE == sqlite ]] && printf 'SQLite, on this machine' || printf 'PostgreSQL, on this machine'; })")
   if [[ $TOPOLOGY != front ]]; then
     lines+=("${C_MUTED}Engine       ${C_RESET}llama.cpp · $(backend_label "$engine")")
@@ -1529,6 +1536,7 @@ setting_up() {
   [[ -n ${LLAMA_SERVER:-} ]] && options+=(--llama-server "$LLAMA_SERVER")
   [[ -n $MACHINE_NAME ]] && options+=(--machine-name "$MACHINE_NAME")
   [[ -z $WAKE_MAC ]] || options+=(--wake-mac "$WAKE_MAC" --wake-address "$WAKE_ADDRESS")
+  ((!BEHIND_PROXY)) || options+=(--behind-proxy)
   [[ $DATABASE == postgresql ]] && options+=(--install-postgresql --provision-postgresql)
   if [[ $DATABASE == postgresql ]]; then ui_sudo "installing and setting up PostgreSQL"; fi
   local rc=0
@@ -1687,6 +1695,7 @@ write_receipt() {
     echo "power_rule=$POWER_RULE"
     echo "wake_mac=${WAKE_MAC:-}"
     echo "wake_address=${WAKE_ADDRESS:-255.255.255.255}"
+    echo "behind_proxy=${BEHIND_PROXY:-0}"
     echo "front_url=$FRONT_URL"
     echo "compute_url=$COMPUTE_URL"
     echo "machine_name=$MACHINE_NAME"
@@ -1794,12 +1803,18 @@ finale() {
   case "$TOPOLOGY" in
     all|front)
       lines+=("${C_MUTED}Console     ${C_RESET}${C_GOLD}$console_local${C_RESET}")
-      [[ $HOST_ADDRESS != 127.0.0.1 ]] && lines+=("${C_MUTED}            ${C_RESET}$console_lan  ${C_DIM}(other devices)${C_RESET}")
+      if ((BEHIND_PROXY)); then
+        lines+=("${C_MUTED}            ${C_RESET}${C_DIM}other devices: the HTTPS address your proxy serves${C_RESET}")
+      elif [[ $HOST_ADDRESS != 127.0.0.1 ]]; then
+        lines+=("${C_MUTED}            ${C_RESET}$console_lan  ${C_DIM}(other devices)${C_RESET}")
+      fi
       lines+=("${C_MUTED}Sign in     ${C_RESET}$ADMIN${TEMPORARY:+  ${C_DIM}temporary password:${C_RESET} $TEMPORARY}")
       lines+=("${C_MUTED}API         ${C_RESET}http://$HOST_ADDRESS:8442/v1")
       [[ -n $API_KEY ]] && lines+=("${C_MUTED}API key     ${C_RESET}$API_KEY  ${C_DIM}(shown once)${C_RESET}")
       [[ $TOPOLOGY == all ]] && lines+=("${C_MUTED}Models      ${C_RESET}download one under Models → HuggingFace, then add it from Files")
       [[ ,$SERVICES, == *,voice-gateway,* ]] && lines+=("Phone calls: set up under System → Voice → Telephone")
+      lines+=("Backups: put your recipients.txt in place (Docs → Backup encryption), then choose")
+      lines+=("daily under Settings → Retention and privacy → Scheduled backups.")
       if [[ $TOPOLOGY == front ]]; then
         lines+=("" "${C_BOLD}Add a compute node${C_RESET}: run ${C_GOLD}owg pair${C_RESET} here, or open Settings → Compute nodes,")
         lines+=("and run the command it gives on the GPU machine.")

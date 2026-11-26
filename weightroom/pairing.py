@@ -243,6 +243,13 @@ def console_url(host: str, port: int) -> str:
     return f"http://{url_host(host)}:{port}"
 
 
+def proxied_console_url(listening: str, seen_host: str, seen_port: int | None) -> str:
+    """The HTTPS address a browser used, for a console that listens only on loopback behind its proxy; else empty."""
+    if listening not in LOOPBACK or not seen_host or seen_host in LOOPBACK or not HOST.fullmatch(seen_host.strip("[]")):
+        return ""
+    return f"https://{url_host(seen_host)}" + (f":{seen_port}" if seen_port and seen_port != 443 else "")
+
+
 def command(console: str, code: str) -> str:
     """What to run on the GPU machine."""
     return f"curl -fsSL {INSTALLER} | bash -s -- --join {console} --code {code}"

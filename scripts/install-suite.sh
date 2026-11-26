@@ -48,6 +48,7 @@ LLAMA_SERVER=
 MACHINE_NAME=
 WAKE_MAC=
 WAKE_ADDRESS=255.255.255.255
+BEHIND_PROXY=0
 VOICE_MODEL=
 PLATFORM_SERVICES=images,speech,audio,downloads,classifiers
 START_NEW=0
@@ -101,6 +102,9 @@ change both the service set and database engine before anything is installed.
   --machine-name NAME        the name the console knows this GPU node by (default: compute)
   --wake-mac MAC             Wake-on-LAN hardware address for the node in new console settings
   --wake-address IP          Wake broadcast destination (default: 255.255.255.255)
+  --behind-proxy             the console is served only through a reverse proxy on this machine,
+                             over HTTPS: it listens on 127.0.0.1, its cookie is HTTPS-only and
+                             the proxy's forwarded client address is trusted (new or existing settings)
   --voice-model NAME         conversation model for newly written voice settings (default: the voice defaults')
   --platform-services LIST   initial console services: images,speech,audio,downloads,classifiers or none
   --start-new                also start services whose settings were just written
@@ -234,6 +238,7 @@ while (($#)); do
     --machine-name) (($# >= 2)) || usage_error '--machine-name needs a name'; MACHINE_NAME=$2; shift 2 ;;
     --wake-mac) (($# >= 2)) || usage_error '--wake-mac needs a MAC address'; WAKE_MAC=$2; shift 2 ;;
     --wake-address) (($# >= 2)) || usage_error '--wake-address needs an IPv4 address'; WAKE_ADDRESS=$2; shift 2 ;;
+    --behind-proxy) BEHIND_PROXY=1; shift ;;
     --voice-model) (($# >= 2)) || usage_error '--voice-model needs a model'; VOICE_MODEL=$2; shift 2 ;;
     --platform-services) (($# >= 2)) || usage_error '--platform-services needs a list or none'; PLATFORM_SERVICES=$2; shift 2 ;;
     --start-new) START_NEW=1; shift ;;
@@ -265,6 +270,7 @@ if [[ $TOPOLOGY == compute && -z $FRONT_URL ]]; then
     "Pass it, for example: --topology compute --front-url http://192.168.1.10:8442" \
     "Or let install.sh pair this node with a code from the console: install.sh --join http://CONSOLE:8440 --code CODE"
 fi
+((!BEHIND_PROXY)) || [[ $TOPOLOGY != compute ]] || usage_error '--behind-proxy is for the console: a GPU node serves no web pages'
 [[ -z $FRONT_URL || $FRONT_URL =~ ^https?://[^/[:space:]]+/?$ ]] || usage_error '--front-url must look like http://192.168.1.10:8442'
 [[ -z $COMPUTE_URL || $COMPUTE_URL =~ ^https?://[^/[:space:]]+/?$ ]] || usage_error '--compute-url must look like http://192.168.1.20:8442'
 [[ -z $UV || -x $UV ]] || die "--uv $UV is not a program." \
@@ -946,21 +952,35 @@ install_example_config() {
     if ((DRY_RUN)); then
       ui_note "DRY RUN: render $source_config to $target_config for $ROOT and $HOME ($TOPOLOGY)"
     else
-      local voice_options=()
+      local voice_options=() proxy_option=()
+      [[ $config_name == weightroom ]] && ((${BEHIND_PROXY:-0})) && proxy_option=(--behind-proxy)
       (has_service voice || has_service voice-gateway) && voice_options=(--voice ${VOICE_MODEL:+--voice-model "$VOICE_MODEL"})
       "$PY" "$ROOT/scripts/install-suite-support.py" render --example "$source_config" --target "$target_config" \
         --root "$ROOT" --home "$HOME" --topology "$TOPOLOGY" --address "${ADDRESS:-127.0.0.1}" \
         --front "$FRONT_URL" --compute "$COMPUTE_URL" --llama-server "$LLAMA_SERVER" --machine-name "$MACHINE_NAME" \
         --wake-mac "$WAKE_MAC" --wake-address "$WAKE_ADDRESS" \
-        --platform-services "$PLATFORM_SERVICES" "${voice_options[@]}" ||
+        --platform-services "$PLATFORM_SERVICES" "${voice_options[@]}" ${proxy_option[@]+"${proxy_option[@]}"} ||
         die "The settings file $(shell_path "$target_config") could not be written." \
           "The lines above say why" "Check the folder is yours and has room: ls -ld $(shell_path "$ROOT/settings") && df -h $(shell_path "$ROOT")"
       ui_ok "Wrote settings/$config_name.toml"
     fi
   else
     [[ -v WAS_CONFIGURED[$config_name] ]] || WAS_CONFIGURED[$config_name]=1
+    if [[ $config_name == weightroom ]] && ((${BEHIND_PROXY:-0})); then
+      if ((DRY_RUN)); then
+        ui_note "DRY RUN: set $target_config to listen on 127.0.0.1 behind an HTTPS proxy"
+      else
+        local changed
+        changed=$("$PY" "$ROOT/scripts/install-suite-support.py" behind-proxy --config "$target_config") ||
+          die "The console settings could not be set for its proxy." "The lines above say why" \
+            "Or set host = \"127.0.0.1\", secure = true and trusted_proxies = [\"127.0.0.1\"] at the top of $(shell_path "$target_config")"
+        [[ $changed == changed ]] && ui_ok "Set settings/weightroom.toml for its proxy" "its old settings are kept beside it as weightroom.toml.before-behind-proxy-…"
+      fi
+    fi
   fi
+  [[ $config_name != weightroom ]] || PROXY_SET=1
 }
+PROXY_SET=0
 
 # Write the owning settings before the gateway that inherits them.
 if ((TOOLLOCKER_FRONT)); then install_example_config weightroom; fi
@@ -969,6 +989,7 @@ for service in "${SELECTED[@]}"; do
   [[ $config_name == voice-gateway || $config_name == voice || $config_name == loadcoach || $config_name == spotter || $config_name == toollocker || $config_name == weightroom ]] || continue
   install_example_config "$config_name"
 done
+((!BEHIND_PROXY || PROXY_SET)) || ui_warn "--behind-proxy changed nothing: the console (weightroom) is not installed here"
 if { has_service spotter || { has_service toollocker && ((!TOOLLOCKER_FRONT)); }; } && [[ ! -f $ROOT/settings/loadcoach.toml ]]; then
   ui_info 'Installing LoadCoach settings as the shared identity configuration for Spotter/ToolLocker.'
   install_example_config loadcoach

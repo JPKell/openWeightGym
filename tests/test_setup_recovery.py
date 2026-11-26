@@ -1310,3 +1310,56 @@ main --repair --dir "$INSTALL" --yes --no-browser --topology front --admin sam -
         assert users.by_name("sam").can("superuser")
     finally:
         users.db.close()
+
+
+@pytest.mark.parametrize('flags,valid', [
+    ('--behind-proxy', True), ('--topology front --behind-proxy', True), ('--topology all --behind-proxy', True),
+    ('--topology compute --behind-proxy', False), ('--join http://console.lan:8440 --code ABCD-EF23 --behind-proxy', False),
+])
+def test_behind_proxy_is_for_the_console_only(tmp_path, flags, valid):
+    answer = shell(tmp_path, script_functions('install.sh') + '\nparse_arguments ' + flags + '\nprintf "%s" "$ARGUMENT_ERROR"\n')
+    assert answer.returncode == 0, answer.stderr
+    assert bool(answer.stdout) is not valid
+
+
+def test_behind_proxy_survives_a_saved_plan_and_joins_keep_an_https_address(tmp_path):
+    install = tmp_path / 'install'
+    install.mkdir()
+    answer = shell(tmp_path, script_functions('install.sh') + '''
+source "$TEST_REPO/scripts/lib/receipt.sh"
+parse_arguments --topology front --behind-proxy
+DIR=$INSTALL SERVICES=weightroom,turnstile
+write_receipt pending
+parse_arguments
+receipt_load "$INSTALL"
+resume_settings
+printf '%s\\n' "$BEHIND_PROXY"
+# A console behind its proxy is joined at the HTTPS address the proxy serves, on the proxy's port.
+console_url https://console.example/; echo
+console_url https://console.example:8443; echo
+console_url 192.168.1.10; echo
+''', env={'INSTALL': str(install)})
+    assert answer.returncode == 0, answer.stderr
+    assert answer.stdout.splitlines() == ['1', 'https://console.example', 'https://console.example:8443', 'http://192.168.1.10:8440']
+
+
+def test_a_console_behind_its_proxy_listens_on_loopback_new_or_existing(tmp_path):
+    import tomllib
+    support = support_module()
+    example = ROOT / 'settings/examples/weightroom.toml'
+    made = subprocess.run([sys.executable, str(ROOT / 'scripts/install-suite-support.py'), 'render', '--example', str(example),
+                           '--target', str(tmp_path / 'new.toml'), '--root', str(tmp_path), '--home', str(tmp_path),
+                           '--topology', 'front', '--address', '192.0.2.10', '--behind-proxy'], capture_output=True, text=True)
+    assert made.returncode == 0, made.stderr
+    told = tomllib.loads((tmp_path / 'new.toml').read_text())
+    assert (told['host'], told['secure'], told['trusted_proxies']) == ('127.0.0.1', True, ['127.0.0.1'])
+    assert told['turnstile']['host'] == '0.0.0.0' and 'secure' not in told['turnstile']  # the API stays on the network
+    # An existing console is changed in place, with its old settings kept privately beside it, once.
+    existing = tmp_path / 'weightroom.toml'
+    existing.write_text(example.read_text())
+    assert support.behind_proxy(existing) is True and support.behind_proxy(existing) is False
+    copies = list(tmp_path.glob('weightroom.toml.before-behind-proxy-*'))
+    assert len(copies) == 1 and copies[0].read_text() == example.read_text()
+    told = tomllib.loads(existing.read_text())
+    assert (told['host'], told['secure'], told['trusted_proxies']) == ('127.0.0.1', True, ['127.0.0.1'])
+    assert told['port'] == 8440 and told['turnstile']['host'] == '0.0.0.0'

@@ -200,7 +200,8 @@ def test_pairing_panel_generates_real_code_without_losing_node_drafts(desk):
         page.get_by_role('button', name='+ Add compute node', exact=True).click()
         expect(page.locator('#add-node')).to_be_visible()
         page.get_by_role('button', name='Make a pairing code', exact=True).click()
-        expect(page.locator('#pairing-command')).to_contain_text('--join http://testserver:8440 --code ')
+        # The test console listens on loopback, so a page opened at another name came through its proxy.
+        expect(page.locator('#pairing-command')).to_contain_text('--join https://testserver --code ')
         expect(page.locator('[name="rotation_days"]')).to_have_value('45')
         command = page.locator('#pairing-command').inner_text()
         page.locator('#rotation-days').fill('60')

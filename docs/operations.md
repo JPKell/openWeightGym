@@ -1289,7 +1289,9 @@ On the control node, `weightroom user locks [NAME]` lists active pairs/shared ad
 shared counter for that address. Unlock is audited. Never clear unrelated accounts to recover one.
 
 Set top-level `trusted_proxies` in `settings/weightroom.toml` to only your actual proxy IP addresses
-or CIDRs, then restart WeightRoom. Its default is empty. The real socket peer must be trusted before
+or CIDRs, then restart WeightRoom. Its default is empty. For a proxy on the console machine itself,
+installing or repairing with `--behind-proxy` sets it, with `host = "127.0.0.1"` and `secure = true`
+(see [Behind a reverse proxy](installation.md#behind-a-reverse-proxy)). The real socket peer must be trusted before
 `X-Forwarded-For` is considered; the last untrusted hop becomes the client. Implicit Uvicorn proxy
 rewriting is disabled. The Security page warns when empty trust makes loopback/proxy traffic share
 an address. Cookie security and permitted browser origins retain their existing machine-file controls.

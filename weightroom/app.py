@@ -3936,7 +3936,8 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
         if "superuser" not in person.can:
             return page(request, "refused.html", person, status=403, why="Adding a GPU node requires the superuser ability.")
         code, expires = pairing.make_code(Path(settings.data), person.name)
-        console = pairing.console_url(request.url.hostname or "", settings.port)
+        console = (pairing.proxied_console_url(settings.host, request.url.hostname or "", request.url.port)
+                   or pairing.console_url(request.url.hostname or "", settings.port))
         form = await typed(request)
         return await compute_nodes_page(request, person, typed_in={'machine': form.get('machine', '')}, opened="add-node", pairing_code={
             "code": code, "expires": expires, "command": pairing.command(console, code)})
@@ -3982,7 +3983,7 @@ def build_app(settings: Settings, client: httpx.AsyncClient | None = None, watch
             restarting = pairing.restart_later() if joined["changed"] else False
         print(f"weightroom: GPU node {joined['name']} paired from {address}", file=sys.stderr)
         return JSONResponse({"name": joined["name"], "machine_key": joined["machine_key"], "restarting": restarting,
-                             "front": f"http://{pairing.url_host(request.url.hostname or pairing.lan_address())}:8442", **extra})
+                             "front": f"http://{pairing.url_host(pairing.lan_address() if settings.host in pairing.LOOPBACK else request.url.hostname or pairing.lan_address())}:8442", **extra})
 
     async def new_machine_key(request: Request, person: Person) -> Response:
         """Have turnstile replace one selected node's key only after that node accepts it."""
@@ -6312,16 +6313,23 @@ def root(ctx: typer.Context, config: Annotated[Path, typer.Option(metavar="FILE"
 
 
 @cli.command("pair")
-def pair(ctx: typer.Context, minutes: Annotated[int, typer.Option(help="How long the code works.")] = pairing.MINUTES) -> None:
+def pair(ctx: typer.Context, minutes: Annotated[int, typer.Option(help="How long the code works.")] = pairing.MINUTES,
+         url: Annotated[str, typer.Option(help="The console's address as the GPU node reaches it, such as https://console.example (behind a proxy).")] = "") -> None:
     """Make a one-time code that lets a GPU node join this console, and print what to run on it.
 
     The code works once, for the minutes given. The node is recorded in this settings file when it
-    joins, and turnstile and weightroom restart to use it.
+    joins, and turnstile and weightroom restart to use it. A console that listens only on 127.0.0.1
+    behind its proxy needs --url, the HTTPS address that proxy serves.
     """
     config = Path(ctx.find_root().params["config"])
     told = read_settings(config)
     code, expires = pairing.make_code(config.parent / told.get("data", "."), "command-line", minutes)
-    console = pairing.console_url("", told.get("port", 8440))
+    if url and not re.fullmatch(r"https?://[^/\s]+/?", url):
+        raise typer.BadParameter("give the console's address, such as https://console.example", param_hint="--url")
+    if not url and told.get("host", "0.0.0.0") in pairing.LOOPBACK:
+        raise typer.BadParameter("this console listens only on 127.0.0.1 behind its proxy: give the HTTPS address it serves, such as https://console.example",
+                                 param_hint="--url")
+    console = url.rstrip("/") or pairing.console_url("", told.get("port", 8440))
     until = datetime.fromtimestamp(expires).strftime("%H:%M")
     print(f"Pairing code {code}, good once until {until}. On the GPU machine, run:\n\n  {pairing.command(console, code)}\n")
 

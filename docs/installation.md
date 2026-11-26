@@ -250,12 +250,51 @@ Without a code, choose **GPU node** and **With the console's key**: give the con
 paste its `keys/machine.key`. Then add `compute = "http://NODE:8442"` to the console's
 `settings/weightroom.toml` and run `owg restart turnstile weightroom` there.
 
+A console [behind a reverse proxy](#behind-a-reverse-proxy) does not answer on port 8440 from
+the network. **Make a pairing code** on its page gives a command with the HTTPS address you opened
+the page at; on the command line, give that address: `owg pair --url https://console.example`.
+The node then joins through the proxy, and is told to reach the gateway at the console's own
+network address on port 8442, so join from the same network.
+
 Add `--voice` to the node's install command to receive a separate voice-service credential and
 enable the console's voice API route. Install the console with `--voice` for the browser voice
 gateway. For manual pairing, also copy the console's `keys/voice-service.key` and pass
 `--voice-key-file FILE`; the machine signing key cannot substitute for it. Voice setup creates
 the service and browser accounts and verifies the speech bundles required by the settings. Once
 you have added a model, choose it as the conversation model under **Settings → Voice**.
+
+## Behind a reverse proxy
+
+When a web server such as nginx on the console machine serves the console over HTTPS, install or
+repair the console with `--behind-proxy` (`owg repair --behind-proxy` for one already installed).
+It sets three values at the top of `settings/weightroom.toml`:
+
+| Setting | Value | Why |
+|---|---|---|
+| `host` | `"127.0.0.1"` | the console answers only through the proxy, never directly on port 8440 |
+| `secure` | `true` | the browser sends the sign-in cookie only over HTTPS |
+| `trusted_proxies` | `["127.0.0.1"]` | sign-in limits and logs see the client address the proxy forwards |
+
+An existing file keeps a private copy of its old settings beside it as
+`weightroom.toml.before-behind-proxy-…`; run `owg restart weightroom` afterwards. The API and tool
+gateway ports (8442–8445) still listen on the network. The proxy must pass the browser's `Host`
+header and set `X-Forwarded-For`, for example:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8440;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+```
+
+Scheduled backups stay off until you turn them on: put `recipients.txt` in place first (see
+[Backup encryption](/docs/data/backup-encryption#setup)), then choose **daily** under
+**Settings → Retention and privacy → Scheduled backups**. The installer's closing summary repeats
+this.
 
 ## For you, or for the whole machine
 
@@ -564,6 +603,7 @@ curl -fsSL …/install.sh | OWG_ADMIN_PASSWORD='…' bash -s -- --yes --topology
 | `--voice-key-file FILE` | voice service key the control node keeps for a GPU node joined by hand |
 | `--power-control` | let the console sleep, restart or switch off this machine (a polkit rule) |
 | `--wake-mac MAC`, `--wake-address IP` | save Wake-on-LAN details; see [Wake-on-LAN during installation](#wake-on-lan-during-installation) |
+| `--behind-proxy` | the console is served only through a reverse proxy on this machine, over HTTPS; see [Behind a reverse proxy](#behind-a-reverse-proxy) |
 | `--no-linger`, `--no-browser` | skip linger, or opening the console |
 | `--ref BRANCH` | which branch to install |
 | `--plain`, `NO_COLOR`, `OWG_QUIET=1` | no colour and no animation, or colour without animation |
